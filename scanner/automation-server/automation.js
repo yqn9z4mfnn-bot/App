@@ -14,8 +14,7 @@ import {
 import { generateWebLoginLink, normalizeMinhaClaroWebLink } from "./linkGenerate.js";
 import {
   tryApiDirectEldoradoPay,
-  isGateRequestCaptureUrl,
-  attachEldorado3dsBypass
+  isGateRequestCaptureUrl
 } from "./apiPayPoc.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1332,12 +1331,10 @@ const attachGateCapture = (context, session = null) => {
 
 const attachClaroNetworkHooks = (context, session = null) => {
   const gateCapture = attachGateCapture(context, session);
-  const eldoradoBypass = config.bypass3dsEnabled ? attachEldorado3dsBypass(context) : null;
   if (session) {
     session.gateCapture = gateCapture;
-    session.eldoradoBypass = eldoradoBypass;
   }
-  return { gateCapture, eldoradoBypass };
+  return { gateCapture };
 };
 
 const M4U_API_RE = /claro-recarga-api\.m4u\.com\.br/i;
@@ -5410,9 +5407,8 @@ export const startSessionFromWebLink = async (payload) => {
       webPortal: true,
       inspect: Boolean(payload?.inspect)
     };
-    const { gateCapture, eldoradoBypass } = attachClaroNetworkHooks(context, session);
+    const { gateCapture } = attachClaroNetworkHooks(context, session);
     session.gateCapture = gateCapture;
-    session.eldoradoBypass = eldoradoBypass;
     sessions.set(sessionId, session);
     releaseSlot();
   } catch (err) {
@@ -5618,9 +5614,8 @@ export const startSession = async (payload) => {
       smsAuthenticated: false,
       authStatePath: null
     };
-    const { gateCapture, eldoradoBypass } = attachClaroNetworkHooks(context, session);
+    const { gateCapture } = attachClaroNetworkHooks(context, session);
     session.gateCapture = gateCapture;
-    session.eldoradoBypass = eldoradoBypass;
     sessions.set(sessionId, session);
     releaseSlot();
   } catch (err) {

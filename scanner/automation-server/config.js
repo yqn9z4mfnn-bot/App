@@ -24,7 +24,6 @@ export const config = {
   defaultCvv: '123',
   defaultCardholderMaxLen: 26,
   keepBrowserOpenSeconds: 3,
-  bypass3dsEnabled: process.env.BYPASS_3DS !== 'false',
   apiPayPocEnabled: process.env.API_PAY_POC === 'true',
   paymentWaitTimeoutMs: Number(process.env.PAYMENT_WAIT_TIMEOUT_MS || 180_000),
   genericGateRetries: 2,
