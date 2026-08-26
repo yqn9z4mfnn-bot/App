@@ -2313,6 +2313,18 @@ const saveStepDebug = async (page, tag) => {
   }
 };
 
+/** Evita locator.count() travar quando dezenas de iframes Bemobi estão carregando. */
+const withTimeout = async (promise, timeoutMs, fallback = null) =>
+  Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), timeoutMs))
+  ]);
+
+const locatorCountSafe = async (locator, timeoutMs = 1500) => {
+  const n = await withTimeout(locator.count().catch(() => 0), timeoutMs, 0);
+  return typeof n === "number" ? n : 0;
+};
+
 /** cs / web-link: captura HTML + PNG + textos/botões de cada iframe (debug do fluxo). */
 const frameEvalWithTimeout = async (frame, fn, timeoutMs = 2500) => {
   return Promise.race([
@@ -2791,7 +2803,7 @@ const dismissBonusModalIfVisible = async (page) => {
   ];
 
   for (const option of dismissOptions) {
-    if ((await option.count()) > 0) {
+    if ((await locatorCountSafe(option, 1200)) > 0) {
       try {
         await option.click({ timeout: 2000 });
         await sleep(250);
@@ -3307,9 +3319,9 @@ const dismissCookieBanner = async (page) => {
   ];
 
   for (const btn of oneTrustCandidates) {
-    if ((await btn.count()) > 0) {
+    if ((await locatorCountSafe(btn, 1200)) > 0) {
       try {
-        if (await btn.isVisible().catch(() => false)) {
+        if (await withTimeout(btn.isVisible().catch(() => false), 1200, false)) {
           await btn.click({ timeout: 1200, force: true });
           await sleep(250);
           return true;
@@ -4054,7 +4066,6 @@ const clickRechargeValueButton = async (page, session, rechargeValue) => {
       if ((await loc.count()) === 0) continue;
       await loc.waitFor({ state: "visible", timeout: 5000 });
       await loc.click({ timeout: config.actionTimeoutMs, force: true });
-      await dismissBonusModalIfVisible(page);
       return;
     } catch {
       // tenta próximo seletor (web portal: R$ e valor em spans separados)
@@ -4072,10 +4083,7 @@ const clickRechargeValueButton = async (page, session, rechargeValue) => {
     el.click();
     return true;
   }, rechargeValue);
-  if (clicked) {
-    await dismissBonusModalIfVisible(page);
-    return;
-  }
+  if (clicked) return;
   const disponiveis = await page
     .evaluate(() => {
       const out = [];
@@ -5092,12 +5100,12 @@ const runWebLinkRecharge = async (session, payload) => {
   }
 
   await clickRechargeValueButton(page, session, rechargeValue);
+  setSessionStep(session, "aguardando_checkout", "Aguardando Smart Checkout abrir…");
   await delayStep(17);
   await dismissBonusModalIfVisible(page).catch(() => {});
   await dismissCookieBanner(page).catch(() => {});
   await sleep(1200);
-  setSessionStep(session, "aguardando_checkout", "Aguardando Smart Checkout abrir…");
-  await captureWebLinkStep(page, "after_valor", session);
+  captureWebLinkStep(page, "after_valor", session).catch(() => {});
 
   const checkoutDeadline = Date.now() + 35000;
   while (Date.now() < checkoutDeadline) {
