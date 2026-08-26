@@ -80,6 +80,12 @@ export async function startWebLinkRecharge(
     if (err.name === 'AbortError') {
       throw new Error('Timeout na automação (>3 min) — checkout ainda processando?');
     }
+    const msg = String(err?.message ?? err);
+    if (/fetch failed|ECONNREFUSED|ENOTFOUND|connect/i.test(msg)) {
+      throw new Error(
+        `Automação offline (${base}) — suba: cd scanner/automation-server && BYPASS_3DS=true node server.js`,
+      );
+    }
     throw err;
   } finally {
     clearTimeout(timer);

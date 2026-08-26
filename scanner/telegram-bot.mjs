@@ -210,6 +210,12 @@ async function executeRecharge(chatId, card) {
   try {
     let outcome;
     if (useBrowser) {
+      const health = await checkAutomationHealth(AUTOMATION_API_URL);
+      if (!health.ok) {
+        throw new Error(
+          'Automação offline — servidor Playwright não está rodando na porta 3000',
+        );
+      }
       outcome = await runBrowserRecharge({
         apiUrl: AUTOMATION_API_URL,
         loginUrl: resolveLoginUrl(entry.link),
