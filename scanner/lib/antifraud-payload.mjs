@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-/** Fingerprint mobile alinhado ao iPhone 12 da automação Playwright. */
+/** Fingerprint mobile (iPhone) para o payload de pagamento da API Eldorado. */
 export function buildMobileDevice() {
   return {
     id: randomUUID(),
