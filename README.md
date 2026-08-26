@@ -34,10 +34,10 @@ TELEGRAM_BOT_TOKEN=seu_token
 ```
 
 No Telegram:
-- envie um **`.txt`** (um número por linha) → gera JWT, lê valores e **salva no banco** (5 em paralelo)
-- `/lista` — números salvos (valores + atalho de recarga)
-- envie o número de novo → recarga rápida com o JWT salvo (sem varrer de novo)
-- `/usar 3899…` / `/apagar 3899…` / `/scan 3899…` (varrer de novo, sem wallet)
+- envie um **`.txt`** (um número por linha) → gera JWT, lê valores e **salva** (5 em paralelo)
+- `/valores` ou `/valor 20` (ou só `20`) → o bot **envia o link** de um número que tem esse valor
+- `/lista` — números salvos
+- `/usar 3899…` / `/apagar 3899…` / `/scan 3899…`
 
 Também aceita número avulso ou o link JWT direto. SQLite: `~/.local/share/linkclaro-bot/numbers.db`.
 

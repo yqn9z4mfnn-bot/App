@@ -30,6 +30,10 @@ import {
   countWithValues,
   deleteNumber,
   listErrors,
+  parseReaisToCents,
+  listValueStock,
+  pickLinkForValue,
+  countForValue,
 } from './lib/numbers-db.mjs';
 import {
   parseNumbersFromTxt,
@@ -59,6 +63,10 @@ const cache = new Map();
 const rechargeFlow = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
 const BULK_CONCURRENCY = Number(process.env.BULK_CONCURRENCY || 5);
+
+function formatBRL(cents) {
+  return `R$ ${(Number(cents) / 100).toFixed(2).replace('.', ',')}`;
+}
 
 function formatValoresShort(valores) {
   if (!valores?.length) return 'sem valores';
@@ -613,6 +621,25 @@ async function handleCallback(query) {
 
   if (data.startsWith('dbpage:')) {
     await sendDbList(chatId, Number(data.slice(7)) || 0, messageId);
+    return;
+  }
+
+  if (data === 'dbvals') {
+    await sendValueStock(chatId);
+    return;
+  }
+
+  if (data.startsWith('dbvaln:')) {
+    const rest = data.slice(7);
+    const sep = rest.indexOf(':');
+    const cents = Number(sep === -1 ? rest : rest.slice(0, sep));
+    const skip = sep === -1 ? '' : rest.slice(sep + 1);
+    await sendLinkForValue(chatId, cents, { excludeMsisdn: skip });
+    return;
+  }
+
+  if (data.startsWith('dbval:')) {
+    await sendLinkForValue(chatId, Number(data.slice(6)));
   }
 }
 
@@ -745,6 +772,7 @@ async function sendDbList(chatId, page = 0, messageId = null) {
   }
   const nav = buildDbListMarkup(page, total).inline_keyboard[0];
   keyboard.push(nav);
+  keyboard.push([{ text: '💰 Pedir valor (link)', callback_data: 'dbvals' }]);
 
   const payload = {
     chat_id: chatId,
@@ -757,6 +785,104 @@ async function sendDbList(chatId, page = 0, messageId = null) {
   } else {
     await tg('sendMessage', { ...payload, disable_web_page_preview: true });
   }
+}
+
+function buildValueStockKeyboard(stock) {
+  const rows = [];
+  for (let i = 0; i < stock.length; i += 2) {
+    const row = stock.slice(i, i + 2).map((v) => ({
+      text: `${v.name || formatBRL(v.value)} (${v.count})`,
+      callback_data: `dbval:${v.value}`,
+    }));
+    rows.push(row);
+  }
+  return { inline_keyboard: rows };
+}
+
+async function sendValueStock(chatId, messageId = null) {
+  const stock = listValueStock();
+  const total = countNumbers({ onlyOk: true });
+  if (!stock.length) {
+    const text =
+      '💰 Nenhum valor no banco ainda. Envie um <code>.txt</code> com um número por linha.';
+    if (messageId) {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: messageId,
+        text,
+        parse_mode: 'HTML',
+      });
+    } else {
+      await send(chatId, text);
+    }
+    return;
+  }
+
+  const lines = [
+    `<b>💰 Valores disponíveis</b>`,
+    `${total} números no banco`,
+    '',
+    'Toque no valor para receber o <b>link</b> de um número.',
+    'Ou envie <code>/valor 20</code>.',
+  ];
+  const payload = {
+    chat_id: chatId,
+    text: lines.join('\n'),
+    parse_mode: 'HTML',
+    reply_markup: buildValueStockKeyboard(stock),
+  };
+  if (messageId) {
+    await tg('editMessageText', { ...payload, message_id: messageId });
+  } else {
+    await tg('sendMessage', { ...payload, disable_web_page_preview: true });
+  }
+}
+
+async function sendLinkForValue(chatId, valueCents, { excludeMsisdn } = {}) {
+  const cents = Number(valueCents);
+  if (!Number.isFinite(cents) || cents <= 0) {
+    await send(chatId, 'Valor inválido. Ex: <code>/valor 20</code>');
+    return;
+  }
+
+  const picked = pickLinkForValue(cents, { excludeMsisdn });
+  if (!picked?.link) {
+    const left = countForValue(cents);
+    await send(
+      chatId,
+      left
+        ? `Não achei outro número com ${formatBRL(cents)}. Restam ${left} (é o mesmo).`
+        : `Nenhum número com ${formatBRL(cents)} no banco.`,
+    );
+    return;
+  }
+
+  const link = toLoginUrl(picked.link).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const label = String(picked.name || formatBRL(cents)).replace(/</g, '&lt;');
+  const left = picked.remaining;
+  await send(
+    chatId,
+    [
+      `<b>💰 ${label}</b>`,
+      `<b>Número:</b> <code>${picked.msisdn}</code>`,
+      `<b>Restam:</b> ${left} com esse valor`,
+      '',
+      link,
+    ].join('\n'),
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: `🔄 Outro ${formatBRL(cents)}`, callback_data: `dbvaln:${cents}:${picked.msisdn}` },
+          ],
+          [
+            { text: '💳 Recarregar neste bot', callback_data: `dbusar:${picked.msisdn}` },
+            { text: '💰 Valores', callback_data: 'dbvals' },
+          ],
+        ],
+      },
+    },
+  );
 }
 
 async function handleTxtDocument(chatId, document) {
@@ -839,11 +965,14 @@ async function handleTxtDocument(chatId, document) {
         `💰 Com valores: <b>${withVal}</b>`,
         ...(errorLines.length ? ['', '<b>Falhas:</b>', ...errorLines] : []),
         '',
-        'Use /lista ou envie o número para recarregar rápido.',
+        'Toque em <b>Pedir valor</b> para receber o link.',
       ].join('\n'),
       parse_mode: 'HTML',
       reply_markup: {
-        inline_keyboard: [[{ text: '🗄 Ver lista', callback_data: 'dbpage:0' }]],
+        inline_keyboard: [
+          [{ text: '💰 Pedir valor', callback_data: 'dbvals' }],
+          [{ text: '🗄 Ver números', callback_data: 'dbpage:0' }],
+        ],
       },
     });
   } catch (err) {
@@ -882,6 +1011,26 @@ async function handleMessage(msg) {
 
     if (text === '/lista' || text.startsWith('/lista@')) {
       await sendDbList(chatId, 0);
+      return;
+    }
+
+    if (text === '/valores' || text.startsWith('/valores@')) {
+      await sendValueStock(chatId);
+      return;
+    }
+
+    if (text.startsWith('/valor')) {
+      const arg = text.replace(/^\/valor(@\S+)?\s*/, '').trim();
+      if (!arg) {
+        await sendValueStock(chatId);
+        return;
+      }
+      const cents = parseReaisToCents(arg);
+      if (!cents) {
+        await send(chatId, 'Uso: <code>/valor 20</code> ou <code>/valor 15,00</code>');
+        return;
+      }
+      await sendLinkForValue(chatId, cents);
       return;
     }
 
@@ -954,12 +1103,17 @@ async function handleMessage(msg) {
     const link = extractLink(skipWallet ? text.replace(/^\/scan(@\S+)?\s*/, '') : text);
 
     if (!link) {
+      const cents = parseReaisToCents(text);
+      if (cents) {
+        await sendLinkForValue(chatId, cents);
+        return;
+      }
       if (text.startsWith('/')) {
         await send(chatId, 'Comando desconhecido. Use /start');
       } else {
         await send(
           chatId,
-          '❌ Envie um <b>.txt</b> (um número por linha), o número (DDD + 9 dígitos) ou o link JWT.',
+          '❌ Envie um <b>.txt</b>, um valor (<code>20</code>), o número ou o link JWT.\n/valores lista o estoque.',
         );
       }
       return;
@@ -1013,6 +1167,7 @@ async function main() {
   await tg('setMyCommands', {
     commands: [
       { command: 'start', description: 'Ajuda' },
+      { command: 'valores', description: 'Pedir link por valor (R$ 20…)' },
       { command: 'lista', description: 'Números salvos no banco' },
       { command: 'erros', description: 'Números que falharam no .txt' },
       { command: 'recarga', description: 'Escolher valor e pagar' },

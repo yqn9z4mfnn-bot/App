@@ -109,22 +109,15 @@ export function buildConfirmKeyboard(token, action = 'rm') {
 
 export const WELCOME = `<b>Claro Recarga Scanner</b>
 
-Envie um <b>.txt</b> com um número por linha.
-O bot gera o JWT, lê os valores e <b>salva no banco</b> (5 em paralelo).
+1. Envie um <b>.txt</b> (um número por linha)
+2. O bot gera o JWT, lê os valores e <b>salva</b> (5 em paralelo)
+3. Peça um valor — o bot <b>envia o link</b> de um número que tem esse valor
 
-Depois, para recarga rápida:
-• /lista — números salvos (valores + atalho)
-• /erros — números que falharam
-• envie o número de novo → usa o JWT salvo
-• /usar 3899… — idem
-• /scan 3899… — varrer de novo (sem wallet)
-• /apagar 3899… — tirar do banco
-
-Também aceita número avulso ou link JWT (<code>?t=...</code>).
+• /valores — estoque (toque em R$ 20)
+• /valor 20 — mesmo efeito
+• ou só mande <code>20</code>
+• /lista — números
+• /erros — falhas do .txt
 
 <b>Comandos:</b>
-/start — ajuda
-/lista — banco de números
-/recarga — escolher valor e pagar
-/cartoes — remover cartões
-/status — bot online`;
+/start · /valores · /lista · /recarga · /status`;

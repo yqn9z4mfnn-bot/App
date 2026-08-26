@@ -23,7 +23,16 @@ export function openNumbersDb(dbPath = defaultDbPath()) {
       scanned_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_numbers_scanned ON numbers(scanned_at DESC);
+    CREATE TABLE IF NOT EXISTS number_values (
+      msisdn TEXT NOT NULL,
+      value_cents INTEGER NOT NULL,
+      product_id TEXT,
+      name TEXT,
+      PRIMARY KEY (msisdn, value_cents)
+    );
+    CREATE INDEX IF NOT EXISTS idx_nv_value ON number_values(value_cents);
   `);
+  rebuildValueIndex(database);
   return database;
 }
 
@@ -41,6 +50,30 @@ function parseValores(raw) {
   }
 }
 
+function replaceValues(database, msisdn, valores) {
+  database.prepare('DELETE FROM number_values WHERE msisdn = ?').run(msisdn);
+  if (!valores?.length) return;
+  const ins = database.prepare(
+    `INSERT OR REPLACE INTO number_values (msisdn, value_cents, product_id, name)
+     VALUES (?, ?, ?, ?)`,
+  );
+  for (const v of valores) {
+    const cents = Number(v?.value);
+    if (!Number.isFinite(cents) || cents <= 0) continue;
+    ins.run(msisdn, cents, v.id ?? null, v.name ?? null);
+  }
+}
+
+function rebuildValueIndex(database) {
+  database.exec('DELETE FROM number_values');
+  const rows = database
+    .prepare("SELECT msisdn, valores FROM numbers WHERE status = 'ok' AND link IS NOT NULL")
+    .all();
+  for (const row of rows) {
+    replaceValues(database, row.msisdn, parseValores(row.valores));
+  }
+}
+
 function mapRow(row) {
   if (!row) return null;
   return {
@@ -54,7 +87,8 @@ function mapRow(row) {
 }
 
 export function upsertNumber({ msisdn, link, valores = [], status = 'ok', error = null }) {
-  getDb()
+  const database = getDb();
+  database
     .prepare(
       `INSERT INTO numbers (msisdn, link, valores, status, error, scanned_at)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -73,6 +107,11 @@ export function upsertNumber({ msisdn, link, valores = [], status = 'ok', error 
       error ?? null,
       Date.now(),
     );
+  if (status === 'ok' && link) {
+    replaceValues(database, msisdn, valores);
+  } else {
+    database.prepare('DELETE FROM number_values WHERE msisdn = ?').run(msisdn);
+  }
 }
 
 export function getNumber(msisdn) {
@@ -100,8 +139,7 @@ export function countNumbers({ onlyOk = true } = {}) {
 }
 
 export function countWithValues() {
-  const rows = getDb().prepare("SELECT valores FROM numbers WHERE status = 'ok'").all();
-  return rows.filter((r) => parseValores(r.valores).length > 0).length;
+  return getDb().prepare('SELECT COUNT(DISTINCT msisdn) AS n FROM number_values').get().n;
 }
 
 export function listErrors({ limit = 20, offset = 0 } = {}) {
@@ -120,6 +158,86 @@ export function countErrors() {
 }
 
 export function deleteNumber(msisdn) {
-  const r = getDb().prepare('DELETE FROM numbers WHERE msisdn = ?').run(msisdn);
+  const database = getDb();
+  database.prepare('DELETE FROM number_values WHERE msisdn = ?').run(msisdn);
+  const r = database.prepare('DELETE FROM numbers WHERE msisdn = ?').run(msisdn);
   return r.changes > 0;
+}
+
+/** Converte "20", "R$ 20", "15,00" em centavos. */
+export function parseReaisToCents(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw || raw.length > 12) return null;
+  const m = raw.match(/^(?:r\$\s*)?(\d{1,4})(?:[.,](\d{1,2}))?$/i);
+  if (!m) return null;
+  const whole = Number(m[1]);
+  const frac = m[2] ? Number(m[2].padEnd(2, '0').slice(0, 2)) : 0;
+  const cents = whole * 100 + frac;
+  if (!Number.isFinite(cents) || cents <= 0) return null;
+  return cents;
+}
+
+export function listValueStock() {
+  return getDb()
+    .prepare(
+      `SELECT value_cents, MIN(name) AS name, COUNT(*) AS n
+       FROM number_values
+       GROUP BY value_cents
+       ORDER BY value_cents`,
+    )
+    .all()
+    .map((r) => ({
+      value: r.value_cents,
+      name: r.name,
+      count: r.n,
+    }));
+}
+
+export function countForValue(valueCents) {
+  const cents = Number(valueCents);
+  if (!Number.isFinite(cents)) return 0;
+  return getDb()
+    .prepare('SELECT COUNT(*) AS n FROM number_values WHERE value_cents = ?')
+    .get(cents).n;
+}
+
+export function pickLinkForValue(valueCents, { excludeMsisdn } = {}) {
+  const cents = Number(valueCents);
+  if (!Number.isFinite(cents) || cents <= 0) return null;
+  const exclude = excludeMsisdn ? String(excludeMsisdn) : '';
+  const row = exclude
+    ? getDb()
+        .prepare(
+          `SELECT n.msisdn, n.link, nv.name, nv.product_id, nv.value_cents
+           FROM number_values nv
+           JOIN numbers n ON n.msisdn = nv.msisdn
+           WHERE nv.value_cents = ?
+             AND n.status = 'ok'
+             AND n.link IS NOT NULL
+             AND n.msisdn != ?
+           ORDER BY n.scanned_at ASC
+           LIMIT 1`,
+        )
+        .get(cents, exclude)
+    : getDb()
+        .prepare(
+          `SELECT n.msisdn, n.link, nv.name, nv.product_id, nv.value_cents
+           FROM number_values nv
+           JOIN numbers n ON n.msisdn = nv.msisdn
+           WHERE nv.value_cents = ?
+             AND n.status = 'ok'
+             AND n.link IS NOT NULL
+           ORDER BY n.scanned_at ASC
+           LIMIT 1`,
+        )
+        .get(cents);
+  if (!row) return null;
+  return {
+    msisdn: row.msisdn,
+    link: row.link,
+    name: row.name,
+    productId: row.product_id,
+    value: row.value_cents,
+    remaining: countForValue(cents),
+  };
 }
