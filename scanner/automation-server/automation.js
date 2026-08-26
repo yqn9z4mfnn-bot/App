@@ -14,7 +14,8 @@ import {
 import { generateWebLoginLink, normalizeMinhaClaroWebLink } from "./linkGenerate.js";
 import {
   tryApiDirectEldoradoPay,
-  isGateRequestCaptureUrl
+  isGateRequestCaptureUrl,
+  gateCaptureHas3dsChallenge
 } from "./apiPayPoc.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1590,6 +1591,12 @@ const runCardAndPayWithGenericRetry = async (session, payload) => {
 };
 
 const classifyFailedClaroPayment = (runError, paymentResult, session, lastErrorText) => {
+  if (paymentResult?.status === "3ds_blocked" || paymentResult?.gateCode === "3DS_BLOCKED") {
+    return {
+      code: "3ds_blocked",
+      message: paymentResult?.message || "3DS exigido pelo banco — recarga abortada"
+    };
+  }
   const gatePixOnly =
     session?.gateCapture &&
     gateCapturePixOnly(session.gateCapture) &&
@@ -3092,6 +3099,25 @@ const buildPaymentResult = async (page, status, currentUrl, gateCapture, pageHin
     };
   }
 
+  if (status === "3ds_blocked") {
+    const tds = gateCapture ? gateCaptureHas3dsChallenge(gateCapture) : null;
+    const brand =
+      tds?.brand ??
+      pageHint?.match(/(Bradesco|Visa|Master|Elo|Ita[uú]|Santander|CARD|banco)/i)?.[1] ??
+      "banco";
+    return {
+      status: "3ds_blocked",
+      url: currentUrl || page.url(),
+      message: `3DS exigido pelo emissor (${brand}) — recarga abortada`,
+      gateCode: "3DS_BLOCKED",
+      gateMessage: `Autenticação 3DS ${brand} — não suportada`,
+      threeDS: true,
+      pageHint,
+      gateNsu,
+      gateResponse
+    };
+  }
+
   return {
     status: "timeout",
     url: page.url(),
@@ -3133,6 +3159,31 @@ const scanPageForPaymentOutcome = async (page) => {
   return null;
 };
 
+const PAGE_3DS_TEXT_RE =
+  /valida[cç][aã]o de seguran[cç]a|chave de seguran[cç]a|verifica[cç][aã]o necess[aá]ria|threeDSSessionData|bpmpi_auth/i;
+
+const scanPageFor3dsChallenge = async (page) => {
+  for (const frame of page.frames()) {
+    try {
+      const text = await frame.evaluate(() => (document.body?.innerText || "").replace(/\s+/g, " ").trim());
+      if (text && PAGE_3DS_TEXT_RE.test(text)) {
+        const brand = text.match(/(Bradesco|Visa|Master|Elo|Ita[uú]|Santander)/i)?.[1] ?? "banco";
+        return { brand, hint: text.slice(0, 300) };
+      }
+      const has3dsInput = await frame
+        .locator('input[name="threeDSSessionData"], input[name="bpmpi_auth_suppresschallenge"]')
+        .count()
+        .catch(() => 0);
+      if (has3dsInput > 0) {
+        return { brand: "CARD", hint: "formulário 3DS detectado" };
+      }
+    } catch {
+      // cross-origin / frame morto
+    }
+  }
+  return null;
+};
+
 const waitForPaymentResult = async (page, timeoutMs = config.paymentWaitTimeoutMs || 120000, gateCapture = null) => {
   const startTime = Date.now();
   const checkInterval = 500;
@@ -3146,6 +3197,20 @@ const waitForPaymentResult = async (page, timeoutMs = config.paymentWaitTimeoutM
     }
     if (outcome?.kind === "error") {
       return buildPaymentResult(page, "error", currentUrl, gateCapture);
+    }
+
+    const tdsNet = gateCapture ? gateCaptureHas3dsChallenge(gateCapture) : null;
+    const tdsPage = await scanPageFor3dsChallenge(page);
+    if (tdsNet || tdsPage) {
+      const brand = tdsNet?.brand ?? tdsPage?.brand ?? "banco";
+      console.log(`[claro][3ds] detectado (${brand}) — abortando pagamento`);
+      return buildPaymentResult(
+        page,
+        "3ds_blocked",
+        currentUrl,
+        gateCapture,
+        tdsPage?.hint || `Challenge 3DS ${brand}`
+      );
     }
 
     const visible = await scanPageForPaymentOutcome(page);
@@ -4267,23 +4332,7 @@ const runCardAndPay = async (session, payload) => {
 
   setSessionStep(session, "aguardando_gate", "Aguardando retorno da gate / página de resultado…");
   const paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture);
-  if (paymentResult?.status === "success") {
-    setSessionStep(session, "sucesso", "Pagamento confirmado com sucesso");
-    // Limpeza (cartão + cadastro) roda DEPOIS de devolver sucesso ao bot —
-    // não bloqueia notificação ao cliente.
-    session.needsPosSucessoCleanup = true;
-  } else if (paymentResult?.status === "error") {
-    setSessionStep(
-      session,
-      "erro_gate",
-      paymentResult.gateMessage || paymentResult.message || "Pagamento recusado"
-    );
-    if (isNegativeListGate(paymentResult)) {
-      await excluirCadastroClaroPosListaNegativa(session);
-    }
-  } else {
-    setSessionStep(session, "timeout", paymentResult?.message || "Timeout no pagamento");
-  }
+  await finalizePaymentResultSteps(session, paymentResult);
   return paymentResult;
 };
 
@@ -4943,6 +4992,37 @@ const ensureCheckoutNewCardForm = async (page, session) => {
   return isPanFormReady(page);
 };
 
+const finalizePaymentResultSteps = async (session, paymentResult) => {
+  if (paymentResult?.status === "success") {
+    setSessionStep(session, "sucesso", "Pagamento confirmado com sucesso");
+    session.needsPosSucessoCleanup = true;
+  } else if (paymentResult?.status === "3ds_blocked") {
+    setSessionStep(
+      session,
+      "3ds_blocked",
+      paymentResult.message || "3DS detectado — sessão encerrada"
+    );
+    console.log(`[claro][3ds] fechando sessão ${session.id}`);
+    try {
+      await closeSession(session.id);
+    } catch {
+      /* ignore */
+    }
+  } else if (paymentResult?.status === "error") {
+    setSessionStep(
+      session,
+      "erro_gate",
+      paymentResult.gateMessage || paymentResult.message || "Pagamento recusado"
+    );
+    if (isNegativeListGate(paymentResult)) {
+      await excluirCadastroClaroPosListaNegativa(session);
+    }
+  } else {
+    setSessionStep(session, "timeout", paymentResult?.message || "Timeout no pagamento");
+  }
+  return paymentResult;
+};
+
 const runWebLinkCheckoutPayAttempt = async (session, payload) => {
   const { page } = session;
 
@@ -5018,21 +5098,7 @@ const runWebLinkCheckoutPayAttempt = async (session, payload) => {
     session.gateCapture
   );
   await captureWebLinkStep(page, `gate_${paymentResult?.status || "unknown"}`, session);
-  if (paymentResult?.status === "success") {
-    setSessionStep(session, "sucesso", "Pagamento confirmado com sucesso");
-    session.needsPosSucessoCleanup = false;
-  } else if (paymentResult?.status === "error") {
-    setSessionStep(
-      session,
-      "erro_gate",
-      paymentResult.gateMessage || paymentResult.message || "Pagamento recusado"
-    );
-    if (isNegativeListGate(paymentResult)) {
-      await excluirCadastroClaroPosListaNegativa(session);
-    }
-  } else {
-    setSessionStep(session, "timeout", paymentResult?.message || "Timeout no pagamento");
-  }
+  await finalizePaymentResultSteps(session, paymentResult);
   return paymentResult;
 };
 
@@ -5498,6 +5564,7 @@ const isPaymentFailure = (paymentResult, runError) => {
   if (gateIndicatesSuccess(paymentResult.gateResponse)) return false;
   if (paymentResult.pagamentoErro) return true;
   const st = String(paymentResult.status || "").toLowerCase();
+  if (st === "3ds_blocked") return true;
   if (st === "success") {
     if (gateIndicatesSuccess(paymentResult.gateResponse)) return false;
     if (isPaymentSuccessUrl(paymentResult.url)) return false;
@@ -5671,7 +5738,9 @@ export const submitCodeAndFinish = async (sessionId, payload) => {
       if (
         runError?.claroErrorCode === "sms_invalid" ||
         runError?.claroErrorCode === "cadastro_deletado" ||
-        runError?.claroErrorCode === "valor_indisponivel"
+        runError?.claroErrorCode === "valor_indisponivel" ||
+        classified.code === "3ds_blocked" ||
+        paymentResult?.status === "3ds_blocked"
       ) {
         keepForRetry = false;
       }
@@ -5753,6 +5822,9 @@ export const submitCodeAndFinish = async (sessionId, payload) => {
               ? "Cadastro Claro Recarga excluído/indisponível — cliente precisa refazer cadastro no site Claro."
               : classified.code === "valor_indisponivel"
                 ? classified.message || "Valor não disponível nesse número."
+              : classified.code === "3ds_blocked"
+                ? classified.message ||
+                  "3DS exigido pelo banco — recarga abortada (autenticação manual não suportada)."
               : isListaNeg
                 ? classified.message ||
                   "Linha na lista negativa Claro — navegador fechado; número bloqueado no bot por 30 dias."

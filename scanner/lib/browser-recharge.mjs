@@ -18,6 +18,25 @@ function mapAutomationStatus(data) {
     };
   }
 
+  if (
+    st === '3ds_blocked' ||
+    st === '3ds_required' ||
+    gate?.threeDS ||
+    data?.claroErrorCode === '3ds_blocked' ||
+    data?.gateCode === '3DS_BLOCKED' ||
+    data?.gateCode?.includes?.('3DS')
+  ) {
+    return {
+      status: '3DS_BLOCKED',
+      message:
+        data?.message ||
+        gate?.message ||
+        gate?.gateMessage ||
+        '3DS exigido pelo banco — recarga abortada',
+      negativeReason: 'Autenticação 3DS manual não suportada',
+    };
+  }
+
   if (st === 'error' || st === 'error_manual' || st === 'timeout' || data?.gateCode) {
     return {
       status: st === 'timeout' ? 'TIMEOUT' : 'DENIED',
