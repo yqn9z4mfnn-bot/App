@@ -4063,9 +4063,10 @@ const clickRechargeValueButton = async (page, session, rechargeValue) => {
   ];
   for (const loc of candidates) {
     try {
-      if ((await loc.count()) === 0) continue;
-      await loc.waitFor({ state: "visible", timeout: 5000 });
-      await loc.click({ timeout: config.actionTimeoutMs, force: true });
+      if ((await locatorCountSafe(loc, 1200)) === 0) continue;
+      await loc.waitFor({ state: "visible", timeout: 4000 });
+      await loc.click({ timeout: 8000, force: true, noWaitAfter: true });
+      if (session) setSessionStep(session, "aguardando_checkout", "Aguardando Smart Checkout abrir…");
       return;
     } catch {
       // tenta próximo seletor (web portal: R$ e valor em spans separados)
@@ -4083,7 +4084,10 @@ const clickRechargeValueButton = async (page, session, rechargeValue) => {
     el.click();
     return true;
   }, rechargeValue);
-  if (clicked) return;
+  if (clicked) {
+    if (session) setSessionStep(session, "aguardando_checkout", "Aguardando Smart Checkout abrir…");
+    return;
+  }
   const disponiveis = await page
     .evaluate(() => {
       const out = [];
@@ -4458,7 +4462,7 @@ const ensureWebNumeroChoiceScreen = async (session) => {
 };
 
 const hasSmartCheckout = async (page) => {
-  if ((await page.locator('iframe#checkout, iframe[title="smartCheckout"]').count()) > 0) {
+  if ((await locatorCountSafe(page.locator('iframe#checkout, iframe[title="smartCheckout"]'), 1500)) > 0) {
     return true;
   }
   return page.frames().some((f) => /eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(f.url() || ""));
@@ -4478,7 +4482,7 @@ const ensureSmartCheckoutReady = async (page, session) => {
   await dismissCookieBanner(page);
   await dismissBonusModalIfVisible(page);
   const iframe = page.locator('iframe#checkout, iframe[title="smartCheckout"]').first();
-  if ((await iframe.count()) > 0) {
+  if ((await locatorCountSafe(iframe, 1200)) > 0) {
     await iframe.scrollIntoViewIfNeeded().catch(() => {});
   }
   if (await hasSmartCheckout(page)) {
