@@ -1,4 +1,4 @@
-import { claroGet, claroPost } from './http.mjs';
+import { claroGet, claroPost, claroDelete } from './http.mjs';
 
 export async function createSession(jwt) {
   const res = await claroPost('/sessions/', null, {
@@ -91,4 +91,11 @@ export async function createSmartCheckout(sessionId, msisdn, productId) {
     recipient: msisdn,
     productId,
   });
+}
+
+export async function deleteClaroPaymentMethod(sessionId, msisdn, cardToken, type = 'credit') {
+  return claroDelete(
+    `/customers/${msisdn}/payment-methods/${type}-${encodeURIComponent(cardToken)}`,
+    sessionId,
+  );
 }

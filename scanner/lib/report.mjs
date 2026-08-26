@@ -6,7 +6,7 @@ function maskCard(card) {
   return {
     brand: card.brand,
     bin: card.bin,
-    last: card.last,
+    last: card.last ?? card.lastDigits,
     expiration: `${String(card.expirationMonth).padStart(2, '0')}/${card.expirationYear}`,
     token: card.token ? `${String(card.token).slice(0, 8)}…` : undefined,
     holder: card.holder?.name || card.holder || '',
@@ -30,6 +30,9 @@ export function buildSummary({ session, claro, wallet, skipWallet = false }) {
   if (wallet?.walletCards?.ok && Array.isArray(wallet.walletCards.body)) {
     walletCards = wallet.walletCards.body;
   }
+
+  const walletTokens = new Set(walletCards.map((c) => c.token).filter(Boolean));
+  const claroOnly = claroCreditCards.filter((c) => !walletTokens.has(c.token));
 
   const availableValues = products
     .filter((p) => p.isAvailable !== false)
@@ -80,9 +83,9 @@ export function buildSummary({ session, claro, wallet, skipWallet = false }) {
       category: p.category,
     })),
     cartoes: {
-      claroApi: claroCreditCards.map(maskCard),
+      claroApi: claroOnly.map(maskCard),
       walletEldorado: walletCards.map(maskCard),
-      total: claroCreditCards.length + walletCards.length,
+      total: walletCards.length + claroOnly.length,
       nota:
         walletCards.length > 0
           ? 'Cartões salvos ficam na wallet Eldorado (não aparecem em /payment-methods)'

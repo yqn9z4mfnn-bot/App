@@ -51,4 +51,11 @@ export async function claroPost(path, sessionId, payload) {
   });
 }
 
+export async function claroDelete(path, sessionId) {
+  return request(`${CLARO_API}${path}`, {
+    method: 'DELETE',
+    headers: claroHeaders(sessionId),
+  });
+}
+
 export { CLARO_API, CHANNEL };
