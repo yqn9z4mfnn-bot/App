@@ -67,8 +67,7 @@ export function formatTelegramReport(summary) {
     lines.push('', `⚠️ ${esc(summary.walletScan.message)}`);
   }
 
-  const mode = summary.meta?.mode === 'fast' ? '⚡' : '';
-  lines.push('', `<i>${mode}⏱ ${summary.meta?.latencyMs ?? '?'}ms</i>`);
+  lines.push('', `<i>⏱ ${summary.meta?.latencyMs ?? '?'}ms</i>`);
 
   let text = lines.join('\n');
   if (text.length > 3900) text = `${text.slice(0, 3890)}…`;

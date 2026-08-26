@@ -3,6 +3,7 @@ import { runScan } from './lib/run-scan.mjs';
 import {
   deleteWalletCard,
   deleteAllWalletCards,
+  fetchWalletCards,
 } from './lib/eldorado.mjs';
 import {
   formatTelegramReport,
@@ -83,11 +84,11 @@ async function doScan(chatId, link, { skipWallet = false, editMsg = null } = {})
   busy.add(chatId);
   let statusMsg = editMsg;
   if (!statusMsg) {
-    statusMsg = await send(chatId, skipWallet ? '🔍 Varredura…' : '⚡ Varredura rápida…');
+    statusMsg = await send(chatId, skipWallet ? '🔍 Varredura (sem wallet)…' : '🔍 Varredura completa…\n<i>~3–5 segundos</i>');
   }
 
   try {
-    const result = await runScan(link, { skipWallet, full: false });
+    const result = await runScan(link, { skipWallet });
     const { summary, walletAuth, wallet } = result;
     const report = formatTelegramReport(summary);
 
@@ -143,6 +144,42 @@ async function handleRemove(chatId, messageId, cardToken, cardLabel) {
   });
 }
 
+async function refreshCardsView(chatId, messageId, entry) {
+  const cardsRes = await fetchWalletCards(
+    entry.walletAuth.bemobiToken,
+    entry.walletAuth.checkoutCode,
+  );
+  const rawCards = Array.isArray(cardsRes.body) ? cardsRes.body : [];
+  entry.cards = rawCards;
+  setCache(chatId, entry);
+
+  const { summary } = await runScan(entry.link, { skipWallet: true });
+  summary.cartoes.walletEldorado = rawCards.map((c) => ({
+    brand: c.brand,
+    bin: c.bin,
+    last: c.last,
+    expiration: `${String(c.expirationMonth).padStart(2, '0')}/${c.expirationYear}`,
+    type: c.type,
+  }));
+  summary.cartoes.claroApi = summary.cartoes.claroApi ?? [];
+  summary.cartoes.total =
+    summary.cartoes.walletEldorado.length + summary.cartoes.claroApi.length;
+  summary.cartoes.nota =
+    rawCards.length > 0
+      ? 'Cartões salvos ficam na wallet Eldorado (não aparecem em /payment-methods)'
+      : 'Nenhum cartão vinculado encontrado';
+
+  const report = formatTelegramReport(summary);
+  await tg('editMessageText', {
+    chat_id: chatId,
+    message_id: messageId,
+    text: report,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    reply_markup: buildCardKeyboard(rawCards),
+  });
+}
+
 async function executeRemove(chatId, messageId, cardToken) {
   const entry = getCache(chatId);
   if (!entry?.walletAuth) {
@@ -172,11 +209,11 @@ async function executeRemove(chatId, messageId, cardToken) {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
-      text: `✅ <b>Removido:</b> ${label}\n\nAtualizando varredura…`,
+      text: `✅ <b>Removido:</b> ${label}`,
       parse_mode: 'HTML',
     });
 
-    await doScan(chatId, entry.link, { editMsg: { message_id: messageId } });
+    await refreshCardsView(chatId, messageId, entry);
   } catch (err) {
     await tg('editMessageText', {
       chat_id: chatId,
@@ -211,11 +248,11 @@ async function executeRemoveAll(chatId, messageId) {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
-      text: `✅ <b>${ok}/${total}</b> cartões removidos.\n\nAtualizando…`,
+      text: `✅ <b>${ok}/${total}</b> cartões removidos.`,
       parse_mode: 'HTML',
     });
 
-    await doScan(chatId, entry.link, { editMsg: { message_id: messageId } });
+    await refreshCardsView(chatId, messageId, entry);
   } catch (err) {
     await tg('editMessageText', {
       chat_id: chatId,
@@ -281,7 +318,7 @@ async function handleMessage(msg) {
   }
 
   if (text === '/status') {
-    await send(chatId, `🟢 Online · ${Math.floor(process.uptime())}s · ⚡ modo rápido`);
+    await send(chatId, `🟢 Online · ${Math.floor(process.uptime())}s`);
     return;
   }
 
@@ -313,7 +350,7 @@ async function handleMessage(msg) {
 }
 
 async function poll() {
-  console.log('[bot] polling (fast mode + remove cards)…');
+  console.log('[bot] polling…');
   while (true) {
     try {
       const updates = await tg('getUpdates', {
