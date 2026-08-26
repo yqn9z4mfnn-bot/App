@@ -5206,8 +5206,8 @@ const runWebLinkRecharge = async (session, payload) => {
   await clickRechargeValueButton(page, session, rechargeValue);
   setSessionStep(session, "aguardando_checkout", "Aguardando Smart Checkout abrir…");
 
-  // Até 8s: falha rápida em 429 ou segue quando checkout OK (API 201 / iframe)
-  const checkoutReadyDeadline = Date.now() + 8000;
+  // Até 20s: falha rápida em 429 ou segue quando checkout OK (API 201 / iframe)
+  const checkoutReadyDeadline = Date.now() + 20000;
   while (Date.now() < checkoutReadyDeadline) {
     throwIfCheckoutApiBlocked(session);
     if (await hasSmartCheckout(page, session)) {
@@ -5222,7 +5222,7 @@ const runWebLinkRecharge = async (session, payload) => {
 
   throw claroFlowError(
     "checkout_timeout",
-    "Checkout não abriu a tempo (8s). Tente novamente."
+    "Checkout não abriu a tempo (20s). Tente novamente."
   );
 };
 
