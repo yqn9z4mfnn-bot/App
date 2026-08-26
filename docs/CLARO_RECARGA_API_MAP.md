@@ -1,6 +1,6 @@
 # Claro Recarga — Mapa Completo de API e Rotas
 
-> Gerado em 2026-08-26 · Portal: `minhaclaro_web` · MSISDN teste: `62994908313`
+> Gerado em 2026-08-26 · Portal: `minhaclaro_web` · MSISDNs teste: `62994908313`, `21978682245`
 
 ---
 
@@ -245,8 +245,76 @@ Retorna sessão completa com:
 
 ### Eldorado BSC API
 - Base: `https://eldorado.m4u.com.br/api-bsc/api/v1`
-- Auth: `Authorization: Bearer {token}` + `x-bsc: client`
+- Tokenização: `https://eldorado.m4u.com.br/tokenizer/validation`
+- BIN lookup: `https://eldorado.m4u.com.br/v1/bins/{bin6}`
+- Auth: `Authorization: Bearer {token}` + `x-bsc: client` + `x-session-id: {checkout_code}`
 - SSE pagamento: `GET /payments/{id}/sse`
+
+### Wallet — cartões salvos (Eldorado)
+
+> Cartões vinculados **não aparecem** em `GET /customers/{msisdn}/payment-methods` (`elements: []`).  
+> Ficam na wallet Bemobi, acessível via sessão Smart Checkout.
+
+| Método | Endpoint | Auth | Descrição |
+|--------|----------|------|-----------|
+| GET | `/api-bsc/api/v1/cards` | Bearer + x-bsc | Lista cartões salvos |
+| GET | `/api-bsc/api/v1/cards?all_tokens=true` | Bearer + x-bsc | Lista com todos os tokens |
+| DELETE | `/api-bsc/api/v1/cards/{token}` | Bearer + x-bsc | **Remove cartão da wallet** (200) |
+| DELETE | `/api-bsc/api/v1/cards/{token}?all_tokens=true` | Bearer + x-bsc | Remove (variante) |
+
+**Response GET `/cards` (exemplo MSISDN 21978682245):**
+```json
+[{
+  "type": "CREDIT",
+  "token": "77D50275-****-****-****-************",
+  "brand": "VISA",
+  "bin": "422061",
+  "last": "6593",
+  "expirationMonth": 12,
+  "expirationYear": 2032,
+  "holder": {"name": "", "email": "", "phoneNumber": ""},
+  "wasValidated": false
+}]
+```
+
+**Pagamento com cartão salvo** — mesmo `POST /payments`, usando `card.token` da wallet + **CVV obrigatório**:
+```json
+{
+  "method": "credit",
+  "installments": 1,
+  "card": {
+    "token": "{wallet_token}",
+    "expirationYear": 2032,
+    "expirationMonth": 12,
+    "cvv": "***",
+    "brand": "VISA",
+    "bin": "422061",
+    "last": "6593",
+    "holder": {"name": "TITULAR", "email": "", "phoneNumber": ""},
+    "paymentWallet": "bemobi",
+    "wasSaved": true
+  }
+}
+```
+
+### DELETE cartão — API Claro vs Eldorado
+
+| API | Endpoint | Smart Checkout | Resultado teste |
+|-----|----------|----------------|-----------------|
+| Claro (legado) | `DELETE /customers/{msisdn}/payment-methods/{type}-{id}` | ❌ | 422 — não remove wallet |
+| Eldorado (ativo) | `DELETE /api-bsc/api/v1/cards/{token}` | ✅ | 200 — remove da wallet |
+
+Formato legado Claro (JS `qe()`): `{type}` = `credit`, `{id}` = ID interno (não é o token Eldorado).
+
+### Perfil cliente — diferenças observadas
+
+| Campo | MSISDN 62994908313 | MSISDN 21978682245 |
+|-------|-------------------|-------------------|
+| status | CREATED | ACTIVATED |
+| registerOrigin | MINHA_CLARO_WEB | APP_MINHA_CLARO |
+| payment-methods elements | `[]` | `[]` (cartões na wallet Eldorado) |
+| traits | planType N/A | plan_offer prezao, plan_offer_status active |
+| recharges | `[]` | histórico PIX ok + cartão nok |
 
 ---
 

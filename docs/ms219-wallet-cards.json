@@ -1,0 +1,86 @@
+{
+  "msisdn": "21978682245",
+  "segment": "CLARO_CARTAO",
+  "customer_status": "ACTIVATED",
+  "register_origin": "APP_MINHA_CLARO",
+  "note": "Conta com cartões salvos na wallet Eldorado (não aparecem em GET /payment-methods da API Claro)",
+  "claro_api": {
+    "GET /customers/{msisdn}/payment-methods": {
+      "status": 200,
+      "response": [
+        {"type": "credit", "label": "Cartão de Crédito", "maxLimit": 3, "elements": []},
+        {"type": "pix", "label": "Pix", "elements": []}
+      ],
+      "note": "elements[] vazio — cartões ficam na wallet Bemobi/Eldorado"
+    },
+    "DELETE /customers/{msisdn}/payment-methods/credit-{token}": {
+      "status": 422,
+      "note": "Não funciona para cartões Smart Checkout; usar Eldorado DELETE /cards/{token}"
+    }
+  },
+  "eldorado_wallet": {
+    "list": {
+      "method": "GET",
+      "url": "https://eldorado.m4u.com.br/api-bsc/api/v1/cards?all_tokens=true",
+      "headers": ["Authorization: Bearer {bemobi_token}", "x-bsc: client"],
+      "status": 200,
+      "response_example": [
+        {
+          "type": "CREDIT",
+          "token": "77D50275-****-****-****-************",
+          "brand": "VISA",
+          "bin": "422061",
+          "last": "6593",
+          "expirationMonth": 12,
+          "expirationYear": 2032,
+          "holder": {"name": "", "email": "", "phoneNumber": ""},
+          "wasValidated": false
+        }
+      ]
+    },
+    "delete": {
+      "method": "DELETE",
+      "url": "https://eldorado.m4u.com.br/api-bsc/api/v1/cards/{token}",
+      "headers": ["Authorization: Bearer {bemobi_token}", "x-bsc: client"],
+      "status": 200,
+      "response": "empty body",
+      "optional_query": "?all_tokens=true"
+    },
+    "pay_with_saved_card": {
+      "method": "POST",
+      "url": "https://eldorado.m4u.com.br/api-bsc/api/v1/payments",
+      "requires": ["GET /installments?method=credit&invoice_ids=...", "CVV do titular"],
+      "payload": {
+        "method": "credit",
+        "installments": 1,
+        "card": {
+          "token": "{wallet_token}",
+          "expirationYear": 2032,
+          "expirationMonth": 12,
+          "cvv": "***",
+          "brand": "VISA",
+          "bin": "422061",
+          "last": "6593",
+          "holder": {"name": "TITULAR", "email": "", "phoneNumber": ""},
+          "paymentWallet": "bemobi",
+          "wasSaved": true
+        }
+      },
+      "result": "200 PENDING → SSE DENIED (422 suspected fraud — CVV incorreto ou antifraude IP)"
+    }
+  },
+  "recharge_history": {
+    "GET /customers/21978682245/recharges": {
+      "credit_attempt": {
+        "status": "nok",
+        "paymentMethod.source.type": "credit",
+        "paymentMethod.source.params": {"token": "77D50275-...", "last": "6593", "brand": "VISA"},
+        "partnerExternalId": "83515674-13c8-4084-a80b-3cb1d08b9011"
+      },
+      "pix_success": {
+        "status": "ok",
+        "paymentMethod.source.type": "pix"
+      }
+    }
+  }
+}
