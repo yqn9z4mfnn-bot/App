@@ -1202,6 +1202,9 @@ const attachGateCapture = (context, session = null) => {
           session.checkoutApiError = { httpStatus: 429, code: "rate_limit", url, at: Date.now() };
         } else if (httpStatus >= 400) {
           session.checkoutApiError = { httpStatus, code: "checkout_api_error", url, at: Date.now() };
+        } else if (httpStatus === 201) {
+          session.checkoutApiOk = true;
+          session.checkoutApiOkAt = Date.now();
         }
       }
       const ct = String(response.headers()["content-type"] || "");
@@ -2315,12 +2318,15 @@ const clickByText = async (page, texts, timeoutMs = config.actionTimeoutMs) => {
 };
 
 const saveStepDebug = async (page, tag) => {
+  if (process.env.SKIP_CS_CAPTURE === "1") return;
   try {
     const stamp = Date.now();
     const base = path.join(CLARO_DEBUG_DIR, `step_${tag}_${stamp}`);
     await fs.mkdir(CLARO_DEBUG_DIR, { recursive: true });
-    await page.screenshot({ path: `${base}.png`, fullPage: true }).catch(() => {});
-    await fs.writeFile(`${base}.html`, await page.content(), "utf8").catch(() => {});
+    await page.screenshot({ path: `${base}.png`, fullPage: true, timeout: 8000 }).catch(() => {});
+    await fs
+      .writeFile(`${base}.html`, await page.content({ timeout: 8000 }).catch(() => ""), "utf8")
+      .catch(() => {});
     console.log(`[claro][debug] ${tag} url=${page.url()} -> ${base}.png`);
   } catch (err) {
     console.warn(`[claro][debug] falha ${tag}: ${err?.message || err}`);
@@ -4475,17 +4481,39 @@ const ensureWebNumeroChoiceScreen = async (session) => {
   return ready();
 };
 
-const hasSmartCheckout = async (page) => {
-  if ((await locatorCountSafe(page.locator('iframe#checkout, iframe[title="smartCheckout"]'), 1500)) > 0) {
+const hasSmartCheckout = async (page, session = null) => {
+  const pageUrl = page.url() || "";
+  if (/\/smartcheckout/i.test(pageUrl)) return true;
+  if (
+    (await locatorCountSafe(
+      page.locator(
+        'iframe#checkout, iframe[title="smartCheckout"], iframe[src*="smart-checkout"], iframe[src*="eldorado"]'
+      ),
+      1500
+    )) > 0
+  ) {
     return true;
   }
-  return page.frames().some((f) => /eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(f.url() || ""));
+  if (
+    page.frames().some((f) => {
+      const u = f.url() || "";
+      return (
+        /eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(u) || /smart-checkout\.bemobi\.com/i.test(u)
+      );
+    })
+  ) {
+    return true;
+  }
+  if (session?.checkoutApiOk && session.checkoutApiOkAt && Date.now() - session.checkoutApiOkAt >= 2500) {
+    return true;
+  }
+  return false;
 };
 
-const waitForSmartCheckout = async (page, timeoutMs = 15000) => {
+const waitForSmartCheckout = async (page, timeoutMs = 15000, session = null) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await hasSmartCheckout(page)) return true;
+    if (await hasSmartCheckout(page, session)) return true;
     await sleep(350);
   }
   return false;
@@ -5154,7 +5182,7 @@ const runWebLinkRecharge = async (session, payload) => {
   const apiDeadline = Date.now() + 6000;
   while (Date.now() < apiDeadline) {
     throwIfCheckoutApiBlocked(session);
-    if (await hasSmartCheckout(page)) break;
+    if (await hasSmartCheckout(page, session)) break;
     await sleep(250);
   }
   throwIfCheckoutApiBlocked(session);
@@ -5168,11 +5196,11 @@ const runWebLinkRecharge = async (session, payload) => {
   const checkoutDeadline = Date.now() + 15000;
   while (Date.now() < checkoutDeadline) {
     throwIfCheckoutApiBlocked(session);
-    if (await hasSmartCheckout(page)) break;
+    if (await hasSmartCheckout(page, session)) break;
     await sleep(300);
   }
   throwIfCheckoutApiBlocked(session);
-  if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 8000))) {
+  if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 8000, session))) {
     throwIfCheckoutApiBlocked(session);
     if (!gateCaptureHasCredit(session?.gateCapture) && (await detectPixOnlyCheckout(page, session))) {
       await saveStepDebug(page, "valor_pix_only_gate");
@@ -5181,7 +5209,7 @@ const runWebLinkRecharge = async (session, payload) => {
   }
   await throwIfPixOnlyCheckout(page, session);
 
-  const hasCheckout = await hasSmartCheckout(page);
+  const hasCheckout = await hasSmartCheckout(page, session);
   if (hasCheckout) {
     return runWebLinkSmartCheckout(session, payload);
   }
