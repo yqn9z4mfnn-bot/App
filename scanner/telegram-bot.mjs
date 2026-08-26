@@ -26,6 +26,14 @@ if (!TOKEN) {
   process.exit(1);
 }
 
+process.on('unhandledRejection', (err) => {
+  console.error('[bot] unhandledRejection:', err?.message ?? err);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[bot] uncaughtException:', err?.message ?? err);
+});
+
 const API = `https://api.telegram.org/bot${TOKEN}`;
 let offset = 0;
 const busy = new Set();
@@ -507,54 +515,61 @@ async function handleCallback(query) {
 }
 
 async function handleMessage(msg) {
-  const chatId = msg.chat.id;
+  const chatId = msg.chat?.id;
   const text = msg.text?.trim() ?? '';
 
-  if (rechargeFlow.has(chatId)) {
-    const handled = await handleRechargeInput(chatId, text);
-    if (handled) return;
-  }
+  if (!chatId) return;
 
-  if (text === '/start' || text === '/help') {
-    await send(chatId, WELCOME);
-    return;
-  }
+  try {
+    if (rechargeFlow.has(chatId)) {
+      const handled = await handleRechargeInput(chatId, text);
+      if (handled) return;
+    }
 
-  if (text === '/recarga') {
-    await startRechargePicker(chatId);
-    return;
-  }
-
-  if (text === '/status') {
-    await send(chatId, `🟢 Online · ${Math.floor(process.uptime())}s`);
-    return;
-  }
-
-  if (text === '/cartoes') {
-    const entry = getCache(chatId);
-    if (!entry?.cards?.length) {
-      await send(chatId, '❌ Nenhum cartão em cache. Varredura necessária.');
+    if (text === '/start' || text === '/help') {
+      await send(chatId, WELCOME);
       return;
     }
-    await send(chatId, `<b>Cartões (${entry.cards.length})</b>:`, {
-      reply_markup: buildCardKeyboard(entry.cards),
-    });
-    return;
-  }
 
-  const skipWallet = text.startsWith('/scan');
-  const link = extractLink(skipWallet ? text.replace(/^\/scan\s*/, '') : text);
-
-  if (!link) {
-    if (text.startsWith('/')) {
-      await send(chatId, 'Comando desconhecido. /start\n/recarga — ' + RECHARGE_HELP.split('\n')[0]);
-    } else {
-      await send(chatId, '❌ Envie o link <code>?t=...</code> ou JWT puro.');
+    if (text === '/recarga') {
+      await startRechargePicker(chatId);
+      return;
     }
-    return;
-  }
 
-  await doScan(chatId, link, { skipWallet });
+    if (text === '/status') {
+      await send(chatId, `🟢 Online · ${Math.floor(process.uptime())}s`);
+      return;
+    }
+
+    if (text === '/cartoes') {
+      const entry = getCache(chatId);
+      if (!entry?.cards?.length) {
+        await send(chatId, '❌ Nenhum cartão em cache. Varredura necessária.');
+        return;
+      }
+      await send(chatId, `<b>Cartões (${entry.cards.length})</b>:`, {
+        reply_markup: buildCardKeyboard(entry.cards),
+      });
+      return;
+    }
+
+    const skipWallet = text.startsWith('/scan');
+    const link = extractLink(skipWallet ? text.replace(/^\/scan\s*/, '') : text);
+
+    if (!link) {
+      if (text.startsWith('/')) {
+        await send(chatId, 'Comando desconhecido. Use /start');
+      } else {
+        await send(chatId, '❌ Envie o link <code>?t=...</code> ou JWT puro.');
+      }
+      return;
+    }
+
+    await doScan(chatId, link, { skipWallet });
+  } catch (err) {
+    console.error('[msg] error:', err.message);
+    await send(chatId, `❌ Erro interno: ${err.message}`).catch(() => {});
+  }
 }
 
 async function poll() {
