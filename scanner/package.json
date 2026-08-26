@@ -1,0 +1,12 @@
+{
+  "name": "claro-recarga-scanner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "claro-scan": "./scan.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
