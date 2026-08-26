@@ -1,7 +1,6 @@
 import { request } from './http.mjs';
 import { openWalletSession } from './eldorado.mjs';
 import { buildBrowserPaymentExtras } from './antifraud-payload.mjs';
-import { detect3dsInObject, THREE_DS_BLOCKED_MESSAGE } from './three-ds-detect.mjs';
 
 const ELDORADO = 'https://eldorado.m4u.com.br';
 
@@ -118,15 +117,6 @@ export async function waitPaymentResult(bemobiToken, paymentId, timeoutMs = 5500
             if (!raw || raw === '[DONE]') continue;
             try {
               lastEvent = JSON.parse(raw);
-              const tds = detect3dsInObject(lastEvent);
-              if (tds) {
-                return {
-                  status: '3DS_BLOCKED',
-                  message: THREE_DS_BLOCKED_MESSAGE,
-                  threeDS: true,
-                  brand: tds.brand ?? null,
-                };
-              }
               const st = lastEvent.status?.toUpperCase?.() ?? lastEvent.status;
               if (st && !['PENDING', 'PROCESSING'].includes(st)) {
                 return lastEvent;
@@ -281,25 +271,6 @@ export async function runRecharge({
 
   const payRes = await createPayment(bemobiToken, checkoutCode, paymentPayload);
 
-  const tdsInPay = detect3dsInObject(payRes.body);
-  if (tdsInPay) {
-    return {
-      paymentId: payRes.body?.id ?? null,
-      pending: payRes.body,
-      result: {
-        status: '3DS_BLOCKED',
-        message: THREE_DS_BLOCKED_MESSAGE,
-        threeDS: true,
-        brand: tdsInPay.brand ?? null,
-      },
-      valueCents: productValue ?? bemobiBody?.invoices?.[0]?.value,
-      latencyMs: Date.now() - started,
-      cardMask: isSaved
-        ? `${card.brand} *${card.last}`
-        : `****${card.number.replace(/\D/g, '').slice(-4)}`,
-    };
-  }
-
   if (payRes.status === 429) {
     throw new Error('Rate limit no pagamento (429) — aguarde e tente novamente');
   }
@@ -312,19 +283,6 @@ export async function runRecharge({
   if (!paymentId) throw new Error('ID do pagamento não retornado');
 
   const sse = await waitPaymentResult(bemobiToken, paymentId);
-
-  if (String(sse?.status ?? '').toUpperCase() === '3DS_BLOCKED') {
-    return {
-      paymentId,
-      pending: payRes.body,
-      result: sse,
-      valueCents: productValue ?? bemobiBody?.invoices?.[0]?.value,
-      latencyMs: Date.now() - started,
-      cardMask: isSaved
-        ? `${card.brand} *${card.last}`
-        : `****${card.number.replace(/\D/g, '').slice(-4)}`,
-    };
-  }
 
   return {
     paymentId,

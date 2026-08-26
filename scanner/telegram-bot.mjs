@@ -6,8 +6,6 @@ import {
   fetchWalletCards,
 } from './lib/eldorado.mjs';
 import { runRecharge } from './lib/recharge.mjs';
-import { runBrowserRecharge } from './lib/browser-recharge.mjs';
-import { checkAutomationHealth, waitForAutomationHealth } from './lib/automation-client.mjs';
 import {
   formatTelegramReport,
   buildCardKeyboard,
@@ -23,34 +21,10 @@ import {
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const AUTOMATION_API_URL = process.env.AUTOMATION_API_URL?.trim() || '';
-const RECHARGE_MODE = (process.env.RECHARGE_MODE || 'auto').toLowerCase();
 
 if (!TOKEN) {
   console.error('Defina TELEGRAM_BOT_TOKEN');
   process.exit(1);
-}
-
-function shouldUseBrowserPay(card) {
-  if (RECHARGE_MODE === 'api') return false;
-  if (card?.token) return false;
-  if (RECHARGE_MODE === 'browser') {
-    if (!AUTOMATION_API_URL) {
-      throw new Error('RECHARGE_MODE=browser exige AUTOMATION_API_URL no .env');
-    }
-    return true;
-  }
-  return Boolean(AUTOMATION_API_URL);
-}
-
-function resolveLoginUrl(link) {
-  const trimmed = String(link ?? '').trim();
-  if (!trimmed) throw new Error('Link JWT ausente no cache');
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  if (/^eyJ[A-Za-z0-9_-]+\./.test(trimmed)) {
-    return `https://clarorecarga.claro.com.br/minhaclaro_web/select-login?t=${trimmed}`;
-  }
-  return `https://${trimmed.replace(/^\/+/, '')}`;
 }
 
 process.on('unhandledRejection', (err) => {
@@ -199,43 +173,19 @@ async function executeRecharge(chatId, card) {
   }
 
   busy.add(chatId);
-  const useBrowser = shouldUseBrowserPay(card);
   const statusMsg = await send(
     chatId,
-    useBrowser
-      ? `💳 <b>${flow.productName}</b>\n🌐 Checkout no navegador (anti-fraude)…\n<i>~1–5 minutos</i>`
-      : `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
+    `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
   );
 
   try {
-    let outcome;
-    if (useBrowser) {
-      const health = await waitForAutomationHealth(AUTOMATION_API_URL, {
-        attempts: 6,
-        delayMs: 2500,
-      });
-      if (!health.ok) {
-        throw new Error(
-          `Automação offline (${AUTOMATION_API_URL}) — suba: bash scanner/start-automation.sh`,
-        );
-      }
-      outcome = await runBrowserRecharge({
-        apiUrl: AUTOMATION_API_URL,
-        loginUrl: resolveLoginUrl(entry.link),
-        msisdn: entry.msisdn,
-        productValue: flow.productValue,
-        card,
-        browser: process.env.AUTOMATION_BROWSER,
-      });
-    } else {
-      outcome = await runRecharge({
-        sessionId: entry.sessionId,
-        msisdn: entry.msisdn,
-        productId: flow.productId,
-        productValue: flow.productValue,
-        card,
-      });
-    }
+    const outcome = await runRecharge({
+      sessionId: entry.sessionId,
+      msisdn: entry.msisdn,
+      productId: flow.productId,
+      productValue: flow.productValue,
+      card,
+    });
 
     const report = formatRechargeResult(outcome);
     await tg('editMessageText', {
@@ -651,15 +601,7 @@ async function poll() {
 
 async function main() {
   const me = await tg('getMe');
-  console.log(`[bot] @${me.username} online`);
-  if (AUTOMATION_API_URL) {
-    const health = await checkAutomationHealth(AUTOMATION_API_URL);
-    console.log(
-      `[bot] automação ${AUTOMATION_API_URL} → ${health.ok ? 'OK' : 'OFF'} (mode=${RECHARGE_MODE})`,
-    );
-  } else {
-    console.log(`[bot] recarga via API direta (defina AUTOMATION_API_URL para browser)`);
-  }
+  console.log(`[bot] @${me.username} online — recarga via API`);
   await tg('deleteWebhook', { drop_pending_updates: false });
   poll();
 }

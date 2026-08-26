@@ -9,18 +9,17 @@ function formatBRL(cents) {
   return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
 }
 
-export function formatRechargeResult(outcome) {
-  const {
-    result,
-    valueCents,
-    cardMask,
-    paymentId,
-    latencyMs,
-    automation,
-    mode,
-  } = outcome ?? {};
+function normalizeStatus(raw) {
+  const st = String(raw ?? 'UNKNOWN').toUpperCase();
+  if (st === 'CONFIRMED' || st === 'APPROVED' || st === 'OK') return 'SUCCESS';
+  if (st === 'REJECTED' || st === 'FAILURE' || st === 'NOK') return 'DENIED';
+  return st;
+}
 
-  const status = (result?.status ?? 'UNKNOWN').toUpperCase();
+export function formatRechargeResult(outcome) {
+  const { result, valueCents, cardMask, paymentId, latencyMs } = outcome ?? {};
+
+  const status = normalizeStatus(result?.status);
   const reason =
     result?.negativeReason ??
     result?.extra?.postMessage?.transaction?.reason ??
@@ -29,24 +28,15 @@ export function formatRechargeResult(outcome) {
 
   let icon = '⏳';
   let title = 'Processando';
-  if (status === 'SUCCESS' || status === 'OK') {
+  if (status === 'SUCCESS') {
     icon = '✅';
     title = 'Recarga aprovada';
-  } else if (status === 'DENIED' || status === 'FAILURE' || status === 'NOK') {
+  } else if (status === 'DENIED') {
     icon = '❌';
     title = 'Recarga negada';
-  } else if (status === '3DS_BLOCKED' || status === '3DS_REQUIRED') {
-    icon = '🚫';
-    title = '3DS bloqueado';
   } else if (status === 'TIMEOUT') {
     icon = '⚠️';
     title = 'Timeout';
-  } else if (status === 'RATE_LIMIT') {
-    icon = '⏳';
-    title = 'Muitas tentativas';
-  } else if (status === 'CHECKOUT_ERROR') {
-    icon = '⚠️';
-    title = 'Checkout indisponível';
   }
 
   const lines = [
@@ -58,13 +48,8 @@ export function formatRechargeResult(outcome) {
   ];
 
   if (reason) lines.push(`<b>Motivo:</b> ${esc(reason)}`);
-  const idLabel = mode === 'browser' ? 'NSU/ID' : 'ID';
-  if (paymentId) lines.push(`<b>${idLabel}:</b> <code>${esc(paymentId)}</code>`);
+  if (paymentId) lines.push(`<b>ID:</b> <code>${esc(paymentId)}</code>`);
   if (latencyMs) lines.push('', `<i>⏱ ${latencyMs}ms</i>`);
-
-  if (mode === 'browser' && automation?.stepLabel) {
-    lines.push('', `<i>🌐 ${esc(automation.stepLabel)}</i>`);
-  }
 
   return lines.join('\n');
 }
