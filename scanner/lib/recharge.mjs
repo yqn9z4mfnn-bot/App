@@ -248,15 +248,32 @@ export async function runRecharge({
       last: pan.slice(-4),
       holder: { name: card.holder, email: '', phoneNumber: '' },
       paymentWallet: 'bemobi',
+      wasSaved: false,
       length: pan.length,
     };
   }
 
-  const payRes = await createPayment(bemobiToken, checkoutCode, {
+  const paymentPayload = {
     method: 'credit',
     installments: 1,
+    invoices: [invoiceId],
+    paymentWallet: 'bemobi',
     card: cardPayload,
-  });
+  };
+
+  // Novo cartão: espelha o checkout web para salvar na wallet Eldorado mesmo se o pagamento falhar.
+  if (!isSaved) {
+    Object.assign(paymentPayload, {
+      saveCard: true,
+      saveRecurrence: false,
+      walletEnabled: true,
+      autoSaveCardEnabled: true,
+      autoRecurrenceOptIn: false,
+      allowMultipleCardOptIn: false,
+    });
+  }
+
+  const payRes = await createPayment(bemobiToken, checkoutCode, paymentPayload);
 
   if (payRes.status === 429) {
     throw new Error('Rate limit no pagamento (429) — aguarde e tente novamente');
