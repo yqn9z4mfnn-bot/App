@@ -1967,7 +1967,6 @@ const waitForEldoradoCheckoutReady = async (page, timeoutMs = 45000) => {
         // frame ainda montando
       }
     }
-    await dismissCookieBanner(page).catch(() => {});
     await sleep(400);
   }
   return null;
