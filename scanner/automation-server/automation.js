@@ -15,7 +15,7 @@ import { generateWebLoginLink, normalizeMinhaClaroWebLink } from "./linkGenerate
 import {
   tryApiDirectEldoradoPay,
   isGateRequestCaptureUrl,
-  gateCaptureHas3dsChallenge
+  attachEldorado3dsBypass
 } from "./apiPayPoc.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1332,10 +1332,12 @@ const attachGateCapture = (context, session = null) => {
 
 const attachClaroNetworkHooks = (context, session = null) => {
   const gateCapture = attachGateCapture(context, session);
+  const eldoradoBypass = config.bypass3dsEnabled ? attachEldorado3dsBypass(context) : null;
   if (session) {
     session.gateCapture = gateCapture;
+    session.eldoradoBypass = eldoradoBypass;
   }
-  return { gateCapture };
+  return { gateCapture, eldoradoBypass };
 };
 
 const M4U_API_RE = /claro-recarga-api\.m4u\.com\.br/i;
@@ -3100,11 +3102,8 @@ const buildPaymentResult = async (page, status, currentUrl, gateCapture, pageHin
   }
 
   if (status === "3ds_blocked") {
-    const tds = gateCapture ? gateCaptureHas3dsChallenge(gateCapture) : null;
     const brand =
-      tds?.brand ??
-      pageHint?.match(/(Bradesco|Visa|Master|Elo|Ita[uú]|Santander|CARD|banco)/i)?.[1] ??
-      "banco";
+      pageHint?.match(/(Bradesco|Visa|Master|Elo|Ita[uú]|Santander|CARD|banco)/i)?.[1] ?? "banco";
     return {
       status: "3ds_blocked",
       url: currentUrl || page.url(),
@@ -3159,23 +3158,20 @@ const scanPageForPaymentOutcome = async (page) => {
   return null;
 };
 
-const PAGE_3DS_TEXT_RE =
-  /valida[cç][aã]o de seguran[cç]a|chave de seguran[cç]a|verifica[cç][aã]o necess[aá]ria|threeDSSessionData|bpmpi_auth/i;
+const PAGE_3DS_MODAL_RE =
+  /valida[cç][aã]o de seguran[cç]a|verifica[cç][aã]o necess[aá]ria/i;
+const PAGE_3DS_USER_ACTION_RE =
+  /chave de seguran[cç]a|chave ref|senha do cart[aã]o|token sms|continuar/i;
 
+/** Só modal 3DS visível ao usuário — NÃO usar URL /3ds/challenge (sempre dispara no Braspag). */
 const scanPageFor3dsChallenge = async (page) => {
   for (const frame of page.frames()) {
     try {
       const text = await frame.evaluate(() => (document.body?.innerText || "").replace(/\s+/g, " ").trim());
-      if (text && PAGE_3DS_TEXT_RE.test(text)) {
+      if (!text) continue;
+      if (PAGE_3DS_MODAL_RE.test(text) && PAGE_3DS_USER_ACTION_RE.test(text)) {
         const brand = text.match(/(Bradesco|Visa|Master|Elo|Ita[uú]|Santander)/i)?.[1] ?? "banco";
         return { brand, hint: text.slice(0, 300) };
-      }
-      const has3dsInput = await frame
-        .locator('input[name="threeDSSessionData"], input[name="bpmpi_auth_suppresschallenge"]')
-        .count()
-        .catch(() => 0);
-      if (has3dsInput > 0) {
-        return { brand: "CARD", hint: "formulário 3DS detectado" };
       }
     } catch {
       // cross-origin / frame morto
@@ -3199,17 +3195,16 @@ const waitForPaymentResult = async (page, timeoutMs = config.paymentWaitTimeoutM
       return buildPaymentResult(page, "error", currentUrl, gateCapture);
     }
 
-    const tdsNet = gateCapture ? gateCaptureHas3dsChallenge(gateCapture) : null;
     const tdsPage = await scanPageFor3dsChallenge(page);
-    if (tdsNet || tdsPage) {
-      const brand = tdsNet?.brand ?? tdsPage?.brand ?? "banco";
-      console.log(`[claro][3ds] detectado (${brand}) — abortando pagamento`);
+    if (tdsPage) {
+      const brand = tdsPage.brand ?? "banco";
+      console.log(`[claro][3ds] modal visível (${brand}) — abortando pagamento`);
       return buildPaymentResult(
         page,
         "3ds_blocked",
         currentUrl,
         gateCapture,
-        tdsPage?.hint || `Challenge 3DS ${brand}`
+        tdsPage.hint || `Modal 3DS ${brand}`
       );
     }
 
@@ -5415,8 +5410,9 @@ export const startSessionFromWebLink = async (payload) => {
       webPortal: true,
       inspect: Boolean(payload?.inspect)
     };
-    const { gateCapture } = attachClaroNetworkHooks(context, session);
+    const { gateCapture, eldoradoBypass } = attachClaroNetworkHooks(context, session);
     session.gateCapture = gateCapture;
+    session.eldoradoBypass = eldoradoBypass;
     sessions.set(sessionId, session);
     releaseSlot();
   } catch (err) {
@@ -5622,8 +5618,9 @@ export const startSession = async (payload) => {
       smsAuthenticated: false,
       authStatePath: null
     };
-    const { gateCapture } = attachClaroNetworkHooks(context, session);
+    const { gateCapture, eldoradoBypass } = attachClaroNetworkHooks(context, session);
     session.gateCapture = gateCapture;
+    session.eldoradoBypass = eldoradoBypass;
     sessions.set(sessionId, session);
     releaseSlot();
   } catch (err) {
