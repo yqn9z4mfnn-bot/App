@@ -61,6 +61,8 @@ async function fetchRunningSessionHint(apiUrl) {
 }
 
 /**
+ * Inicia recarga via link web (Playwright) — POST /api/session/start-web-link
+ */
 export async function startWebLinkRecharge(
   apiUrl,
   {
