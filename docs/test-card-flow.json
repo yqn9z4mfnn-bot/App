@@ -1,0 +1,191 @@
+[
+  {
+    "step": "session",
+    "method": "POST",
+    "url": "/sessions/",
+    "request": "{\"data\": \"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJtc2lzZG4iOiI2Mjk5NDkwODMxMyIsInNlZ21lbnQiOiJDTEFST19DQVJUQU8iLCJwb3J0YWwiOiJtaW5oYWNsYXJvX3dlYiIsImlhdCI6MTc4NzcyODA2Mn0.HxcBUvQvvx-ko6TxQTA0RwN8mtxv5Qxys39ZGi_d2nntiiOsbWL1ugGMBqf2LScXxluSrmWpHJ_0uOWIK9yknD8Tg8jAw0Agw1Kg1w5kUcJ7aOcJzxD6m8ewDd6nlpDlgRGsurvHHfoanqtX2kVHWZHC7NVOgdlDuYYgctog_u6MSkDogsKXpu6B_8jXsL31vsP679oRIg_xGxFXYwE7ojQaeUGPfA_ZllNir8XM3_PMzEMsu9UwvEwVVTejzSxWDb_Hviz6SuHaz_w4TKqKDCr5fm-pVl3kanUeJJFqcEmMp1-xN3hQvGCz7ZRhDIlh-av8YEbD_ejsQRewavXjaA\", \"type\": \"encrypted\", \"channel\": [\"minhaclaro_web\", \"MINHA_CLARO_WEB\"], \"origin\": \"login\"}",
+    "status": 200,
+    "response": "{\"id\":\"2cadb0a1-2669-4c52-a14e-52a29ea7f167\",\"partnerExternalId\":\"6a2265aa-680f-464d-8f40-1025f1d647ad\",\"identifier\":\"62994908313\",\"segment\":\"CLARO_CARTAO\"}"
+  },
+  {
+    "step": "customer",
+    "method": "GET",
+    "url": "/customers/62994908313",
+    "request": null,
+    "status": 200,
+    "response": "{\"id\":\"69614923-54f9-4c16-b101-eda40591f928\",\"name\":\"Msisdn: 62994908313\",\"msisdn\":\"62994908313\",\"carrierSegment\":\"PRE_PAGO\",\"carrierActivationDate\":\"2014-01-24\",\"registerDate\":\"2026-08-26T07:08:04.088Z\",\"registerOrigin\":\"MINHA_CLARO_WEB\",\"status\":\"CREATED\",\"recipients\":[{\"msisdn\":\"62994908313\",\"status\":\"ACTIVATED\",\"favorite\":true}],\"averageTicket\":null,\"profile\":{\"name\":\"claro_recarga_basic\",\"remaining_spending_limit\":3500,\"available_recipient_slots\":3,\"allowed_recipient_changes\":3,\"available_credit_card_slots\":3,\"allowed_credit_card_changes\":3,\"todays_reload_quantity\":0,\"todays_reload_amount\":0},\"traits\":{\"planType\":{\"type\":\"string\",\"value\":\"N/A\",\"traitType\":\"\",\"expired\":false,\"lastModified\":\"2026-08-26T08:18:35Z\",\"modified\":\"2026-08-26T08:18:35Z\"}}}"
+  },
+  {
+    "step": "products",
+    "method": "GET",
+    "url": "/products",
+    "request": null,
+    "status": 200,
+    "response": "{\"rechargeValues\":[{\"id\":\"03868918-975d-4e8a-a3ab-d551db9f29ea\",\"name\":\"R$15,00\",\"value\":1500,\"category\":\"FIRST_RELOAD\",\"custom_attributes\":{\"reload_validity\":\"30\"},\"components\":{},\"isAvailable\":true},{\"id\":\"d249e16c-b53a-4351-aeed-86d55ca1fc7d\",\"name\":\"R$20,00\",\"value\":2000,\"category\":\"FIRST_RELOAD\",\"custom_attributes\":{\"reload_validity\":\"30\"},\"components\":{},\"isAvailable\":true},{\"id\":\"1aa52f32-4256-4168-9f09-c180fbcd9d0d\",\"name\":\"R$25,00\",\"value\":2500,\"category\":\"FIRST_RELOAD\",\"custom_attributes\":{\"reload_validity\":\"30\"},\"components\":{},\"isAvailable\":true},{\"id\":\"aa45f1c1-fe5a-482f-b7a9-a63584139b31\",\"name\":\"R$30,00\",\"value\":3000,\"category\":\"FIRST_RELOAD\",\"custom_attributes\":{\"reload_validity\":\"60\"},\"components\":{},\"isAvailable\":true},{\"id\":\"08d6a618-5708-45a6-bb6d-7aaa9d6d107f\",\"name\":\"R$35,00\",\"value\":3500,\"category\":\"FIRST_RELOAD\",\"custom_attributes\":{\"reload_validity\":\"90\"},\"components\":{},\"isAvailable\":true},{\"id\":\"517cadff-adce-4ff8-98b0-997e43c2c1dd\",\"name\":\"R$40,00\",\"value\":4000,\"category\":\"FIRST_RELOAD\",\"custom_attributes\":{\"reload_validity\":\"90\"},\"components\":{},\"isAvailable\":false},{\"id\":\"2a658724-6735-4a15-8b68-f9979db59e59\",\"name\":\"R$50,00\",\"value\":5000,\"category\":\"FIRST_RELOAD\",\"custom_attributes\":{\"reload_validity\":\"120\"},\"components\":{},\"isAvailable\":false},{\"id\":\"ca9773ed-333d-4b2b-9f90-e6bbade57492\",\"name\":\"R$100,00\",\"value\":10000,\"category\":\"FIRST_RELOAD\",\"custom_attributes\":{\"reload_validity\":\"180\"},\"components\":{},\"isAvailable\":false}]}"
+  },
+  {
+    "step": "validate_cc_VISA",
+    "method": "POST",
+    "url": "/v1/cc",
+    "request": {
+      "pan": "411111...",
+      "month": "12",
+      "year": "30",
+      "partner": "CLARO"
+    },
+    "status": 404,
+    "response": null
+  },
+  {
+    "step": "validate_cc_MASTERCARD",
+    "method": "POST",
+    "url": "/v1/cc",
+    "request": {
+      "pan": "555555...",
+      "month": "12",
+      "year": "30",
+      "partner": "CLARO"
+    },
+    "status": 404,
+    "response": null
+  },
+  {
+    "step": "save_card_v1",
+    "method": "POST",
+    "url": "/payment-methods",
+    "request": {
+      "type": "credit",
+      "pan": "4111111111111111",
+      "expirationMonth": "12",
+      "expirationYear": "2030",
+      "cvv": "123",
+      "holderName": "TESTE SILVA"
+    },
+    "status": 500,
+    "response": null
+  },
+  {
+    "step": "save_card_alt_0",
+    "method": "POST",
+    "url": "/payment-methods",
+    "request": {
+      "creditCard": {
+        "pan": "4111111111111111",
+        "month": 12,
+        "year": 2030,
+        "cvv": "123",
+        "holder": "TESTE"
+      }
+    },
+    "status": 422,
+    "response": null
+  },
+  {
+    "step": "save_card_alt_1",
+    "method": "POST",
+    "url": "/payment-methods",
+    "request": {
+      "token": "4111111111111111",
+      "type": "credit",
+      "brandName": "VISA",
+      "lastDigits": "1111"
+    },
+    "status": 500,
+    "response": null
+  },
+  {
+    "step": "checkout_event",
+    "method": "POST",
+    "url": "/events/checkout",
+    "request": {
+      "customer": {
+        "id": "69614923-54f9-4c16-b101-eda40591f928"
+      }
+    },
+    "status": 201,
+    "response": "Created"
+  },
+  {
+    "step": "smartcheckout",
+    "method": "POST",
+    "url": "/smartcheckout/v2/url",
+    "request": {
+      "msisdn": "62994908313",
+      "channel": "MINHA_CLARO_WEB",
+      "recipient": "62994908313",
+      "productId": "03868918-975d-4e8a-a3ab-d551db9f29ea"
+    },
+    "status": 201,
+    "response": "{\"token\":\"199f7dd7-1137-48e7-a89c-f227032c8fc1\",\"url\":\"https://eldorado.m4u.com.br/bsc/checkout/?code=199f7dd7-1137-48e7-a89c-f227032c8fc1\",\"paymentItemsId\":[\"f6b230af-c80a-4757-a6f4-f65b9b321b3b\"],\"allowRecurrenceOptin\":false}"
+  },
+  {
+    "step": "bemobi_session",
+    "method": "GET",
+    "url": "smart-checkout session",
+    "request": {
+      "code": "199f7dd7-1137-48e7-a89c-f227032c8fc1"
+    },
+    "status": 201,
+    "response": "{\"token\":\"69da7e6e-d922-4686-9e93-d85956b4dc5d\",\"user\":{\"id\":\"\",\"idType\":\"\",\"name\":\"\",\"email\":\"\",\"phoneNumber\":\"5562994908313\",\"phoneDdi\":\"55\",\"phoneDdd\":\"62\",\"unit\":\"62994908313\",\"customerId\":\"69614923-54f9-4c16-b101-eda40591f928\",\"partnerAccountId\":\"62994908313\"},\"partner\":\"MINHA-CLARO-WEB\",\"company\":\"claro\",\"channel\":\"MINHA_CLARO_WEB\",\"extra\":{\"checkout_medium\":\"\",\"customer_id\":\"69614923-54f9-4c16-b101-eda40591f928\"},\"invoices\":[{\"id\":\"f6b230af-c80a-4757-a6f4-f65b9b321b3b\",\"digitableLine\":\"\",\"currency\":\"BRL\",\"description\":\"\",\"referenceMonth\":\"\",\"dueDate\":\"\",\"groupId\":\"\",\"value\":1500,\"required\":false}],\"externalId\":\"\",\"utm\":{\"campaign\":\"\",\"content\":\"\",\"medium\":\"\",\"source\":\"\"},\"receiptDescription\":\"Claro\",\"paymentMethodsAllowed\":[\"credit\",\"pix\",\"googlepay\",\"applepay\",\"clicktopay\",\"nupay\"],\"metadata\":{\"3dsMode\":\"default\",\"cdpWriteKey\":\"9daeda6f771d108dcb5d485ac1ed1960\",\"features\":{\"autoSaveCardInWallet\":true,\"bridgeCustomization\":{\"hasTokenizerValidation\":true},\"clickToPay\":{\"enableSaveCard\":false},\"credit3DS\":{\"enable\":true,\"enableDataOnly\":true,\"enableFallback\":false},\"enableMultiPayments\":false,\"enableWallet\":true,\"enableWebTokenizationApi\":true,\"fallbackErrorByMethod\":{\"bank_slip\":\"credit\",\"click2pay\":\"credit\",\"credit\":\"credit\",\"debit\":\"credit\",\"pix\":\"credit\"},\"hasNewCardInsideC2P\":true,\"multipayment\":{\"enable\":false},\"paymentMethodsHomePage\":{\"applepay\":true,\"bank_slip\":false,\"click2pay\":true,\"credit\":true,\"debit\":false,\"googlepay\":true,\"nupay\":true,\"pix\":true},\"paymentsList\":[{\"active\":false,\"cardMethod\":true,\"name\":\"credit\"},{\"active\":false,\"cardMethod\":true,\"name\":\"debit\"}],\"useSSE\":true,\"verifyIdentity\":{\"blockedTime\":5,\"enable\":false,\"limitAttempts\":3}},\"flow\":{\"enableInvoices\":false,\"redirectMethodPage\":false,\"redirectSuccessOrErrorPage\":false,\"returnBeginningPage\":\"\",\"showFallbackMethodOnError\":false},\"locale\":\"pt-BR\",\"slug\":\"claro\",\"theme\":{\"background\":\"#FFC722\",\"brandHeader\":\"#DA291C\",\"brandPrimary\":\"#FFC722\",\"brandSecondary\":\"#FF0000\",\"headerTextColor\":\"#00818F\",\"inputsBackground\":\"#000000\"},\"ui\":{\"bridgeTheme\":\"smart-checkout\",\"currency\":\"BRL\",\"dateMask\":\"MM/YYYY\",\"fontFamily\":\"roboto\",\"header\":{\"colorizeBackground\":false,\"showPhoneNumber\":false},\"hideHolderExtraFields\":true,\"installmentDisplay\":{\"radioIncentive\":false,\"selectIncentive\":false},\"logo\":{\"desktopPath\":\"/static/claro\",\"desktopSize\":{\"height\":36,\"width\":166},\"fileExtension\":\"svg\",\"mobilePath\":\"/static/claro\",\"mobileSize\":{\"height\":23,\"width\":108},\"show\":false,\"usePartnerDivision\":false},\"merchantUrl\":\"https://www.claro.com.br/\",\"moneyAsDecimal\":true,\"moneyMask\":null,\"partnerName\":\"Claro Flex\",\"receipt\":{\"showCompanyId\":true},\"receiptTruncInstallmentAsDecimal\":false,\"showCardListTitle\":true,\"showClientName\":true,\"showCustomerId\":false,\"showFavoriteMethod\":false,\"showFooter\":true,\"showHeader\":true,\"showHolderExtraFieldsFirstAccess\":false,\"showIconOnInvoice\":true,\"showInvoiceDueDate\":true,\"showPaymentsAsList\":false,\"showRetryButtonOnError\":true,\"showReturnBeginnigButton\":false,\"showReturnInvoicesButton\":false,\"showRootDisclaimer\":false,\"showSubtotalSummary\":true}},\"optIns\":{},\"generateBankSlipEnabled\":false,\"requireZipCodeOnNewCard\":false,\"applicationId\":\"A:PRD:01KGMTR0TGZQ7HF0R6VTGM4Y8H\"}\n"
+  },
+  {
+    "step": "recharge_0",
+    "method": "POST",
+    "url": "/recharges",
+    "request": {
+      "targetMsisdn": "62994908313",
+      "rechargeValue": {
+        "id": "03868918-975d-4e8a-a3ab-d551db9f29ea",
+        "value": 1500
+      },
+      "paymentMethod": {
+        "type": "credit",
+        "data": {
+          "token": "test-token",
+          "cvv": "123",
+          "brandName": "VISA",
+          "lastDigits": "1111"
+        }
+      }
+    },
+    "status": 422,
+    "response": null
+  },
+  {
+    "step": "recharge_1",
+    "method": "POST",
+    "url": "/recharges",
+    "request": {
+      "targetMsisdn": "62994908313",
+      "rechargeValue": 1500,
+      "productId": "03868918-975d-4e8a-a3ab-d551db9f29ea",
+      "paymentMethod": {
+        "type": "credit",
+        "data": {
+          "cvv": "123"
+        }
+      },
+      "type": "credit"
+    },
+    "status": 422,
+    "response": null
+  },
+  {
+    "step": "payment",
+    "method": "POST",
+    "url": "/payment",
+    "request": null,
+    "status": 400,
+    "response": null
+  },
+  {
+    "step": "pix_encrypted",
+    "method": "POST",
+    "url": "/recharges/encrypted",
+    "request": {
+      "payload": "test"
+    },
+    "status": 422,
+    "response": null
+  }
+]

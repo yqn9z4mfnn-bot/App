@@ -1,0 +1,86 @@
+{
+  "session_invoice": {
+    "id": "94d071d7-9d2f-47d0-a46a-ad61df43fabd",
+    "digitableLine": "",
+    "currency": "BRL",
+    "description": "",
+    "referenceMonth": "",
+    "dueDate": "",
+    "groupId": "",
+    "value": 1500,
+    "required": false
+  },
+  "installments_raw": [
+    {
+      "installments": 1,
+      "installmentValue": 1500,
+      "currencyCode": "BRL",
+      "totalValue": 1500,
+      "totalFee": 0,
+      "totalDiscount": 0,
+      "interestRate": 0,
+      "highlight": false,
+      "recommended": false
+    }
+  ],
+  "results": [
+    {
+      "step": "installments_get",
+      "params": {
+        "currency": "BRL",
+        "value": 1500
+      },
+      "status": 200,
+      "body": "[{\"installments\":1,\"installmentValue\":1500,\"currencyCode\":\"BRL\",\"totalValue\":1500,\"totalFee\":0,\"totalDiscount\":0,\"interestRate\":0,\"highlight\":false,\"recommended\":false}]\n"
+    },
+    {
+      "step": "payment_0",
+      "req": {
+        "method": "credit",
+        "installments": 1,
+        "installment": 1,
+        "card": {
+          "number": "4111111111111111",
+          "holder": {
+            "name": "TESTE APROVADO"
+          },
+          "expiration": {
+            "month": 12,
+            "year": 2030
+          },
+          "cvv": "123"
+        }
+      },
+      "status": 400,
+      "body": "{\"type\":\"bad-request\",\"detail\":\"the selected installment is not in the session\"}\n"
+    },
+    {
+      "step": "payment_1",
+      "req": {
+        "method": "credit",
+        "installment": {
+          "installments": 1,
+          "value": 1500
+        },
+        "card": {
+          "number": "4111111111111111",
+          "holder": {
+            "name": "TESTE APROVADO"
+          },
+          "expiration": {
+            "month": 12,
+            "year": 2030
+          },
+          "cvv": "123"
+        }
+      },
+      "status": 400,
+      "body": "{\"type\":\"bad-request\",\"detail\":\"the selected installment is not in the session\"}\n"
+    },
+    {
+      "step": "cards_after",
+      "status": 200,
+      "body": "[]\n"
+    }
+  ]
+}
