@@ -12,3 +12,13 @@ node scan.mjs "SEU_JWT" --no-wallet   # só API Claro (mais rápido, evita 429)
 ```
 
 Requer Node.js 18+. Documentação completa da API: `docs/CLARO_RECARGA_API_MAP.md`.
+
+### Bot Telegram
+
+```bash
+cd scanner
+export TELEGRAM_BOT_TOKEN="seu_token"
+node telegram-bot.mjs
+```
+
+Envie o link JWT ou `/scan <link>` (modo rápido sem wallet).

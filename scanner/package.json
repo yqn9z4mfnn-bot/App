@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "bin": {
-    "claro-scan": "./scan.mjs"
+    "claro-scan": "./scan.mjs",
+    "claro-telegram-bot": "./telegram-bot.mjs"
+  },
+  "scripts": {
+    "bot": "node telegram-bot.mjs"
   },
   "engines": {
     "node": ">=18"

@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 import { writeFileSync } from 'node:fs';
-import { parseLink } from './lib/parse-link.mjs';
-import { createSession, scanClaroApi } from './lib/claro.mjs';
-import { scanWallet } from './lib/eldorado.mjs';
-import { buildSummary, printSummary } from './lib/report.mjs';
+import { runScan } from './lib/run-scan.mjs';
+import { printSummary } from './lib/report.mjs';
 
 function usage() {
   console.log(`
@@ -39,53 +37,11 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const started = Date.now();
   const { link, outFile, skipWallet } = parseArgs(process.argv);
 
-  const parsed = parseLink(link);
-  let session;
-  let wallet = null;
-
-  if (parsed.kind === 'jwt') {
-    session = await createSession(parsed.jwt);
-  } else {
-    throw new Error(
-      'Modo checkout-only ainda não suportado — use link select-login com ?t=JWT',
-    );
-  }
-
-  const msisdn = session.identifier;
-  console.error(`[scan] sessão OK — ${msisdn} (${session.segment})`);
-
-  const claro = await scanClaroApi(session.id, msisdn);
+  const { summary, session, claro, wallet } = await runScan(link, { skipWallet });
+  console.error(`[scan] sessão OK — ${session.identifier} (${session.segment})`);
   console.error(`[scan] API Claro — ${Object.keys(claro).length} endpoints`);
-
-  const products = claro.products?.body?.rechargeValues ?? [];
-  const firstProduct =
-    products.find((p) => p.isAvailable !== false) ?? products[0];
-
-  if (!skipWallet && firstProduct?.id) {
-    console.error('[scan] wallet Eldorado…');
-    try {
-      wallet = await scanWallet(session.id, msisdn, firstProduct.id);
-      if (wallet.error) {
-        console.error(`[scan] wallet: ${wallet.message}`);
-      }
-    } catch (err) {
-      wallet = {
-        error: 'wallet_exception',
-        message: err.message,
-        walletCards: null,
-      };
-      console.error(`[scan] wallet: ${err.message}`);
-    }
-  }
-
-  const summary = buildSummary({ session, claro, wallet, skipWallet });
-  summary.meta = {
-    latencyMs: Date.now() - started,
-    sessionId: `${session.id.slice(0, 8)}…`,
-  };
 
   printSummary(summary);
 
