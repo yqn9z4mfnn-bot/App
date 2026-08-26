@@ -31,7 +31,13 @@ Token fica só em `~/.local/share/linkclaro-bot/.env` (chmod 600):
 
 ```bash
 TELEGRAM_BOT_TOKEN=seu_token
+PROXY_SERVER=proxy.smartproxy.net
+PROXY_PORT=3120
+PROXY_USERNAME=seu_user
+PROXY_PASSWORD=sua_senha
 ```
+
+A API Claro/Eldorado sai pelo proxy (Telegram e o gerador de JWT não).
 
 No Telegram:
 - envie um **`.txt`** (um número por linha) → gera JWT, lê valores e **salva** (5 em paralelo)

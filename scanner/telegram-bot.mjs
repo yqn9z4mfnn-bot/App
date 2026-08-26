@@ -22,6 +22,7 @@ import {
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
+import { describeProxy } from './lib/proxy.mjs';
 import {
   getNumber,
   listNumbers,
@@ -1179,7 +1180,11 @@ async function poll() {
 
 async function main() {
   const me = await tg('getMe');
-  console.log(`[bot] @${me.username} online — recarga via API + banco SQLite`);
+  const proxy = describeProxy();
+  console.log(
+    `[bot] @${me.username} online — recarga via API + banco SQLite` +
+      (proxy ? ` · proxy ${proxy}` : ''),
+  );
   await tg('deleteWebhook', { drop_pending_updates: false });
   await tg('setMyCommands', {
     commands: [

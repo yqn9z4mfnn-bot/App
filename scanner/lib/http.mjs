@@ -1,3 +1,5 @@
+import { proxiedFetch } from './proxy.mjs';
+
 const CLARO_API = 'https://claro-recarga-api.m4u.com.br';
 const CHANNEL = 'MINHA_CLARO_WEB';
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -14,7 +16,7 @@ export async function request(url, options = {}) {
 
   try {
     const { timeoutMs: _ignored, signal: _sig, ...rest } = options;
-    const res = await fetch(url, {
+    const res = await proxiedFetch(url, {
       ...rest,
       signal: controller.signal,
       headers: {

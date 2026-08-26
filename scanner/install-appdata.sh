@@ -16,6 +16,13 @@ cp -r "$SCRIPT_DIR"/lib "$SCRIPT_DIR"/*.mjs "$SCRIPT_DIR"/package.json "$APP_DIR
 cp -r "$SCRIPT_DIR/lib" "$APP_DIR/"
 for f in "$SCRIPT_DIR"/*.mjs; do [ -f "$f" ] && cp "$f" "$APP_DIR/"; done
 [ -f "$SCRIPT_DIR/package.json" ] && cp "$SCRIPT_DIR/package.json" "$APP_DIR/"
+[ -f "$SCRIPT_DIR/package-lock.json" ] && cp "$SCRIPT_DIR/package-lock.json" "$APP_DIR/"
+if [ -d "$SCRIPT_DIR/node_modules" ]; then
+  rm -rf "$APP_DIR/node_modules"
+  cp -a "$SCRIPT_DIR/node_modules" "$APP_DIR/"
+else
+  (cd "$APP_DIR" && npm install --omit=dev --no-fund --no-audit)
+fi
 
 # Token: usa .env local do projeto só na 1ª instalação, depois só appdata
 if [ -f "$DATA_DIR/.env" ]; then

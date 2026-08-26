@@ -1,4 +1,5 @@
 import { request } from './http.mjs';
+import { proxiedFetch } from './proxy.mjs';
 import { openWalletSession } from './eldorado.mjs';
 import { buildBrowserPaymentExtras } from './antifraud-payload.mjs';
 
@@ -84,7 +85,7 @@ export async function waitPaymentResult(bemobiToken, paymentId, timeoutMs = 5500
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, {
+    const res = await proxiedFetch(url, {
       headers: {
         authorization: `Bearer ${bemobiToken}`,
         'x-bsc': 'client',
