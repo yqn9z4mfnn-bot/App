@@ -29,6 +29,7 @@ import {
   countNumbers,
   countWithValues,
   deleteNumber,
+  listErrors,
 } from './lib/numbers-db.mjs';
 import {
   parseNumbersFromTxt,
@@ -795,23 +796,37 @@ async function handleTxtDocument(chatId, document) {
     });
 
     let lastPaint = 0;
+    let finished = false;
+    let paintQueue = Promise.resolve();
     const expectedTotal = numbers.length;
-    const { total, ok, fail } = await ingestNumbers(numbers, {
+    const { total, ok, fail, results } = await ingestNumbers(numbers, {
       concurrency: BULK_CONCURRENCY,
       onProgress: ({ done, total: tot = expectedTotal, ok: o, fail: f }) => {
+        if (finished || done >= tot) return;
         const now = Date.now();
-        if (now - lastPaint < 1200 && done < tot) return;
+        if (now - lastPaint < 1200) return;
         lastPaint = now;
-        tg('editMessageText', {
-          chat_id: chatId,
-          message_id: statusMsg.message_id,
-          text: `⚙️ <b>${done}/${tot}</b>\n✅ ${o}   ❌ ${f}\n<i>${BULK_CONCURRENCY} em paralelo</i>`,
-          parse_mode: 'HTML',
-        }).catch(() => {});
+        paintQueue = paintQueue.then(() => {
+          if (finished) return;
+          return tg('editMessageText', {
+            chat_id: chatId,
+            message_id: statusMsg.message_id,
+            text: `⚙️ <b>${done}/${tot}</b>\n✅ ${o}   ❌ ${f}\n<i>${BULK_CONCURRENCY} em paralelo</i>`,
+            parse_mode: 'HTML',
+          }).catch(() => {});
+        });
       },
     });
+    finished = true;
+    await paintQueue.catch(() => {});
 
-    const withVal = countWithValues();
+    const withVal = results.filter((r) => r.status === 'ok' && r.valores?.length).length;
+    const errors = results.filter((r) => r.status !== 'ok');
+    const errorLines = errors.slice(0, 8).map(
+      (r) => `• <code>${r.msisdn}</code> — ${(r.error || 'erro').replace(/</g, '&lt;')}`,
+    );
+    if (errors.length > 8) errorLines.push(`… +${errors.length - 8}`);
+
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
@@ -822,6 +837,7 @@ async function handleTxtDocument(chatId, document) {
         `✅ Salvos: <b>${ok}</b>`,
         `❌ Erros: <b>${fail}</b>`,
         `💰 Com valores: <b>${withVal}</b>`,
+        ...(errorLines.length ? ['', '<b>Falhas:</b>', ...errorLines] : []),
         '',
         'Use /lista ou envie o número para recarregar rápido.',
       ].join('\n'),
@@ -866,6 +882,20 @@ async function handleMessage(msg) {
 
     if (text === '/lista' || text.startsWith('/lista@')) {
       await sendDbList(chatId, 0);
+      return;
+    }
+
+    if (text === '/erros' || text.startsWith('/erros@')) {
+      const rows = listErrors({ limit: 20 });
+      if (!rows.length) {
+        await send(chatId, 'Nenhum erro no banco.');
+        return;
+      }
+      const lines = ['<b>❌ Falhas no banco</b>', ''];
+      for (const r of rows) {
+        lines.push(`<code>${r.msisdn}</code> — ${(r.error || 'erro').replace(/</g, '&lt;')}`);
+      }
+      await send(chatId, lines.join('\n'));
       return;
     }
 
@@ -984,6 +1014,7 @@ async function main() {
     commands: [
       { command: 'start', description: 'Ajuda' },
       { command: 'lista', description: 'Números salvos no banco' },
+      { command: 'erros', description: 'Números que falharam no .txt' },
       { command: 'recarga', description: 'Escolher valor e pagar' },
       { command: 'cartoes', description: 'Cartões da última varredura' },
       { command: 'status', description: 'Bot online' },

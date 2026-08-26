@@ -41,6 +41,7 @@ export HISTFILE=/dev/null
 set -a
 source "$DATA_DIR/.env"
 set +a
+export NUMBERS_DB="$DATA_DIR/numbers.db"
 
 cd "$APP_DIR"
 

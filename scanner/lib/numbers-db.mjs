@@ -104,6 +104,21 @@ export function countWithValues() {
   return rows.filter((r) => parseValores(r.valores).length > 0).length;
 }
 
+export function listErrors({ limit = 20, offset = 0 } = {}) {
+  const lim = Math.max(1, Number(limit) || 20);
+  const off = Math.max(0, Number(offset) || 0);
+  const rows = getDb()
+    .prepare(
+      "SELECT * FROM numbers WHERE status = 'error' ORDER BY scanned_at DESC LIMIT ? OFFSET ?",
+    )
+    .all(lim, off);
+  return rows.map(mapRow);
+}
+
+export function countErrors() {
+  return getDb().prepare("SELECT COUNT(*) AS n FROM numbers WHERE status = 'error'").get().n;
+}
+
 export function deleteNumber(msisdn) {
   const r = getDb().prepare('DELETE FROM numbers WHERE msisdn = ?').run(msisdn);
   return r.changes > 0;

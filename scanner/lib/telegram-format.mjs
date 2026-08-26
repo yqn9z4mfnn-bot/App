@@ -114,6 +114,7 @@ O bot gera o JWT, lê os valores e <b>salva no banco</b> (5 em paralelo).
 
 Depois, para recarga rápida:
 • /lista — números salvos (valores + atalho)
+• /erros — números que falharam
 • envie o número de novo → usa o JWT salvo
 • /usar 3899… — idem
 • /scan 3899… — varrer de novo (sem wallet)
