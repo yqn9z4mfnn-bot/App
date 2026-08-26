@@ -532,6 +532,80 @@ Header: x-session-id: {checkout_code da URL Eldorado}
 
 Headers: `Authorization: Bearer {bemobi_token}`, `x-bsc: client`, `x-session-id: {checkout_code}`
 
+> **Payload mínimo vs browser:** a chamada acima é suficiente para obter `200 PENDING` via API direta. O frontend Eldorado envia um payload **maior** (capturado via browser em 2026-08-26, cartão teste `411111******1111`). Ver `docs/browser-payment-payload.json`.
+
+### POST `/payments` — payload completo (browser)
+
+Campos adicionais enviados pelo checkout web que **não** aparecem no payload mínimo:
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `invoices` | `string[]` | UUIDs das faturas da sessão Bemobi |
+| `saveCard` | `bool` | Salvar cartão na wallet Eldorado |
+| `saveRecurrence` | `bool` | Opt-in recarga recorrente |
+| `walletEnabled` | `bool` | Wallet habilitada na sessão |
+| `autoSaveCardEnabled` | `bool` | Auto-save após pagamento |
+| `autoRecurrenceOptIn` | `bool` | Opt-in automático recorrência |
+| `allowMultipleCardOptIn` | `bool` | Múltiplos cartões |
+| `paymentWallet` | `string` | `"bemobi"` (nível raiz, além de `card.paymentWallet`) |
+| `otherPaymentMethodCollapsed` | `bool` | UI state |
+| `paymentMethodsShown` | `object` | Métodos exibidos (`credit`, `pix`, `google_pay`, etc.) |
+| `device` | `object` | Fingerprint: `id`, `screenWidth/Height`, `userAgent`, `platform`, `browser`, `deviceType`, `colorDepth`, `language`, `timeZoneOffset`, `cookiesEnabled`, `javaEnabled` |
+| `userBehaviour` | `object` | Antifraude: `keystrokeEvents[]`, `formFieldEvents[]`, `formFieldInteractionTime{}`, `mouseEvents[]` |
+| `card.threeDSecure` | `object` | Resultado 3DS: `xid`, `eci`, `version`, `referenceId`, `cavv`, `tdsdsxid` |
+| `card.wasSaved` | `bool` | Cartão já estava salvo |
+| `card.issuer` | `string` | Emissor (BIN lookup) |
+
+Headers extras no browser:
+- `X-User-IP: {ip_cliente}`
+- `newrelic`, `traceparent`, `tracestate` (APM)
+- Cookies Hotjar (`_hjSession_*`)
+
+**Exemplo estrutural (mascarado):**
+```json
+{
+  "method": "credit",
+  "installments": 1,
+  "invoices": ["bef0b658-****-****-****-************"],
+  "saveCard": true,
+  "saveRecurrence": false,
+  "walletEnabled": true,
+  "autoSaveCardEnabled": true,
+  "paymentWallet": "bemobi",
+  "card": {
+    "token": "F25EFA99-****-****-****-************",
+    "expirationYear": 2030,
+    "expirationMonth": 12,
+    "cvv": "***",
+    "brand": "VISA",
+    "bin": "411111",
+    "last": "1111",
+    "wasSaved": false,
+    "threeDSecure": { "xid": "", "eci": "", "version": "", "referenceId": "", "cavv": "", "tdsdsxid": "" },
+    "holder": { "name": "TESTE APROVADO" },
+    "paymentWallet": "bemobi"
+  },
+  "device": { "id": "uuid", "screenWidth": 1951, "screenHeight": 1220, "platform": "linux", "browser": "Chrome", "deviceType": "desktop", "type": "BROWSER" },
+  "userBehaviour": {
+    "keystrokeEvents_count": 162,
+    "formFieldInteractionTime": { "card_number": 24748, "name": 34084, "expiration_date": 24329, "cvv": 36921 }
+  }
+}
+```
+
+### 3D Secure (Braspag + Cardinal Commerce)
+
+Observado no fluxo browser (cartão teste VISA R$20):
+
+| Recurso | URL / script |
+|---------|--------------|
+| Braspag 3DS | `script-braspag-3ds.js` (CDN Eldorado) |
+| Cardinal songbird | `songbird.js` |
+| Challenge bind | `/challenge/bind/VISA/methodProd...` |
+| Tokenização | `POST /tokenizer/validation` → `card_token` antes do pay |
+
+No teste com `411111******1111`, `card.threeDSecure` foi enviado com campos vazios (sem challenge concluído). Cartões reais provavelmente preenchem `cavv`/`eci` após o fluxo 3DS.
+
 **Response (200):**
 ```json
 {
@@ -612,14 +686,17 @@ Events: pix_code | timeout | success | failure | DENIED
 - `POST /smartcheckout/v2/url` → 429 após muitas tentativas (usar checkout_code existente)
 - `POST /payments` → 429 após tentativas rápidas
 - Pagamento via API sem browser pode ser negado por antifraude (422 suspected fraud)
-- Fluxo 3DS Braspag disponível no frontend (`credit3DS.enable: true`) — não exercitado via API direta
+- Payload browser inclui `userBehaviour` + `device` — omitir pode aumentar score de fraude
+- Fluxo 3DS Braspag/Cardinal carregado no browser; challenge completo não concluído neste teste
 
 ### O que ainda não foi exercitado
 
-- POST `/payments` → SSE `success` (cartão negado por antifraude neste teste)
-- Fluxo 3DS challenge completo (Braspag)
-- PIX end-to-end (`POST /recharges/encrypted`)
+- POST `/payments` → SSE `success` (cartões negados por antifraude nestes testes)
+- Fluxo 3DS challenge completo com `cavv`/`eci` preenchidos (Braspag/Cardinal)
+- PIX end-to-end via API direta (`POST /recharges/encrypted`)
 - Google Pay / Apple Pay / Click to Pay
+- PayPal / Mercado Pago authorize + delete
+- Recarga programada (POST/DELETE `/scheduled-recharges`) — retorna `[]` neste número
 
 ---
 
@@ -628,3 +705,6 @@ Events: pix_code | timeout | success | failure | DENIED
 - `/tmp/claro-analysis/full-capture.json` — 48+ requests com headers/bodies
 - `/tmp/claro-analysis/api-probe.json` — probe de todos endpoints GET
 - `/tmp/claro-analysis/endpoints-parsed.json` — endpoints únicos parseados
+- `docs/final-payment-flow.json` — fluxo pagamento cartão novo (payload API mínimo)
+- `docs/browser-payment-payload.json` — payload completo capturado no browser (device, userBehaviour, 3DS)
+- `docs/ms219-wallet-cards.json` — wallet Eldorado: listar/remover/pagar cartão salvo
