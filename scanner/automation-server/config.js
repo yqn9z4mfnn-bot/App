@@ -1,0 +1,36 @@
+export const config = {
+  port: Number(process.env.AUTOMATION_PORT || 3000),
+  headless: process.env.HEADLESS !== 'false',
+  defaultBrowser: process.env.AUTOMATION_BROWSER || 'chromium',
+  maxConcurrentSessions: 2,
+  sessionSlotWaitMs: 600_000,
+  sessionIdleTimeoutSeconds: 300,
+  mobileViewportWidth: 390,
+  mobileViewportHeight: 844,
+  browserWindowWidth: 390,
+  browserWindowHeight: 844,
+  landingUrl: 'https://clarorecarga.claro.com.br/minhaclaro_web',
+  baseUrl: 'https://clarorecarga.claro.com.br/minhaclaro_web',
+  meusDadosUrl: 'https://clarorecarga.claro.com.br/minhaclaro_web/meus-dados',
+  pagamentoErroUrl: 'https://clarorecarga.claro.com.br/minhaclaro_web/pagamento-erro',
+  pagamentoSucessoUrl: 'pagamento-sucesso',
+  actionTimeoutMs: 25_000,
+  elementClickTimeoutMs: 15_000,
+  navTimeoutMs: 60_000,
+  cardIframeTimeoutMs: 45_000,
+  cardFormReadyTimeoutMs: 45_000,
+  cardFormSettleMs: 1200,
+  pamTypingDelayMs: 80,
+  defaultCvv: '123',
+  defaultCardholderMaxLen: 26,
+  keepBrowserOpenSeconds: 3,
+  bypass3dsEnabled: process.env.BYPASS_3DS !== 'false',
+  apiPayPocEnabled: process.env.API_PAY_POC === 'true',
+  paymentWaitTimeoutMs: Number(process.env.PAYMENT_WAIT_TIMEOUT_MS || 180_000),
+  genericGateRetries: 2,
+  defaultRechargeNickname: 'Recarga',
+};
+
+export function getStepDelay(step) {
+  return Number(step || 0) * 400;
+}

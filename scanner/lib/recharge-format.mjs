@@ -35,6 +35,9 @@ export function formatRechargeResult(outcome) {
   } else if (status === 'DENIED' || status === 'FAILURE' || status === 'NOK') {
     icon = '❌';
     title = 'Recarga negada';
+  } else if (status === '3DS_REQUIRED') {
+    icon = '🔐';
+    title = '3DS exigido';
   } else if (status === 'TIMEOUT') {
     icon = '⚠️';
     title = 'Timeout';

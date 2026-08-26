@@ -18,9 +18,17 @@ function mapAutomationStatus(data) {
     };
   }
 
-  if (st === 'error' || st === 'error_manual' || data?.gateCode) {
+  if (st === '3ds_required' || gate?.threeDS || data?.gateCode?.includes?.('3DS')) {
     return {
-      status: 'DENIED',
+      status: '3DS_REQUIRED',
+      message: gate?.message || gate?.gateMessage || 'Autenticação 3DS exigida pelo banco',
+      negativeReason: gate?.gateMessage || 'Challenge Braspag (ELO/Visa/Master)',
+    };
+  }
+
+  if (st === 'error' || st === 'error_manual' || st === 'timeout' || data?.gateCode) {
+    return {
+      status: st === 'timeout' ? 'TIMEOUT' : 'DENIED',
       message: data?.error || gate?.gateMessage || gate?.message || 'Pagamento recusado',
       negativeReason: data?.gateMessage || gate?.gateMessage || data?.claroErrorCode || null,
     };
