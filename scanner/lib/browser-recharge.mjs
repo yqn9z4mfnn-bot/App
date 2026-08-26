@@ -18,14 +18,6 @@ function mapAutomationStatus(data) {
     };
   }
 
-  if (st === '3ds_required' || gate?.threeDS || data?.gateCode?.includes?.('3DS')) {
-    return {
-      status: '3DS_REQUIRED',
-      message: gate?.message || gate?.gateMessage || 'Autenticação 3DS exigida pelo banco',
-      negativeReason: gate?.gateMessage || 'Challenge Braspag (ELO/Visa/Master)',
-    };
-  }
-
   if (st === 'error' || st === 'error_manual' || st === 'timeout' || data?.gateCode) {
     return {
       status: st === 'timeout' ? 'TIMEOUT' : 'DENIED',

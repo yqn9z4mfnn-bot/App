@@ -109,10 +109,10 @@ export async function startWebLinkRecharge(
     if (err.name === 'AbortError') {
       const hint = await fetchRunningSessionHint(base);
       const mins = Math.round(timeoutMs / 60_000);
-      if (hint && /3ds|aguardando_gate|pagar|checkout|valor/i.test(hint)) {
+      if (hint && /aguardando_gate|pagar|checkout|valor/i.test(hint)) {
         throw new Error(
           `Timeout do bot (${mins} min) — automação ainda rodando: ${hint}. ` +
-            'Pode ser checkout lento ou 3DS; aguarde ou feche a sessão na API.',
+            'Checkout lento; aguarde ou feche a sessão na API.',
         );
       }
       throw new Error(
@@ -122,7 +122,7 @@ export async function startWebLinkRecharge(
     const msg = String(err?.message ?? err);
     if (/fetch failed|ECONNREFUSED|ENOTFOUND|connect/i.test(msg)) {
       throw new Error(
-        `Automação offline (${base}) — suba: cd scanner/automation-server && BYPASS_3DS=true node server.js`,
+        `Automação offline (${base}) — suba: cd scanner/automation-server && node server.js`,
       );
     }
     throw err;
