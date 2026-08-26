@@ -1,0 +1,104 @@
+{
+  "test_date": "2026-08-26",
+  "checkout_code": "e8bd2af7-****-****-****-************",
+  "card_masked": "418230******2570",
+  "value_cents": 1500,
+  "flow": [
+    {
+      "step": 1,
+      "name": "bemobi_session",
+      "method": "GET",
+      "url": "https://smart-checkout.bemobi.com/api/v1/session?code={checkout_code}",
+      "status": 201,
+      "note": "Retorna bearer token para API Eldorado"
+    },
+    {
+      "step": 2,
+      "name": "installments_credit",
+      "method": "GET",
+      "url": "https://eldorado.m4u.com.br/api-bsc/api/v1/installments?method=credit&currency=BRL&invoice_ids={invoice_id}",
+      "headers": ["Authorization: Bearer {token}", "x-bsc: client"],
+      "status": 200,
+      "response": [{"installments": 1, "installmentValue": 1500, "totalValue": 1500}]
+    },
+    {
+      "step": 3,
+      "name": "tokenize_card",
+      "method": "POST",
+      "url": "https://eldorado.m4u.com.br/tokenizer/validation",
+      "headers": ["Content-Type: application/json", "x-session-id: {checkout_code}"],
+      "request": {
+        "card_number": "418230******2570",
+        "cvv": "***",
+        "expiration_month": "03",
+        "expiration_year": "2030",
+        "holder_name": "TESTE CLARO",
+        "holder_document": "",
+        "partner": "MINHA-CLARO-WEB",
+        "payment_type": "credit",
+        "perform_zero_auth": false
+      },
+      "status": 201,
+      "response": {"card_token": "7502A17D-****-****-****-************"}
+    },
+    {
+      "step": 4,
+      "name": "bin_lookup",
+      "method": "GET",
+      "url": "https://eldorado.m4u.com.br/v1/bins/418230",
+      "status": 200,
+      "response_brand": "VISA"
+    },
+    {
+      "step": 5,
+      "name": "create_payment",
+      "method": "POST",
+      "url": "https://eldorado.m4u.com.br/api-bsc/api/v1/payments",
+      "headers": ["Authorization: Bearer {token}", "x-bsc: client", "x-session-id: {checkout_code}"],
+      "request": {
+        "method": "credit",
+        "installments": 1,
+        "card": {
+          "token": "7502A17D-****",
+          "expirationYear": 2030,
+          "expirationMonth": 3,
+          "cvv": "***",
+          "brand": "VISA",
+          "bin": "418230",
+          "last": "2570",
+          "holder": {"name": "TESTE CLARO", "email": "", "phoneNumber": ""},
+          "paymentWallet": "bemobi",
+          "length": 16
+        }
+      },
+      "status": 200,
+      "response": {
+        "id": "cd16923d-7566-416f-9d21-47af9402e64a",
+        "status": "PENDING"
+      }
+    },
+    {
+      "step": 6,
+      "name": "payment_sse",
+      "method": "GET",
+      "url": "https://eldorado.m4u.com.br/api-bsc/api/v1/payments/{payment_id}/sse",
+      "headers": ["Authorization: Bearer {token}", "x-bsc: client"],
+      "event": {
+        "status": "DENIED",
+        "negativeReason": "CREDIT_CARD - 422 - suspected fraud",
+        "method": "CREDIT_CARD",
+        "installments": 1,
+        "value": 1500,
+        "card": {"brand": "VISA", "bin": "418230", "last": "2570"}
+      }
+    }
+  ],
+  "errors_encountered": {
+    "installment_not_in_session": "Ocorre se POST /payments sem GET /installments?method=credit antes",
+    "token_null": "Ocorre se enviar PAN direto em card.number — exige tokenização prévia",
+    "PM:001": "Payload card incompleto — faltam brand, bin, paymentWallet",
+    "429_payments": "Rate limit após múltiplas tentativas POST /payments",
+    "429_smartcheckout": "Rate limit em POST /smartcheckout/v2/url"
+  },
+  "result": "Pagamento processado end-to-end; adquirente retornou DENIED (suspected fraud) — fluxo API completo"
+}

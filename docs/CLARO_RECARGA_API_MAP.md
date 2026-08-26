@@ -388,13 +388,170 @@ Padrão: `https://clarorecarga.claro.com.br/{channel}/{rota}`
 
 ---
 
-## 13. O que NÃO foi exercitado (requer cartão real)
+## 13. Teste com cartão 4111111111111111 (Visa teste)
 
-- POST `/customers/{id}/recharges` com pagamento real
-- POST `/v1/cc` com PAN real
-- POST `/recharges/encrypted` fluxo PIX completo
-- PayPal / Google Pay / Mercado Pago authorize
-- Confirmação SSE pagamento Eldorado até `success`
+### API legada (claro-recarga-api) — **deprecada para cartão**
+
+| Endpoint | Status | Resultado |
+|----------|--------|-----------|
+| `POST /v1/cc` | 404 | Não existe neste host |
+| `POST /payment-methods` | 500/422 | Schema incorreto / path legado |
+| `POST /recharges` | 422 | Exige token real do gateway |
+| `POST /payment` | 400 | Payload inválido |
+| `POST /recharges/encrypted` | 422 | Payload criptografado inválido |
+
+**Conclusão:** pagamento com cartão **não passa mais** pela API direta da Claro. Usa Smart Checkout.
+
+### Smart Checkout (Eldorado/Bemobi) — **fluxo ativo (100% mapeado)**
+
+| Passo | Endpoint | Status | Response |
+|-------|----------|--------|----------|
+| 1 | `POST /smartcheckout/v2/url` | 201 / 429 | URL Eldorado + token (429 após muitas tentativas) |
+| 2 | `GET smart-checkout.bemobi.com/api/v1/session?code=` | 201 | Sessão checkout completa + bearer |
+| 3 | `GET .../installments?method=credit&currency=BRL&invoice_ids={id}` | 200 | Parcelas (obrigatório antes do pagamento) |
+| 4 | `POST eldorado.m4u.com.br/tokenizer/validation` | 201 | `{card_token}` |
+| 5 | `GET eldorado.m4u.com.br/v1/bins/{bin6}` | 200 | Brand do cartão |
+| 6 | `POST .../api-bsc/api/v1/payments` | 200 | `{id, status:"PENDING"}` |
+| 7 | `GET .../payments/{id}/sse` | 200 | Evento final: `success` / `DENIED` / `failure` |
+
+### Tokenização — POST `/tokenizer/validation`
+
+```
+URL: https://eldorado.m4u.com.br/tokenizer/validation
+Header: x-session-id: {checkout_code da URL Eldorado}
+```
+
+**Request:**
+```json
+{
+  "card_number": "418230******2570",
+  "cvv": "***",
+  "expiration_month": "03",
+  "expiration_year": "2030",
+  "holder_name": "NOME TITULAR",
+  "holder_document": "",
+  "partner": "MINHA-CLARO-WEB",
+  "payment_type": "credit",
+  "perform_zero_auth": false
+}
+```
+
+**Response (201):**
+```json
+{ "card_token": "7502A17D-****-****-****-************" }
+```
+
+### POST `/api-bsc/api/v1/payments` — payload final validado
+
+```json
+{
+  "method": "credit",
+  "installments": 1,
+  "card": {
+    "token": "{card_token}",
+    "expirationYear": 2030,
+    "expirationMonth": 3,
+    "cvv": "***",
+    "brand": "VISA",
+    "bin": "418230",
+    "last": "2570",
+    "holder": { "name": "NOME", "email": "", "phoneNumber": "" },
+    "paymentWallet": "bemobi",
+    "length": 16
+  }
+}
+```
+
+Headers: `Authorization: Bearer {bemobi_token}`, `x-bsc: client`, `x-session-id: {checkout_code}`
+
+**Response (200):**
+```json
+{
+  "id": "cd16923d-7566-416f-9d21-47af9402e64a",
+  "status": "PENDING"
+}
+```
+
+Erros comuns:
+- `holder` deve ser **objeto**, não string
+- `installments` deve ser **int**, não objeto
+- PAN em `card.number` → `402 Token at index 0 can't be null` — **obrigatório tokenizar antes**
+- Sem GET `/installments?method=credit` antes → `400 installment not in session`
+- Payload incompleto (sem brand/bin/paymentWallet) → `402 PM:001 invalid request`
+- Múltiplas tentativas → `429 too-many-requests`
+
+### GET `/installments?method=credit&currency=BRL&invoice_ids={uuid}`
+
+```json
+[{
+  "installments": 1,
+  "installmentValue": 1500,
+  "currencyCode": "BRL",
+  "totalValue": 1500,
+  "totalFee": 0,
+  "totalDiscount": 0,
+  "interestRate": 0
+}]
+```
+
+> Parâmetro `method=credit` + `invoice_ids` é obrigatório (diferente do probe inicial com apenas `value=1500`).
+
+### Bemobi session — métodos permitidos
+
+```json
+"paymentMethodsAllowed": ["credit", "pix", "googlepay", "applepay", "clicktopay", "nupay"]
+```
+
+Features ativas: 3DS, wallet, click-to-pay, tokenização web.
+
+### Confirmação de pagamento (Eldorado) — testado
+
+```
+GET {eldorado}/api-bsc/api/v1/payments/{id}/sse
+Headers: Authorization: Bearer {token}, x-bsc: client
+Accept: text/event-stream
+
+Events: pix_code | timeout | success | failure | DENIED
+```
+
+**Exemplo SSE real (cartão 418230… · R$15 · 2026-08-26):**
+```json
+{
+  "status": "DENIED",
+  "negativeReason": "CREDIT_CARD - 422 - suspected fraud",
+  "payments": [{
+    "method": "CREDIT_CARD",
+    "installments": 1,
+    "totalAmount": { "currency": "BRL", "value": 1500 },
+    "card": { "brand": "VISA", "bin": "418230", "last": "2570" },
+    "status": "DENIED"
+  }],
+  "extra": {
+    "postMessage": {
+      "type": "ok",
+      "status": "DENIED",
+      "transaction": {
+        "status": "DENIED",
+        "reason": "CREDIT_CARD - 422 - suspected fraud"
+      }
+    }
+  }
+}
+```
+
+### Limitações / rate limits
+
+- `POST /smartcheckout/v2/url` → 429 após muitas tentativas (usar checkout_code existente)
+- `POST /payments` → 429 após tentativas rápidas
+- Pagamento via API sem browser pode ser negado por antifraude (422 suspected fraud)
+- Fluxo 3DS Braspag disponível no frontend (`credit3DS.enable: true`) — não exercitado via API direta
+
+### O que ainda não foi exercitado
+
+- POST `/payments` → SSE `success` (cartão negado por antifraude neste teste)
+- Fluxo 3DS challenge completo (Braspag)
+- PIX end-to-end (`POST /recharges/encrypted`)
+- Google Pay / Apple Pay / Click to Pay
 
 ---
 
