@@ -5734,6 +5734,15 @@ export const submitCodeAndFinish = async (sessionId, payload) => {
       if (runError?.claroErrorCode === "sms_invalid" || runError?.claroErrorCode === "cadastro_deletado") {
         markAuthLost(session);
       }
+      const gateErr =
+        paymentResult?.gateMessage ||
+        paymentResult?.gateCode ||
+        paymentResult?.message ||
+        null;
+      session.lastError = runError
+        ? String(runError.message || runError)
+        : String(gateErr || "Pagamento não concluído");
+      const classified = classifyFailedClaroPayment(runError, paymentResult, session, session.lastError);
       let keepForRetry = Boolean(session.smsAuthenticated) && sessionPageAlive(session);
       if (
         runError?.claroErrorCode === "sms_invalid" ||
@@ -5744,15 +5753,6 @@ export const submitCodeAndFinish = async (sessionId, payload) => {
       ) {
         keepForRetry = false;
       }
-      const gateErr =
-        paymentResult?.gateMessage ||
-        paymentResult?.gateCode ||
-        paymentResult?.message ||
-        null;
-      session.lastError = runError
-        ? String(runError.message || runError)
-        : String(gateErr || "Pagamento não concluído");
-      const classified = classifyFailedClaroPayment(runError, paymentResult, session, session.lastError);
       const isListaNeg = classified.code === "lista_negativa_claro";
       const isFatalCard =
         classified.code === "cartao_limite_conta" || classified.code === "cartao_limite_vinculo";
