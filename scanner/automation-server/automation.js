@@ -1189,13 +1189,21 @@ const shouldLogGateCapture = (url, httpStatus, sum) => {
   return false;
 };
 
-const attachGateCapture = (context) => {
+const attachGateCapture = (context, session = null) => {
   const captures = [];
   const onResponse = async (response) => {
     try {
       const url = response.url();
       if (GATE_SKIP_URL_RE.test(url)) return;
       if (GATE_TELEMETRY_URL_RE.test(url)) return;
+      const httpStatus = response.status();
+      if (session && /smartcheckout\/v2\/url/i.test(url)) {
+        if (httpStatus === 429) {
+          session.checkoutApiError = { httpStatus: 429, code: "rate_limit", url, at: Date.now() };
+        } else if (httpStatus >= 400) {
+          session.checkoutApiError = { httpStatus, code: "checkout_api_error", url, at: Date.now() };
+        }
+      }
       const ct = String(response.headers()["content-type"] || "");
       const looksJson = /json|text\/plain|javascript/i.test(ct) || /\/api\/|graphql|\.json/i.test(url);
       if (!looksJson && !GATE_URL_RE.test(url)) return;
@@ -1310,7 +1318,7 @@ const attachGateCapture = (context) => {
 };
 
 const attachClaroNetworkHooks = (context, session = null) => {
-  const gateCapture = attachGateCapture(context);
+  const gateCapture = attachGateCapture(context, session);
   const eldoradoBypass = config.bypass3dsEnabled ? attachEldorado3dsBypass(context) : null;
   if (session) {
     session.gateCapture = gateCapture;
@@ -1458,6 +1466,12 @@ const classifyClaroFlowError = (errText, session) => {
   }
   if (/valor_indisponivel|n[aã]o dispon[ií]vel na [Cc]laro|Opções:/i.test(t)) {
     return { code: "valor_indisponivel", message: t || "Valor não disponível na Claro." };
+  }
+  if (/rate.?limit|429|muitas tentativas/i.test(t)) {
+    return {
+      code: "rate_limit",
+      message: "Muitas tentativas na Claro (429). Aguarde 15–30 minutos e tente novamente."
+    };
   }
   if (
     session?.gateCapture &&
@@ -4592,6 +4606,34 @@ const gateCapturePixOnly = (gateCapture) => {
   return false;
 };
 
+const gateCaptureSmartCheckoutBlock = (gateCapture) => {
+  const caps = gateCapture?.captures || [];
+  for (let i = caps.length - 1; i >= 0; i -= 1) {
+    const c = caps[i];
+    const u = String(c.url || "");
+    if (!/smartcheckout\/v2\/url/i.test(u)) continue;
+    if (c.httpStatus === 429) return { httpStatus: 429, code: "rate_limit" };
+    if (c.httpStatus >= 400) return { httpStatus: c.httpStatus, code: "checkout_api_error" };
+  }
+  return null;
+};
+
+const throwIfCheckoutApiBlocked = (session) => {
+  const block =
+    session?.checkoutApiError || gateCaptureSmartCheckoutBlock(session?.gateCapture);
+  if (!block) return;
+  if (block.code === "rate_limit" || block.httpStatus === 429) {
+    throw claroFlowError(
+      "rate_limit",
+      "Muitas tentativas na Claro (429). Aguarde 15–30 minutos e tente novamente."
+    );
+  }
+  throw claroFlowError(
+    "checkout_api_error",
+    `Checkout indisponível (HTTP ${block.httpStatus}). Tente novamente em alguns minutos.`
+  );
+};
+
 /** Checkout sem opção de cartão de crédito (só Pix / Apple Pay / NuPay). */
 const isCardPaymentUnavailable = (text) => {
   const t = String(text || "");
@@ -5107,19 +5149,33 @@ const runWebLinkRecharge = async (session, payload) => {
 
   await clickRechargeValueButton(page, session, rechargeValue);
   setSessionStep(session, "aguardando_checkout", "Aguardando Smart Checkout abrir…");
+
+  // Falha rápida: detecta 429/4xx da API smartcheckout em ~1–6s (sem esperar 47s)
+  const apiDeadline = Date.now() + 6000;
+  while (Date.now() < apiDeadline) {
+    throwIfCheckoutApiBlocked(session);
+    if (await hasSmartCheckout(page)) break;
+    await sleep(250);
+  }
+  throwIfCheckoutApiBlocked(session);
+
   await delayStep(17);
   await dismissBonusModalIfVisible(page).catch(() => {});
   await dismissCookieBanner(page).catch(() => {});
-  await sleep(1200);
+  await sleep(800);
   captureWebLinkStep(page, "after_valor", session).catch(() => {});
 
-  const checkoutDeadline = Date.now() + 35000;
+  const checkoutDeadline = Date.now() + 15000;
   while (Date.now() < checkoutDeadline) {
+    throwIfCheckoutApiBlocked(session);
     if (await hasSmartCheckout(page)) break;
-    await sleep(400);
+    await sleep(300);
   }
-  if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 12000))) {
+  throwIfCheckoutApiBlocked(session);
+  if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 8000))) {
+    throwIfCheckoutApiBlocked(session);
     if (!gateCaptureHasCredit(session?.gateCapture) && (await detectPixOnlyCheckout(page, session))) {
+      await saveStepDebug(page, "valor_pix_only_gate");
       throw claroFlowError("valor_indisponivel", "Valor não disponível nesse número (cartão indisponível nesta linha).");
     }
   }
@@ -5130,6 +5186,7 @@ const runWebLinkRecharge = async (session, payload) => {
     return runWebLinkSmartCheckout(session, payload);
   }
 
+  throwIfCheckoutApiBlocked(session);
   await saveStepDebug(page, "valor_sem_cartao");
   throw claroFlowError("valor_indisponivel", "Valor não disponível nesse número.");
 };
@@ -5603,7 +5660,9 @@ export const submitCodeAndFinish = async (sessionId, payload) => {
       if (
         runError?.claroErrorCode === "sms_invalid" ||
         runError?.claroErrorCode === "cadastro_deletado" ||
-        runError?.claroErrorCode === "valor_indisponivel"
+        runError?.claroErrorCode === "valor_indisponivel" ||
+        runError?.claroErrorCode === "rate_limit" ||
+        runError?.claroErrorCode === "checkout_api_error"
       ) {
         keepForRetry = false;
       }
@@ -5685,6 +5744,11 @@ export const submitCodeAndFinish = async (sessionId, payload) => {
               ? "Cadastro Claro Recarga excluído/indisponível — cliente precisa refazer cadastro no site Claro."
               : classified.code === "valor_indisponivel"
                 ? classified.message || "Valor não disponível nesse número."
+              : classified.code === "rate_limit"
+                ? classified.message ||
+                  "Muitas tentativas na Claro (429). Aguarde 15–30 minutos e tente novamente."
+              : classified.code === "checkout_api_error"
+                ? classified.message || "Checkout indisponível — tente novamente em alguns minutos."
               : isListaNeg
                 ? classified.message ||
                   "Linha na lista negativa Claro — navegador fechado; número bloqueado no bot por 30 dias."

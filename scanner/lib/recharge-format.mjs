@@ -41,6 +41,12 @@ export function formatRechargeResult(outcome) {
   } else if (status === 'TIMEOUT') {
     icon = '⚠️';
     title = 'Timeout';
+  } else if (status === 'RATE_LIMIT') {
+    icon = '⏳';
+    title = 'Muitas tentativas';
+  } else if (status === 'CHECKOUT_ERROR') {
+    icon = '⚠️';
+    title = 'Checkout indisponível';
   }
 
   const lines = [

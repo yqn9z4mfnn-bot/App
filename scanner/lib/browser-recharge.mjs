@@ -34,6 +34,25 @@ function mapAutomationStatus(data) {
     };
   }
 
+  if (data?.claroErrorCode === 'rate_limit') {
+    return {
+      status: 'RATE_LIMIT',
+      message:
+        data?.error ||
+        data?.message ||
+        'Muitas tentativas na Claro (429). Aguarde 15–30 minutos e tente novamente.',
+      negativeReason: 'Rate limit Claro (429)',
+    };
+  }
+
+  if (data?.claroErrorCode === 'checkout_api_error') {
+    return {
+      status: 'CHECKOUT_ERROR',
+      message: data?.error || data?.message || 'Checkout indisponível — tente novamente em alguns minutos.',
+      negativeReason: 'Checkout API error',
+    };
+  }
+
   return {
     status: 'UNKNOWN',
     message: data?.message || data?.stepLabel || st || 'Resultado desconhecido',
