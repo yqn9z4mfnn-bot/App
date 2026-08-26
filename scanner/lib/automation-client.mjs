@@ -1,4 +1,4 @@
-const DEFAULT_TIMEOUT_MS = 180_000;
+const DEFAULT_TIMEOUT_MS = Number(process.env.AUTOMATION_TIMEOUT_MS || 420_000);
 
 function normalizeBaseUrl(url) {
   return String(url ?? '').trim().replace(/\/+$/, '');
@@ -30,10 +30,24 @@ export async function checkAutomationHealth(apiUrl, timeoutMs = 8000) {
   }
 }
 
+/** Consulta sessão ativa após timeout do bot (automação pode continuar em background). */
+async function fetchRunningSessionHint(apiUrl) {
+  const base = normalizeBaseUrl(apiUrl);
+  try {
+    const res = await fetch(`${base}/api/sessions`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await readJson(res);
+    const sessions = data?.sessions ?? [];
+    const running = sessions.find((s) => s.status === 'running') ?? sessions[0];
+    if (!running) return null;
+    return `${running.stepLabel || running.step || running.status} (idle ${running.idleForSeconds ?? '?'}s)`;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Recarga via automação Playwright (mesmo fluxo do server.js / automation.js).
- * POST /api/session/start-web-link
- */
 export async function startWebLinkRecharge(
   apiUrl,
   {
@@ -78,7 +92,17 @@ export async function startWebLinkRecharge(
     return data;
   } catch (err) {
     if (err.name === 'AbortError') {
-      throw new Error('Timeout na automação (>3 min) — checkout ainda processando?');
+      const hint = await fetchRunningSessionHint(base);
+      const mins = Math.round(timeoutMs / 60_000);
+      if (hint && /3ds|aguardando_gate|pagar|checkout|valor/i.test(hint)) {
+        throw new Error(
+          `Timeout do bot (${mins} min) — automação ainda rodando: ${hint}. ` +
+            'Pode ser checkout lento ou 3DS; aguarde ou feche a sessão na API.',
+        );
+      }
+      throw new Error(
+        `Timeout do bot (${mins} min) — automação ainda processando${hint ? `: ${hint}` : ''}`,
+      );
     }
     const msg = String(err?.message ?? err);
     if (/fetch failed|ECONNREFUSED|ENOTFOUND|connect/i.test(msg)) {

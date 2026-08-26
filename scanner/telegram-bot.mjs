@@ -203,7 +203,7 @@ async function executeRecharge(chatId, card) {
   const statusMsg = await send(
     chatId,
     useBrowser
-      ? `💳 <b>${flow.productName}</b>\n🌐 Checkout no navegador (anti-fraude)…\n<i>~30–90 segundos</i>`
+      ? `💳 <b>${flow.productName}</b>\n🌐 Checkout no navegador (anti-fraude)…\n<i>~1–5 minutos</i>`
       : `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
   );
 
