@@ -22,7 +22,6 @@ export function formatTelegramReport(summary) {
     `<b>Segmento:</b> ${esc(summary.segmento)}`,
     `<b>Status:</b> ${esc(summary.cliente?.status)}`,
     `<b>Perfil:</b> ${esc(summary.cliente?.profile?.name)}`,
-    `<b>Origem:</b> ${esc(summary.cliente?.registerOrigin)}`,
   ];
 
   if (summary.cliente?.profile) {
@@ -32,76 +31,87 @@ export function formatTelegramReport(summary) {
     );
   }
 
-  lines.push('', `<b>💰 Valores disponíveis (${summary.valoresDisponiveis.length})</b>`);
-  if (summary.valoresDisponiveis.length === 0) {
-    lines.push('Nenhum');
-  } else {
-    for (const v of summary.valoresDisponiveis) {
-      lines.push(`• ${esc(v.name)} — ${esc(v.category)} (${v.validityDays ?? '?'} dias)`);
-    }
+  lines.push('', `<b>💰 Valores (${summary.valoresDisponiveis.length})</b>`);
+  for (const v of summary.valoresDisponiveis) {
+    lines.push(`• ${esc(v.name)} (${v.validityDays ?? '?'}d)`);
   }
+  if (summary.valoresDisponiveis.length === 0) lines.push('Nenhum');
 
   lines.push('', `<b>💳 Cartões (${summary.cartoes.total})</b>`);
   if (summary.cartoes.total === 0) {
-    lines.push('Nenhum cartão vinculado');
+    lines.push('Nenhum');
   } else {
     for (const c of summary.cartoes.walletEldorado) {
-      lines.push(`• 🏦 ${esc(c.brand)} ${esc(c.bin)}****${esc(c.last)} exp ${esc(c.expiration)}`);
+      lines.push(`• ${esc(c.brand)} ${esc(c.bin)}****${esc(c.last)} exp ${esc(c.expiration)}`);
     }
     for (const c of summary.cartoes.claroApi) {
-      lines.push(`• 📋 ${esc(c.brand)} ****${esc(c.last)}`);
+      lines.push(`• ${esc(c.brand)} ****${esc(c.last)}`);
     }
-  }
-  if (summary.cartoes.nota) {
-    lines.push(`<i>${esc(summary.cartoes.nota)}</i>`);
   }
 
   lines.push('', `<b>📜 Histórico (${summary.historico.total})</b>`);
   if (summary.historico.total === 0) {
     lines.push('Vazio');
   } else {
-    for (const h of summary.historico.recargas.slice(0, 8)) {
+    for (const h of summary.historico.recargas.slice(0, 6)) {
       const icon = h.status === 'ok' ? '✅' : '❌';
-      const card = h.cardLast ? ` ${esc(h.cardBrand)} *${esc(h.cardLast)}` : '';
-      lines.push(
-        `${icon} ${esc(h.valueFormatted)} — ${esc(h.paymentType)}${card} — ${esc(fmtDate(h.date))}`,
-      );
+      const card = h.cardLast ? ` *${esc(h.cardLast)}` : '';
+      lines.push(`${icon} ${esc(h.valueFormatted)} ${esc(h.paymentType)}${card} ${esc(fmtDate(h.date))}`);
     }
-    if (summary.historico.total > 8) {
-      lines.push(`… +${summary.historico.total - 8} registros`);
+    if (summary.historico.total > 6) {
+      lines.push(`… +${summary.historico.total - 6}`);
     }
-  }
-
-  if (summary.historico.programadas?.length > 0) {
-    lines.push('', `<b>🗓 Programadas:</b> ${summary.historico.programadas.length}`);
   }
 
   if (summary.walletScan?.ok === false) {
-    lines.push('', `⚠️ <i>Wallet: ${esc(summary.walletScan.message)}</i>`);
+    lines.push('', `⚠️ ${esc(summary.walletScan.message)}`);
   }
 
-  lines.push(
-    '',
-    `<i>⏱ ${summary.meta?.latencyMs ?? '?'}ms · ${esc(summary.scannedAt)}</i>`,
-  );
+  const mode = summary.meta?.mode === 'fast' ? '⚡' : '';
+  lines.push('', `<i>${mode}⏱ ${summary.meta?.latencyMs ?? '?'}ms</i>`);
 
   let text = lines.join('\n');
-  if (text.length > 4000) {
-    text = `${text.slice(0, 3990)}…`;
-  }
+  if (text.length > 3900) text = `${text.slice(0, 3890)}…`;
   return text;
+}
+
+/** Botões inline para remover cartões da wallet. */
+export function buildCardKeyboard(walletCards) {
+  if (!walletCards?.length) return undefined;
+
+  const rows = walletCards.map((c) => [
+    {
+      text: `🗑 ${c.brand} *${c.last}`,
+      callback_data: `rm:${c.token}`,
+    },
+  ]);
+
+  if (walletCards.length > 1) {
+    rows.push([{ text: '🗑 Remover TODOS', callback_data: 'rmall:confirm' }]);
+  }
+
+  return { inline_keyboard: rows };
+}
+
+export function buildConfirmKeyboard(token, action = 'rm') {
+  return {
+    inline_keyboard: [
+      [
+        { text: '✅ Sim, remover', callback_data: `${action}ok:${token}` },
+        { text: '❌ Cancelar', callback_data: 'cancel' },
+      ],
+    ],
+  };
 }
 
 export const WELCOME = `<b>Claro Recarga Scanner</b>
 
-Envie o <b>link de login</b> ou o <b>JWT</b> (<code>?t=...</code>) para varrer:
+Envie o <b>link JWT</b> (<code>?t=...</code>) para varredura rápida:
 
-• Número e perfil
-• Valores de recarga
-• Cartões vinculados (wallet)
-• Histórico
+• Número, valores, cartões, histórico
+• Botões <b>🗑</b> para remover cartões da wallet
 
 <b>Comandos:</b>
 /start — ajuda
-/scan — modo rápido (sem wallet)
-/status — status do bot`;
+/cartoes — remover cartões (precisa varrer antes)
+/status — bot online`;

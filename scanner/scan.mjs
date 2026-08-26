@@ -27,19 +27,20 @@ function parseArgs(argv) {
   const outIdx = args.indexOf('--out');
   const outFile = outIdx >= 0 ? args[outIdx + 1] : null;
   const skipWallet = args.includes('--no-wallet');
+  const full = args.includes('--full');
 
   if (!link) {
     usage();
     process.exit(1);
   }
 
-  return { link, outFile, skipWallet };
+  return { link, outFile, skipWallet, full };
 }
 
 async function main() {
-  const { link, outFile, skipWallet } = parseArgs(process.argv);
+  const { link, outFile, skipWallet, full } = parseArgs(process.argv);
 
-  const { summary, session, claro, wallet } = await runScan(link, { skipWallet });
+  const { summary, session, claro, wallet } = await runScan(link, { skipWallet, full });
   console.error(`[scan] sessão OK — ${session.identifier} (${session.segment})`);
   console.error(`[scan] API Claro — ${Object.keys(claro).length} endpoints`);
 

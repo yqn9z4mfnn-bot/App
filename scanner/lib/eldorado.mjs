@@ -28,16 +28,15 @@ export async function fetchWalletCards(bemobiToken, checkoutCode) {
   );
 }
 
-export async function scanWallet(sessionId, msisdn, productId) {
+export async function openWalletSession(sessionId, msisdn, productId) {
   const { createSmartCheckout } = await import('./claro.mjs');
   const checkoutRes = await createSmartCheckout(sessionId, msisdn, productId);
 
   if (checkoutRes.status === 429) {
     return {
       error: 'rate_limited',
-      message: 'POST /smartcheckout/v2/url retornou 429 — aguarde ou reutilize um checkout_code',
+      message: 'POST /smartcheckout/v2/url retornou 429 — aguarde alguns minutos',
       checkout: checkoutRes,
-      walletCards: null,
     };
   }
 
@@ -46,7 +45,6 @@ export async function scanWallet(sessionId, msisdn, productId) {
       error: 'checkout_failed',
       message: `Smart checkout falhou (${checkoutRes.status})`,
       checkout: checkoutRes,
-      walletCards: null,
     };
   }
 
@@ -58,18 +56,65 @@ export async function scanWallet(sessionId, msisdn, productId) {
       error: 'bemobi_session_failed',
       checkout: checkoutRes,
       bemobi: bemobiRes,
-      walletCards: null,
     };
   }
 
   const bemobiToken = bemobiRes.body?.token;
-  const cardsRes = await fetchWalletCards(bemobiToken, checkoutCode);
-
   return {
     checkout: checkoutRes,
     bemobi: bemobiRes,
+    checkoutCode,
+    checkoutUrl,
+    bemobiToken,
+  };
+}
+
+export async function fetchWalletCardsWithAuth(auth) {
+  return fetchWalletCards(auth.bemobiToken, auth.checkoutCode);
+}
+
+export async function deleteWalletCard(bemobiToken, checkoutCode, cardToken) {
+  return request(
+    `https://eldorado.m4u.com.br/api-bsc/api/v1/cards/${encodeURIComponent(cardToken)}?all_tokens=true`,
+    {
+      method: 'DELETE',
+      headers: {
+        authorization: `Bearer ${bemobiToken}`,
+        'x-bsc': 'client',
+        'x-session-id': checkoutCode,
+        accept: 'application/json',
+      },
+    },
+  );
+}
+
+export async function deleteAllWalletCards(bemobiToken, checkoutCode, cards) {
+  const results = await Promise.all(
+    cards.map((c) => deleteWalletCard(bemobiToken, checkoutCode, c.token)),
+  );
+  const ok = results.filter((r) => r.status === 200 || r.status === 204).length;
+  return { ok, total: cards.length, results };
+}
+
+export async function scanWallet(sessionId, msisdn, productId) {
+  const session = await openWalletSession(sessionId, msisdn, productId);
+  if (session.error) {
+    return {
+      error: session.error,
+      message: session.message,
+      checkout: session.checkout,
+      walletCards: null,
+    };
+  }
+
+  const { bemobiToken, checkoutCode, checkout, bemobi } = session;
+  const cardsRes = await fetchWalletCards(bemobiToken, checkoutCode);
+
+  return {
+    checkout,
+    bemobi,
     walletCards: cardsRes,
     checkoutCode,
-    bemobiToken: bemobiToken ? `${bemobiToken.slice(0, 8)}…` : null,
+    bemobiToken,
   };
 }
