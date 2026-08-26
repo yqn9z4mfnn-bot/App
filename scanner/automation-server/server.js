@@ -16,7 +16,8 @@ import {
   startSession,
   startSessionFromWebLink,
   submitCodeAndFinish,
-  inspectClickOnce
+  inspectClickOnce,
+  screenshotSession
 } from "./automation.js";
 import { generateWebLoginLink } from "./linkGenerate.js";
 import { readAttemptsTail } from "./pamLedger.js";
@@ -203,6 +204,19 @@ app.post("/api/session/restore-login", async (req, res) => {
       sessionId: body.sessionId
     });
     return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/session/:sessionId/screenshot", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const shot = await screenshotSession(sessionId);
+    res.set("Content-Type", "image/png");
+    res.set("X-Claro-Step", String(shot.step || ""));
+    res.set("X-Claro-Url", String(shot.url || ""));
+    return res.send(shot.buffer);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }

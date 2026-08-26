@@ -1954,12 +1954,16 @@ const waitForEldoradoCheckoutReady = async (page, timeoutMs = 45000) => {
     for (const frame of page.frames()) {
       if (!isEldoradoCheckoutUrl(frame.url())) continue;
       try {
-        const ready = await frame.evaluate(() => {
-          const t = document.body?.innerText || "";
-          if (/Escolha como pagar|N[uú]mero do cart/i.test(t)) return true;
-          const pan = document.querySelector('input[name="pan"]');
-          return pan instanceof HTMLInputElement;
-        });
+        const ready = await frameEvalWithTimeout(
+          frame,
+          () => {
+            const t = document.body?.innerText || "";
+            if (/Escolha como pagar|N[uú]mero do cart/i.test(t)) return true;
+            const pan = document.querySelector('input[name="pan"]');
+            return pan instanceof HTMLInputElement;
+          },
+          2500
+        );
         if (ready) return frame;
       } catch {
         // frame ainda montando
@@ -5066,11 +5070,15 @@ const runWebLinkCheckoutPayAttempt = async (session, payload) => {
 const runWebLinkSmartCheckout = async (session, payload) => {
   const { page } = session;
   setSessionStep(session, "smart_checkout", "Checkout M4U — pagamento direto…");
+  captureStuckSnapshot(session, "smart_checkout_entrada").catch(() => {});
   await dismissCookieBanner(page);
   await page.locator('iframe#checkout, iframe[title="smartCheckout"]').first()
     .waitFor({ state: "attached", timeout: 30000 })
     .catch(() => {});
-  await waitForEldoradoCheckoutReady(page, 45000);
+  const eldoradoFrame = await waitForEldoradoCheckoutReady(page, 45000);
+  if (!eldoradoFrame) {
+    await captureStuckSnapshot(session, "eldorado_timeout");
+  }
   await sleep(1200);
   await captureWebLinkStep(page, "smart_checkout_open", session);
   await ensureCardCheckoutOrThrow(page, session);
@@ -6301,6 +6309,58 @@ export const inspectClickOnce = async (sessionId, label, options = {}) => {
     url: page.url(),
     captures: session.gateCapture?.captures?.length || 0,
     sessionId
+  };
+};
+
+const STUCK_SHOT_DIR = process.env.STUCK_SCREENSHOT_DIR || "/opt/cursor/artifacts/screenshots/stuck";
+
+/** Print automático quando entra em passo crítico (antes de waits longos). */
+const captureStuckSnapshot = async (session, tag) => {
+  if (!session?.page) return null;
+  try {
+    const msisdn = session.accessNumber || "unknown";
+    const stamp = Date.now();
+    const base = path.join(STUCK_SHOT_DIR, `stuck_${msisdn}_${tag}_${stamp}`);
+    await fs.mkdir(STUCK_SHOT_DIR, { recursive: true });
+    await session.page.screenshot({ path: `${base}.png`, fullPage: true, timeout: 8000 }).catch(() => {});
+    const frames = session.page.frames().map((f) => f.url()).filter((u) => u && u !== "about:blank");
+    const meta = {
+      tag,
+      step: session.step,
+      stepLabel: session.stepLabel,
+      url: session.page.url(),
+      frames,
+      at: new Date().toISOString()
+    };
+    await fs.writeFile(`${base}.json`, JSON.stringify(meta, null, 2), "utf8").catch(() => {});
+    console.log(`[claro][stuck-shot] ${tag} → ${base}.png`);
+    return base;
+  } catch (err) {
+    console.warn(`[claro][stuck-shot] falha ${tag}: ${err?.message || err}`);
+    return null;
+  }
+};
+
+/** PNG da página atual (debug / print do checkout). */
+export const screenshotSession = async (sessionId) => {
+  const session = sessions.get(sessionId);
+  if (!session?.page) throw new Error("Sessão não encontrada ou browser fechado.");
+  touchSession(session);
+  const page = session.page;
+  let buffer;
+  try {
+    buffer = await page.screenshot({ fullPage: true, timeout: 8000 });
+  } catch (err) {
+    throw new Error(`Screenshot indisponível (página ocupada): ${err?.message || err}`);
+  }
+  const frames = page.frames().map((f) => f.url()).filter((u) => u && u !== "about:blank");
+  return {
+    sessionId,
+    step: session.step,
+    stepLabel: session.stepLabel,
+    url: page.url(),
+    frames,
+    buffer
   };
 };
 
