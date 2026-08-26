@@ -33,6 +33,14 @@ Token fica só em `~/.local/share/linkclaro-bot/.env` (chmod 600):
 TELEGRAM_BOT_TOKEN=seu_token
 ```
 
-No Telegram: link JWT → `/recarga` → escolha valor → envie o cartão (`NUMERO|MM|AAAA|CVV`).
+No Telegram: envie o <b>número</b> (`38991121276`) → o bot gera o link JWT → varredura → `/recarga` → cartão (`NUMERO|MM|AAAA|CVV`).
+
+Também aceita o link JWT direto.
 
 Recarga via **API JavaScript** (tokenização Eldorado + pagamento + SSE).
+
+Gerador de link (padrão):
+
+```bash
+CLARO_LINK_API=https://sarcastic-pertinaciously-shawnda.ngrok-free.dev
+```

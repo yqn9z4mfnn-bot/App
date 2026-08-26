@@ -109,7 +109,11 @@ export function buildConfirmKeyboard(token, action = 'rm') {
 
 export const WELCOME = `<b>Claro Recarga Scanner</b>
 
-Envie o <b>link JWT</b> (<code>?t=...</code>) para varredura rápida:
+Envie o <b>número</b> (DDD + 9 dígitos) para varredura:
+
+<code>38991121276</code>
+
+Também aceita o link JWT (<code>?t=...</code>).
 
 • Número, valores, cartões, histórico
 • Botões <b>🗑</b> para remover cartões da wallet

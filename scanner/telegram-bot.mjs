@@ -20,6 +20,7 @@ import {
   RECHARGE_HELP,
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
+import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -78,6 +79,9 @@ function extractLink(text) {
   if (trimmed.includes('clarorecarga.claro.com.br') || trimmed.includes('select-login')) {
     return trimmed;
   }
+  if (looksLikeMsisdn(trimmed)) {
+    return { kind: 'msisdn', msisdn: normalizeBrMobile(trimmed) };
+  }
   return null;
 }
 
@@ -107,7 +111,7 @@ async function startRechargePicker(chatId) {
   if (!entry?.sessionId || !entry?.valores?.length) {
     await send(
       chatId,
-      '❌ Faça a varredura primeiro (envie o link JWT).\n\nDepois use /recarga ou toque em <b>💳 Recarregar</b>.',
+      '❌ Faça a varredura primeiro (envie o número).\n\nDepois use /recarga ou toque em <b>💳 Recarregar</b>.',
     );
     return;
   }
@@ -249,7 +253,7 @@ async function handleRechargeInput(chatId, text) {
   return false;
 }
 
-async function doScan(chatId, link, { skipWallet = false, editMsg = null } = {}) {
+async function doScan(chatId, target, { skipWallet = false, editMsg = null } = {}) {
   if (busy.has(chatId)) {
     await send(chatId, '⏳ Aguarde a operação anterior…');
     return;
@@ -257,14 +261,33 @@ async function doScan(chatId, link, { skipWallet = false, editMsg = null } = {})
 
   busy.add(chatId);
   let statusMsg = editMsg;
+  const isMsisdn = target?.kind === 'msisdn';
   if (!statusMsg) {
     statusMsg = await send(
       chatId,
-      skipWallet ? '🔍 Varredura (sem wallet)…' : '🔍 Varredura completa…\n<i>~3–5 segundos</i>',
+      isMsisdn
+        ? `🔗 Gerando link para <code>${target.msisdn}</code>…`
+        : skipWallet
+          ? '🔍 Varredura (sem wallet)…'
+          : '🔍 Varredura completa…\n<i>~3–5 segundos</i>',
     );
   }
 
   try {
+    let link = target;
+    if (isMsisdn) {
+      const generated = await fetchClaroLoginLink(target.msisdn);
+      link = generated.link;
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsg.message_id,
+        text: skipWallet
+          ? `🔍 Varredura (sem wallet) — <code>${target.msisdn}</code>…`
+          : `🔍 Varredura completa — <code>${target.msisdn}</code>…`,
+        parse_mode: 'HTML',
+      });
+    }
+
     const result = await runScan(link, { skipWallet });
     const { summary, walletAuth, wallet, session, claro } = result;
     const report = formatTelegramReport(summary);
@@ -583,7 +606,7 @@ async function handleMessage(msg) {
       if (text.startsWith('/')) {
         await send(chatId, 'Comando desconhecido. Use /start');
       } else {
-        await send(chatId, '❌ Envie o link <code>?t=...</code> ou JWT puro.');
+        await send(chatId, '❌ Envie o <b>número</b> (DDD + 9 dígitos) ou o link JWT.');
       }
       return;
     }

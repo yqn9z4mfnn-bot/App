@@ -2,15 +2,17 @@
 import { writeFileSync } from 'node:fs';
 import { runScan } from './lib/run-scan.mjs';
 import { printSummary } from './lib/report.mjs';
+import { fetchClaroLoginLink, looksLikeMsisdn } from './lib/fetch-claro-link.mjs';
 
 function usage() {
   console.log(`
 Uso:
-  node scan.mjs "<link ou JWT>"
-  node scan.mjs "<link>" --out resultado.json
-  node scan.mjs "<link>" --no-wallet   # pula Smart Checkout (evita 429)
+  node scan.mjs "<número | link | JWT>"
+  node scan.mjs "<número>" --out resultado.json
+  node scan.mjs "<número>" --no-wallet   # pula Smart Checkout (evita 429)
 
 Exemplos:
+  node scan.mjs "38991121276"
   node scan.mjs "https://clarorecarga.claro.com.br/minhaclaro_web/select-login?t=eyJ..."
   node scan.mjs "eyJhbGciOiJSUzI1NiIs..."
 `);
@@ -39,7 +41,14 @@ function parseArgs(argv) {
 async function main() {
   const { link, outFile, skipWallet } = parseArgs(process.argv);
 
-  const { summary, session, claro, wallet } = await runScan(link, { skipWallet });
+  let target = link;
+  if (looksLikeMsisdn(link)) {
+    const generated = await fetchClaroLoginLink(link);
+    console.error(`[scan] link gerado para ${generated.msisdn}`);
+    target = generated.link;
+  }
+
+  const { summary, session, claro, wallet } = await runScan(target, { skipWallet });
   console.error(`[scan] sessão OK — ${session.identifier} (${session.segment})`);
   console.error(`[scan] API Claro — ${Object.keys(claro).length} endpoints`);
 
