@@ -6,13 +6,14 @@ SESSION="automation-server"
 TMUX="tmux -f /exec-daemon/tmux.portal.conf"
 
 if curl -sf http://127.0.0.1:3000/health >/dev/null 2>&1; then
-  echo "Automação já online em http://127.0.0.1:3000"
-  exit 0
+  echo "Automação já online — reiniciando com Edge…"
+  $TMUX kill-session -t "=$SESSION" 2>/dev/null || true
+  sleep 1
 fi
 
 $TMUX kill-session -t "=$SESSION" 2>/dev/null || true
 $TMUX new-session -d -s "$SESSION" -c "$DIR" -- "${SHELL:-bash}" -l
-$TMUX send-keys -t "$SESSION:0.0" "cd \"$DIR\" && HEADLESS=true SKIP_CS_CAPTURE=1 node server.js 2>&1 | tee /tmp/automation-server.log" C-m
+$TMUX send-keys -t "$SESSION:0.0" "cd \"$DIR\" && AUTOMATION_BROWSER=edge HEADLESS=false SKIP_CS_CAPTURE=1 node server.js 2>&1 | tee /tmp/automation-server.log" C-m
 
 for i in $(seq 1 15); do
   if curl -sf http://127.0.0.1:3000/health >/dev/null 2>&1; then

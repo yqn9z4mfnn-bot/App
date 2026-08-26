@@ -1,7 +1,7 @@
 export const config = {
   port: Number(process.env.AUTOMATION_PORT || 3000),
   headless: process.env.HEADLESS !== 'false',
-  defaultBrowser: process.env.AUTOMATION_BROWSER || 'chromium',
+  defaultBrowser: process.env.AUTOMATION_BROWSER || 'edge',
   maxConcurrentSessions: 2,
   sessionSlotWaitMs: 600_000,
   sessionIdleTimeoutSeconds: 300,
