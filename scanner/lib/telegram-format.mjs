@@ -76,14 +76,18 @@ export function formatTelegramReport(summary) {
 
 /** Botões inline para remover cartões da wallet. */
 export function buildCardKeyboard(walletCards) {
-  if (!walletCards?.length) return undefined;
+  const rows = [[{ text: '💳 Recarregar', callback_data: 'recarga:start' }]];
 
-  const rows = walletCards.map((c) => [
-    {
-      text: `🗑 ${c.brand} *${c.last}`,
-      callback_data: `rm:${c.token}`,
-    },
-  ]);
+  if (!walletCards?.length) return { inline_keyboard: rows };
+
+  for (const c of walletCards) {
+    rows.push([
+      {
+        text: `🗑 ${c.brand} *${c.last}`,
+        callback_data: `rm:${c.token}`,
+      },
+    ]);
+  }
 
   if (walletCards.length > 1) {
     rows.push([{ text: '🗑 Remover TODOS', callback_data: 'rmall:confirm' }]);
@@ -112,5 +116,6 @@ Envie o <b>link JWT</b> (<code>?t=...</code>) para varredura rápida:
 
 <b>Comandos:</b>
 /start — ajuda
+/recarga — escolher valor e pagar
 /cartoes — remover cartões (precisa varrer antes)
 /status — bot online`;
