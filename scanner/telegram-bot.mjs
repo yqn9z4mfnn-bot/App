@@ -795,16 +795,17 @@ async function handleTxtDocument(chatId, document) {
     });
 
     let lastPaint = 0;
+    const expectedTotal = numbers.length;
     const { total, ok, fail } = await ingestNumbers(numbers, {
       concurrency: BULK_CONCURRENCY,
-      onProgress: ({ done, ok: o, fail: f }) => {
+      onProgress: ({ done, total: tot = expectedTotal, ok: o, fail: f }) => {
         const now = Date.now();
-        if (now - lastPaint < 1200 && done < total) return;
+        if (now - lastPaint < 1200 && done < tot) return;
         lastPaint = now;
         tg('editMessageText', {
           chat_id: chatId,
           message_id: statusMsg.message_id,
-          text: `⚙️ <b>${done}/${total}</b>\n✅ ${o}   ❌ ${f}\n<i>${BULK_CONCURRENCY} em paralelo</i>`,
+          text: `⚙️ <b>${done}/${tot}</b>\n✅ ${o}   ❌ ${f}\n<i>${BULK_CONCURRENCY} em paralelo</i>`,
           parse_mode: 'HTML',
         }).catch(() => {});
       },
