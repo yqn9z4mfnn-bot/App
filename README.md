@@ -33,9 +33,13 @@ Token fica só em `~/.local/share/linkclaro-bot/.env` (chmod 600):
 TELEGRAM_BOT_TOKEN=seu_token
 ```
 
-No Telegram: envie o <b>número</b> (`38991121276`) → o bot gera o link JWT → varredura → `/recarga` → cartão (`NUMERO|MM|AAAA|CVV`).
+No Telegram:
+- envie um **`.txt`** (um número por linha) → gera JWT, lê valores e **salva no banco** (5 em paralelo)
+- `/lista` — números salvos (valores + atalho de recarga)
+- envie o número de novo → recarga rápida com o JWT salvo (sem varrer de novo)
+- `/usar 3899…` / `/apagar 3899…` / `/scan 3899…` (varrer de novo, sem wallet)
 
-Também aceita o link JWT direto.
+Também aceita número avulso ou o link JWT direto. SQLite: `~/.local/share/linkclaro-bot/numbers.db`.
 
 Recarga via **API JavaScript** (tokenização Eldorado + pagamento + SSE).
 

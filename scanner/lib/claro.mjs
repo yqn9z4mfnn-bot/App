@@ -84,6 +84,10 @@ export async function scanClaroApi(sessionId, msisdn) {
   return Object.fromEntries(entries);
 }
 
+export async function fetchRechargeProducts(sessionId, msisdn) {
+  return claroGet(`/customers/${msisdn}/products`, sessionId);
+}
+
 export async function createSmartCheckout(sessionId, msisdn, productId) {
   return claroPost(`/customers/${msisdn}/smartcheckout/v2/url`, sessionId, {
     msisdn,

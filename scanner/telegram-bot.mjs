@@ -5,7 +5,7 @@ import {
   deleteCardEverywhere,
   unifySavedCards,
 } from './lib/eldorado.mjs';
-import { scanClaroEssential } from './lib/claro.mjs';
+import { scanClaroEssential, createSession, fetchRechargeProducts } from './lib/claro.mjs';
 import { runRecharge } from './lib/recharge.mjs';
 import {
   formatTelegramReport,
@@ -21,6 +21,20 @@ import {
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
+import { parseLink } from './lib/parse-link.mjs';
+import {
+  upsertNumber,
+  getNumber,
+  listNumbers,
+  countNumbers,
+  countWithValues,
+  deleteNumber,
+} from './lib/numbers-db.mjs';
+import {
+  parseNumbersFromTxt,
+  ingestNumbers,
+  extractAvailableValues,
+} from './lib/bulk-scan.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -43,6 +57,23 @@ const busy = new Set();
 const cache = new Map();
 const rechargeFlow = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
+const BULK_CONCURRENCY = Number(process.env.BULK_CONCURRENCY || 5);
+
+function formatValoresShort(valores) {
+  if (!valores?.length) return 'sem valores';
+  return valores
+    .map((v) => v.name ?? `R$ ${(v.value / 100).toFixed(2).replace('.', ',')}`)
+    .join(', ');
+}
+
+function toLoginUrl(linkOrJwt) {
+  const s = String(linkOrJwt ?? '');
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^eyJ/.test(s)) {
+    return `https://clarorecarga.claro.com.br/minhaclaro_web/select-login?t=${s}`;
+  }
+  return s;
+}
 
 async function tg(method, body = {}) {
   const res = await fetch(`${API}/${method}`, {
@@ -304,6 +335,12 @@ async function doScan(chatId, target, { skipWallet = false, editMsg = null } = {
       msisdn: session.identifier,
       valores: summary.valoresDisponiveis,
     });
+    upsertNumber({
+      msisdn: session.identifier,
+      link: toLoginUrl(link),
+      valores: summary.valoresDisponiveis,
+      status: 'ok',
+    });
 
     await tg('editMessageText', {
       chat_id: chatId,
@@ -557,6 +594,250 @@ async function handleCallback(query) {
 
   if (data.startsWith('rmok:')) {
     await executeRemove(chatId, messageId, data.slice(5));
+    return;
+  }
+
+  if (data === 'noop') return;
+
+  if (data.startsWith('dbusar:')) {
+    await loadSavedNumber(chatId, data.slice(7));
+    return;
+  }
+
+  if (data.startsWith('dbscan:')) {
+    const msisdn = data.slice(7);
+    await doScan(chatId, { kind: 'msisdn', msisdn }, { skipWallet: true });
+    return;
+  }
+
+  if (data.startsWith('dbpage:')) {
+    await sendDbList(chatId, Number(data.slice(7)) || 0, messageId);
+  }
+}
+
+async function loadSavedNumber(chatId, msisdn, { editMsg = null } = {}) {
+  const number = normalizeBrMobile(msisdn);
+  const row = number ? getNumber(number) : null;
+  if (!row?.link) {
+    await send(chatId, '❌ Número não está no banco. Envie o .txt ou o número para gerar.');
+    return;
+  }
+
+  if (busy.has(chatId)) {
+    await send(chatId, '⏳ Aguarde…');
+    return;
+  }
+
+  busy.add(chatId);
+  let statusMsg = editMsg;
+  if (!statusMsg) {
+    statusMsg = await send(chatId, `⚡️ Carregando <code>${number}</code> do banco…`);
+  } else {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: `⚡️ Carregando <code>${number}</code> do banco…`,
+      parse_mode: 'HTML',
+    });
+  }
+
+  try {
+    let link = toLoginUrl(row.link);
+    let valores = row.valores ?? [];
+    let session;
+    try {
+      session = await createSession(parseLink(link).jwt);
+    } catch {
+      const generated = await fetchClaroLoginLink(number);
+      link = generated.link;
+      session = await createSession(parseLink(link).jwt);
+    }
+
+    try {
+      const products = await fetchRechargeProducts(session.id, session.identifier);
+      if (products.ok) {
+        valores = extractAvailableValues(products.body);
+        upsertNumber({ msisdn: session.identifier, link, valores, status: 'ok' });
+      }
+    } catch {
+      // mantém valores salvos se /products falhar
+    }
+
+    setCache(chatId, {
+      link,
+      walletAuth: null,
+      cards: [],
+      sessionId: session.id,
+      msisdn: session.identifier,
+      valores,
+    });
+
+    const lines = [
+      `<b>⚡️ ${session.identifier}</b> (banco)`,
+      '',
+      `<b>Valores (${valores.length}):</b> ${formatValoresShort(valores)}`,
+    ];
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: lines.join('\n'),
+      parse_mode: 'HTML',
+      reply_markup: valores.length
+        ? buildValueKeyboard(valores)
+        : { inline_keyboard: [[{ text: '🔍 Varrer de novo', callback_data: `dbscan:${number}` }]] },
+    });
+  } catch (err) {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: `❌ <b>Erro:</b> ${err.message.replace(/</g, '&lt;')}`,
+      parse_mode: 'HTML',
+    });
+  } finally {
+    busy.delete(chatId);
+  }
+}
+
+function buildDbListMarkup(page, total) {
+  const pageSize = 8;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const row = [];
+  if (page > 0) row.push({ text: '⬅️', callback_data: `dbpage:${page - 1}` });
+  row.push({ text: `${page + 1}/${pages}`, callback_data: 'noop' });
+  if (page + 1 < pages) row.push({ text: '➡️', callback_data: `dbpage:${page + 1}` });
+  return { inline_keyboard: [row] };
+}
+
+async function sendDbList(chatId, page = 0, messageId = null) {
+  const pageSize = 8;
+  const total = countNumbers({ onlyOk: true });
+  const rows = listNumbers({ limit: pageSize, offset: page * pageSize, onlyOk: true });
+  const withVal = countWithValues();
+  if (!rows.length) {
+    const text = '🗄 Banco vazio. Envie um arquivo <code>.txt</code> com um número por linha.';
+    if (messageId) {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: messageId,
+        text,
+        parse_mode: 'HTML',
+      });
+    } else {
+      await send(chatId, text);
+    }
+    return;
+  }
+
+  const lines = [
+    `<b>🗄 Banco</b> — ${total} números (${withVal} com valores)`,
+    '',
+  ];
+  const keyboard = [];
+  for (const r of rows) {
+    lines.push(`<code>${r.msisdn}</code> — ${formatValoresShort(r.valores)}`);
+    keyboard.push([
+      {
+        text: `⚡️ ${r.msisdn}`,
+        callback_data: `dbusar:${r.msisdn}`,
+      },
+    ]);
+  }
+  const nav = buildDbListMarkup(page, total).inline_keyboard[0];
+  keyboard.push(nav);
+
+  const payload = {
+    chat_id: chatId,
+    text: lines.join('\n'),
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: keyboard },
+  };
+  if (messageId) {
+    await tg('editMessageText', { ...payload, message_id: messageId });
+  } else {
+    await tg('sendMessage', { ...payload, disable_web_page_preview: true });
+  }
+}
+
+async function handleTxtDocument(chatId, document) {
+  const name = String(document.file_name || '').toLowerCase();
+  const mime = String(document.mime_type || '').toLowerCase();
+  const isTxt = name.endsWith('.txt') || mime === 'text/plain';
+  if (!isTxt) {
+    await send(chatId, '❌ Envie um arquivo <code>.txt</code> (um número por linha).');
+    return;
+  }
+  if (busy.has(chatId)) {
+    await send(chatId, '⏳ Já tem um processamento em andamento.');
+    return;
+  }
+
+  busy.add(chatId);
+  const statusMsg = await send(chatId, '📥 Baixando arquivo…');
+  try {
+    const file = await tg('getFile', { file_id: document.file_id });
+    const url = `https://api.telegram.org/file/bot${TOKEN}/${file.file_path}`;
+    const res = await fetch(url);
+    const text = await res.text();
+    const numbers = parseNumbersFromTxt(text);
+    if (!numbers.length) {
+      throw new Error('Nenhum número válido no arquivo');
+    }
+    const MAX_NUMBERS = 2000;
+    if (numbers.length > MAX_NUMBERS) {
+      throw new Error(`Arquivo grande demais (${numbers.length}). Máximo ${MAX_NUMBERS} números.`);
+    }
+
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: `⚙️ <b>${numbers.length}</b> números — gerando links em paralelo (${BULK_CONCURRENCY}x)…`,
+      parse_mode: 'HTML',
+    });
+
+    let lastPaint = 0;
+    const { total, ok, fail } = await ingestNumbers(numbers, {
+      concurrency: BULK_CONCURRENCY,
+      onProgress: ({ done, ok: o, fail: f }) => {
+        const now = Date.now();
+        if (now - lastPaint < 1200 && done < total) return;
+        lastPaint = now;
+        tg('editMessageText', {
+          chat_id: chatId,
+          message_id: statusMsg.message_id,
+          text: `⚙️ <b>${done}/${total}</b>\n✅ ${o}   ❌ ${f}\n<i>${BULK_CONCURRENCY} em paralelo</i>`,
+          parse_mode: 'HTML',
+        }).catch(() => {});
+      },
+    });
+
+    const withVal = countWithValues();
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: [
+        '<b>📦 Arquivo processado</b>',
+        '',
+        `Total: <b>${total}</b>`,
+        `✅ Salvos: <b>${ok}</b>`,
+        `❌ Erros: <b>${fail}</b>`,
+        `💰 Com valores: <b>${withVal}</b>`,
+        '',
+        'Use /lista ou envie o número para recarregar rápido.',
+      ].join('\n'),
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [[{ text: '🗄 Ver lista', callback_data: 'dbpage:0' }]],
+      },
+    });
+  } catch (err) {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: `❌ <b>Erro:</b> ${err.message.replace(/</g, '&lt;')}`,
+      parse_mode: 'HTML',
+    });
+  } finally {
+    busy.delete(chatId);
   }
 }
 
@@ -567,27 +848,66 @@ async function handleMessage(msg) {
   if (!chatId) return;
 
   try {
-    if (rechargeFlow.has(chatId)) {
+    if (msg.document) {
+      await handleTxtDocument(chatId, msg.document);
+      return;
+    }
+
+    if (rechargeFlow.has(chatId) && text && !text.startsWith('/')) {
       const handled = await handleRechargeInput(chatId, text);
       if (handled) return;
     }
 
-    if (text === '/start' || text === '/help') {
+    if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@')) {
       await send(chatId, WELCOME);
       return;
     }
 
-    if (text === '/recarga') {
+    if (text === '/lista' || text.startsWith('/lista@')) {
+      await sendDbList(chatId, 0);
+      return;
+    }
+
+    if (text.startsWith('/usar')) {
+      const arg = text.replace(/^\/usar(@\S+)?\s*/, '').trim();
+      if (!arg) {
+        await send(chatId, 'Uso: <code>/usar 38991121276</code>');
+        return;
+      }
+      await loadSavedNumber(chatId, arg);
+      return;
+    }
+
+    if (text.startsWith('/apagar')) {
+      const arg = text.replace(/^\/apagar(@\S+)?\s*/, '').trim();
+      if (!arg) {
+        await send(chatId, 'Uso: <code>/apagar 38991121276</code>');
+        return;
+      }
+      const n = normalizeBrMobile(arg);
+      if (!n) {
+        await send(chatId, '❌ Número inválido.');
+        return;
+      }
+      const ok = deleteNumber(n);
+      await send(
+        chatId,
+        ok ? `🗑 Apaguei <code>${n}</code> do banco.` : 'Não achei esse número no banco.',
+      );
+      return;
+    }
+
+    if (text === '/recarga' || text.startsWith('/recarga@')) {
       await startRechargePicker(chatId);
       return;
     }
 
-    if (text === '/status') {
+    if (text === '/status' || text.startsWith('/status@')) {
       await send(chatId, `🟢 Online · ${Math.floor(process.uptime())}s`);
       return;
     }
 
-    if (text === '/cartoes') {
+    if (text === '/cartoes' || text.startsWith('/cartoes@')) {
       const entry = getCache(chatId);
       if (!entry?.cards?.length) {
         await send(chatId, '❌ Nenhum cartão em cache. Varredura necessária.');
@@ -600,15 +920,26 @@ async function handleMessage(msg) {
     }
 
     const skipWallet = text.startsWith('/scan');
-    const link = extractLink(skipWallet ? text.replace(/^\/scan\s*/, '') : text);
+    const link = extractLink(skipWallet ? text.replace(/^\/scan(@\S+)?\s*/, '') : text);
 
     if (!link) {
       if (text.startsWith('/')) {
         await send(chatId, 'Comando desconhecido. Use /start');
       } else {
-        await send(chatId, '❌ Envie o <b>número</b> (DDD + 9 dígitos) ou o link JWT.');
+        await send(
+          chatId,
+          '❌ Envie um <b>.txt</b> (um número por linha), o número (DDD + 9 dígitos) ou o link JWT.',
+        );
       }
       return;
+    }
+
+    if (link?.kind === 'msisdn' && !skipWallet) {
+      const row = getNumber(link.msisdn);
+      if (row?.link && row.status === 'ok') {
+        await loadSavedNumber(chatId, link.msisdn);
+        return;
+      }
     }
 
     await doScan(chatId, link, { skipWallet });
@@ -646,8 +977,17 @@ async function poll() {
 
 async function main() {
   const me = await tg('getMe');
-  console.log(`[bot] @${me.username} online — recarga via API`);
+  console.log(`[bot] @${me.username} online — recarga via API + banco SQLite`);
   await tg('deleteWebhook', { drop_pending_updates: false });
+  await tg('setMyCommands', {
+    commands: [
+      { command: 'start', description: 'Ajuda' },
+      { command: 'lista', description: 'Números salvos no banco' },
+      { command: 'recarga', description: 'Escolher valor e pagar' },
+      { command: 'cartoes', description: 'Cartões da última varredura' },
+      { command: 'status', description: 'Bot online' },
+    ],
+  }).catch(() => {});
   poll();
 }
 
