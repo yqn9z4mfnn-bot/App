@@ -1,5 +1,6 @@
 import { request } from './http.mjs';
 import { openWalletSession } from './eldorado.mjs';
+import { buildBrowserPaymentExtras } from './antifraud-payload.mjs';
 
 const ELDORADO = 'https://eldorado.m4u.com.br';
 
@@ -249,6 +250,14 @@ export async function runRecharge({
       holder: { name: card.holder, email: '', phoneNumber: '' },
       paymentWallet: 'bemobi',
       wasSaved: false,
+      threeDSecure: {
+        xid: '',
+        eci: '',
+        version: '',
+        referenceId: '',
+        cavv: '',
+        tdsdsxid: '',
+      },
       length: pan.length,
     };
   }
@@ -256,22 +265,9 @@ export async function runRecharge({
   const paymentPayload = {
     method: 'credit',
     installments: 1,
-    invoices: [invoiceId],
-    paymentWallet: 'bemobi',
     card: cardPayload,
+    ...buildBrowserPaymentExtras({ invoiceId, isSaved }),
   };
-
-  // Novo cartão: espelha o checkout web para salvar na wallet Eldorado mesmo se o pagamento falhar.
-  if (!isSaved) {
-    Object.assign(paymentPayload, {
-      saveCard: true,
-      saveRecurrence: false,
-      walletEnabled: true,
-      autoSaveCardEnabled: true,
-      autoRecurrenceOptIn: false,
-      allowMultipleCardOptIn: false,
-    });
-  }
 
   const payRes = await createPayment(bemobiToken, checkoutCode, paymentPayload);
 

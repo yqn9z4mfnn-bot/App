@@ -9,7 +9,17 @@ function formatBRL(cents) {
   return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
 }
 
-export function formatRechargeResult({ result, valueCents, cardMask, paymentId, latencyMs }) {
+export function formatRechargeResult(outcome) {
+  const {
+    result,
+    valueCents,
+    cardMask,
+    paymentId,
+    latencyMs,
+    automation,
+    mode,
+  } = outcome ?? {};
+
   const status = (result?.status ?? 'UNKNOWN').toUpperCase();
   const reason =
     result?.negativeReason ??
@@ -39,8 +49,13 @@ export function formatRechargeResult({ result, valueCents, cardMask, paymentId, 
   ];
 
   if (reason) lines.push(`<b>Motivo:</b> ${esc(reason)}`);
-  if (paymentId) lines.push(`<b>ID:</b> <code>${esc(paymentId)}</code>`);
+  const idLabel = mode === 'browser' ? 'NSU/ID' : 'ID';
+  if (paymentId) lines.push(`<b>${idLabel}:</b> <code>${esc(paymentId)}</code>`);
   if (latencyMs) lines.push('', `<i>⏱ ${latencyMs}ms</i>`);
+
+  if (mode === 'browser' && automation?.stepLabel) {
+    lines.push('', `<i>🌐 ${esc(automation.stepLabel)}</i>`);
+  }
 
   return lines.join('\n');
 }
