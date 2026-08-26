@@ -42,6 +42,11 @@ set -a
 source "$DATA_DIR/.env"
 set +a
 
+# Sobe automação Playwright antes do bot (se script configurado)
+if [ -n "${AUTOMATION_API_URL:-}" ] && [ -n "${AUTOMATION_START_SCRIPT:-}" ] && [ -f "$AUTOMATION_START_SCRIPT" ]; then
+  bash "$AUTOMATION_START_SCRIPT" >> "$LOG_FILE" 2>&1 || true
+fi
+
 cd "$APP_DIR"
 
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then

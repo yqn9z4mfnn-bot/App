@@ -13,6 +13,8 @@ async function readJson(res) {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /** Verifica se a API de automação (Playwright) está online. */
 export async function checkAutomationHealth(apiUrl, timeoutMs = 8000) {
   const base = normalizeBaseUrl(apiUrl);
@@ -28,6 +30,17 @@ export async function checkAutomationHealth(apiUrl, timeoutMs = 8000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Aguarda automação ficar online (retries entre reinícios do servidor). */
+export async function waitForAutomationHealth(apiUrl, { attempts = 5, delayMs = 2000 } = {}) {
+  let last = { ok: false };
+  for (let i = 0; i < attempts; i++) {
+    last = await checkAutomationHealth(apiUrl);
+    if (last.ok) return last;
+    if (i < attempts - 1) await sleep(delayMs);
+  }
+  return last;
 }
 
 /** Consulta sessão ativa após timeout do bot (automação pode continuar em background). */

@@ -7,7 +7,7 @@ import {
 } from './lib/eldorado.mjs';
 import { runRecharge } from './lib/recharge.mjs';
 import { runBrowserRecharge } from './lib/browser-recharge.mjs';
-import { checkAutomationHealth } from './lib/automation-client.mjs';
+import { checkAutomationHealth, waitForAutomationHealth } from './lib/automation-client.mjs';
 import {
   formatTelegramReport,
   buildCardKeyboard,
@@ -210,10 +210,13 @@ async function executeRecharge(chatId, card) {
   try {
     let outcome;
     if (useBrowser) {
-      const health = await checkAutomationHealth(AUTOMATION_API_URL);
+      const health = await waitForAutomationHealth(AUTOMATION_API_URL, {
+        attempts: 6,
+        delayMs: 2500,
+      });
       if (!health.ok) {
         throw new Error(
-          'Automação offline — servidor Playwright não está rodando na porta 3000',
+          `Automação offline (${AUTOMATION_API_URL}) — suba: bash scanner/start-automation.sh`,
         );
       }
       outcome = await runBrowserRecharge({
