@@ -2313,41 +2313,56 @@ const saveStepDebug = async (page, tag) => {
   }
 };
 
+const frameEvalWithTimeout = async (frame, fn, timeoutMs = 2500) =>
+  Promise.race([
+    frame.evaluate(fn),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`frame evaluate timeout (${timeoutMs}ms)`)), timeoutMs)
+    )
+  ]);
+
 /** cs / web-link: captura HTML + PNG + textos/botões de cada iframe (debug do fluxo). */
 const captureWebLinkStep = async (page, tag, session = null) => {
+  if (process.env.SKIP_CS_CAPTURE === "1") return;
   try {
     const stamp = Date.now();
     const prefix = session?.accessNumber ? `${session.accessNumber}_` : "";
     const base = path.join(CLARO_DEBUG_DIR, `cs_${prefix}${tag}_${stamp}`);
     await fs.mkdir(CLARO_DEBUG_DIR, { recursive: true });
-    await page.screenshot({ path: `${base}.png`, fullPage: true }).catch(() => {});
-    await fs.writeFile(`${base}.html`, await page.content(), "utf8").catch(() => {});
+    await page.screenshot({ path: `${base}.png`, fullPage: true, timeout: 8000 }).catch(() => {});
+    await fs
+      .writeFile(`${base}.html`, await page.content({ timeout: 8000 }).catch(() => ""), "utf8")
+      .catch(() => {});
 
     const framesDump = [];
     for (const frame of page.frames()) {
       try {
         const url = frame.url() || "";
-        const meta = await frame.evaluate(() => {
-          const text = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
-          const buttons = [...document.querySelectorAll("button, a, [role='button'], label, [role='radio']")]
-            .map((el) => (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim())
-            .filter((t) => t && t.length < 100);
-          const inputs = [...document.querySelectorAll("input, select, textarea")]
-            .map((el) => ({
-              id: el.id || null,
-              name: el.name || null,
-              type: el.type || el.tagName,
-              placeholder: el.placeholder || null,
-              autocomplete: el.autocomplete || null,
-              visible: el.offsetWidth > 0 && el.offsetHeight > 0
-            }))
-            .slice(0, 30);
-          return {
-            textPreview: text.slice(0, 2000),
-            buttons: [...new Set(buttons)].slice(0, 50),
-            inputs
-          };
-        });
+        const meta = await frameEvalWithTimeout(
+          frame,
+          () => {
+            const text = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+            const buttons = [...document.querySelectorAll("button, a, [role='button'], label, [role='radio']")]
+              .map((el) => (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim())
+              .filter((t) => t && t.length < 100);
+            const inputs = [...document.querySelectorAll("input, select, textarea")]
+              .map((el) => ({
+                id: el.id || null,
+                name: el.name || null,
+                type: el.type || el.tagName,
+                placeholder: el.placeholder || null,
+                autocomplete: el.autocomplete || null,
+                visible: el.offsetWidth > 0 && el.offsetHeight > 0
+              }))
+              .slice(0, 30);
+            return {
+              textPreview: text.slice(0, 2000),
+              buttons: [...new Set(buttons)].slice(0, 50),
+              inputs
+            };
+          },
+          2500
+        );
         framesDump.push({ url, ...meta });
       } catch (err) {
         framesDump.push({ url: frame.url() || "", error: String(err?.message || err) });
