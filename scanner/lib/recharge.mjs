@@ -27,11 +27,19 @@ export async function getInstallments(bemobiToken, checkoutCode, invoiceId) {
 
 export async function tokenizeCard(checkoutCode, card) {
   const pan = card.number.replace(/\D/g, '');
-  const [mm, yy] = card.expiry.includes('/')
-    ? card.expiry.split('/')
-    : [card.expiry.slice(0, 2), card.expiry.slice(2)];
+  let mm;
+  let year;
 
-  const year = yy.length === 2 ? `20${yy}` : yy;
+  if (card.expirationMonth && card.expirationYear) {
+    mm = String(card.expirationMonth).padStart(2, '0');
+    year = String(card.expirationYear);
+  } else {
+    const [m, y] = card.expiry.includes('/')
+      ? card.expiry.split('/')
+      : [card.expiry.slice(0, 2), card.expiry.slice(2)];
+    mm = m.padStart(2, '0');
+    year = y.length === 2 ? `20${y}` : y;
+  }
 
   return request(`${ELDORADO}/tokenizer/validation`, {
     method: 'POST',
@@ -222,10 +230,13 @@ export async function runRecharge({
     const binRes = await lookupBin(bin);
     const brand = binRes.body?.brand ?? binRes.body?.name ?? 'VISA';
 
-    const [mm, yy] = card.expiry.includes('/')
+    const [mm, yy] = card.expiry?.includes('/')
       ? card.expiry.split('/')
-      : [card.expiry.slice(0, 2), card.expiry.slice(2)];
-    const year = Number(yy.length === 2 ? `20${yy}` : yy);
+      : [
+          String(card.expirationMonth ?? '').padStart(2, '0'),
+          String(card.expirationYear ?? '').slice(-2),
+        ];
+    const year = card.expirationYear ?? Number(yy.length === 2 ? `20${yy}` : yy);
 
     cardPayload = {
       token: cardToken,

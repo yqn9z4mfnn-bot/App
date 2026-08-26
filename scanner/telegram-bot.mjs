@@ -18,6 +18,7 @@ import {
   buildPayMethodKeyboard,
   RECHARGE_HELP,
 } from './lib/recharge-format.mjs';
+import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!TOKEN) {
@@ -87,19 +88,8 @@ function clearRecharge(chatId) {
   rechargeFlow.delete(chatId);
 }
 
-function parseCompactCard(text) {
-  const parts = text.trim().split('|').map((s) => s.trim());
-  if (parts.length !== 4) return null;
-  const [number, holder, expiry, cvv] = parts;
-  if (!/^\d{13,19}$/.test(number.replace(/\D/g, ''))) return null;
-  if (!/^\d{2}\/\d{2,4}$/.test(expiry)) return null;
-  if (!/^\d{3,4}$/.test(cvv)) return null;
-  return {
-    number: number.replace(/\D/g, ''),
-    holder,
-    expiry,
-    cvv,
-  };
+async function promptCardLine(chatId) {
+  await send(chatId, CARD_INPUT_HINT);
 }
 
 async function startRechargePicker(chatId) {
@@ -153,12 +143,9 @@ async function onValueSelected(chatId, messageId, productId) {
   if (!hasCards) {
     rechargeFlow.set(chatId, {
       ...rechargeFlow.get(chatId),
-      step: 'card_number',
+      step: 'card_line',
     });
-    await send(
-      chatId,
-      '📝 Digite o <b>número do cartão</b> (16 dígitos):\n\nOu envie: <code>NUMERO|NOME|MM/AA|CVV</code>',
-    );
+    await promptCardLine(chatId);
   }
 }
 
@@ -215,79 +202,41 @@ async function handleRechargeInput(chatId, text) {
   const flow = rechargeFlow.get(chatId);
   if (!flow) return false;
 
-  const compact = parseCompactCard(text);
-  if (compact && ['pick_card', 'card_number', 'holder', 'expiry', 'cvv'].includes(flow.step)) {
-    await executeRecharge(chatId, compact);
+  if (flow.step === 'cvv_saved') {
+    if (!/^\d{3,4}$/.test(text.trim())) {
+      await send(chatId, '❌ CVV inválido (3 ou 4 dígitos).');
+      return true;
+    }
+    const saved = flow.savedCard;
+    await executeRecharge(chatId, {
+      token: saved.token,
+      cvv: text.trim(),
+      brand: saved.brand,
+      bin: saved.bin,
+      last: saved.last,
+      expirationMonth: saved.expirationMonth,
+      expirationYear: saved.expirationYear,
+      holder: saved.holder?.name ?? randomHolderName(),
+      wasSaved: true,
+    });
     return true;
   }
 
-  switch (flow.step) {
-    case 'card_number': {
-      const num = text.replace(/\D/g, '');
-      if (num.length < 13 || num.length > 19) {
-        await send(chatId, '❌ Número inválido. Digite 13–19 dígitos.');
-        return true;
-      }
-      flow.card.number = num;
-      flow.step = 'holder';
-      rechargeFlow.set(chatId, flow);
-      await send(chatId, '📝 <b>Nome</b> igual ao cartão:');
-      return true;
-    }
-    case 'holder': {
-      if (text.length < 3) {
-        await send(chatId, '❌ Nome muito curto.');
-        return true;
-      }
-      flow.card.holder = text.toUpperCase();
-      flow.step = 'expiry';
-      rechargeFlow.set(chatId, flow);
-      await send(chatId, '📝 <b>Validade</b> (MM/AA):');
-      return true;
-    }
-    case 'expiry': {
-      if (!/^\d{2}\/\d{2,4}$/.test(text.trim())) {
-        await send(chatId, '❌ Use formato MM/AA (ex: 12/30)');
-        return true;
-      }
-      flow.card.expiry = text.trim();
-      flow.step = 'cvv';
-      rechargeFlow.set(chatId, flow);
-      await send(chatId, '📝 <b>CVV</b> (3 ou 4 dígitos):');
-      return true;
-    }
-    case 'cvv': {
-      if (!/^\d{3,4}$/.test(text.trim())) {
-        await send(chatId, '❌ CVV inválido.');
-        return true;
-      }
-      flow.card.cvv = text.trim();
-      rechargeFlow.set(chatId, flow);
-      await executeRecharge(chatId, flow.card);
-      return true;
-    }
-    case 'cvv_saved': {
-      if (!/^\d{3,4}$/.test(text.trim())) {
-        await send(chatId, '❌ CVV inválido.');
-        return true;
-      }
-      const saved = flow.savedCard;
-      await executeRecharge(chatId, {
-        token: saved.token,
-        cvv: text.trim(),
-        brand: saved.brand,
-        bin: saved.bin,
-        last: saved.last,
-        expirationMonth: saved.expirationMonth,
-        expirationYear: saved.expirationYear,
-        holder: saved.holder?.name ?? '',
-        wasSaved: true,
-      });
-      return true;
-    }
-    default:
-      return false;
+  const card = parseCardInput(text);
+  if (card) {
+    await executeRecharge(chatId, card);
+    return true;
   }
+
+  if (['pick_card', 'card_line', 'card_number'].includes(flow.step)) {
+    await send(
+      chatId,
+      '❌ Formato não reconhecido.\n\n' + CARD_INPUT_HINT,
+    );
+    return true;
+  }
+
+  return false;
 }
 
 async function doScan(chatId, link, { skipWallet = false, editMsg = null } = {}) {
@@ -497,12 +446,9 @@ async function handleCallback(query) {
   if (data === 'rcgpay:new') {
     const flow = rechargeFlow.get(chatId);
     if (!flow) return;
-    flow.step = 'card_number';
+    flow.step = 'card_line';
     rechargeFlow.set(chatId, flow);
-    await send(
-      chatId,
-      '📝 Digite o <b>número do cartão</b>:\n\nOu: <code>NUMERO|NOME|MM/AA|CVV</code>',
-    );
+    await promptCardLine(chatId);
     return;
   }
 

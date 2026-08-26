@@ -78,10 +78,11 @@ export function buildPayMethodKeyboard(cards) {
 
 export const RECHARGE_HELP = `<b>💳 Recarga</b>
 
-1. Envie o link JWT (varredura)
-2. Use /recarga ou botão <b>Recarregar</b>
-3. Escolha o valor
-4. Informe o cartão passo a passo
+1. Link JWT → varredura
+2. /recarga → escolha valor
+3. Envie o cartão:
 
-Ou envie tudo de uma vez:
-<code>NUMERO|NOME|MM/AA|CVV</code>`;
+<code>NUMERO|MM|AAAA|CVV</code>
+
+Ex: <code>4271680002723941|08|2033|999</code>
+<i>Nome aleatório automático.</i>`;
