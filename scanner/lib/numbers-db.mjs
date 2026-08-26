@@ -114,6 +114,15 @@ export function upsertNumber({ msisdn, link, valores = [], status = 'ok', error 
   }
 }
 
+export function listOkMsisdns() {
+  return new Set(
+    getDb()
+      .prepare("SELECT msisdn FROM numbers WHERE status = 'ok' AND link IS NOT NULL")
+      .all()
+      .map((r) => r.msisdn),
+  );
+}
+
 export function getNumber(msisdn) {
   const row = getDb().prepare('SELECT * FROM numbers WHERE msisdn = ?').get(msisdn);
   return mapRow(row);

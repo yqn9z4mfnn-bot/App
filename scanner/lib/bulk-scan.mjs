@@ -1,7 +1,7 @@
 import { fetchClaroLoginLink, normalizeBrMobile } from './fetch-claro-link.mjs';
 import { parseLink } from './parse-link.mjs';
 import { createSession, fetchRechargeProducts } from './claro.mjs';
-import { upsertNumber } from './numbers-db.mjs';
+import { upsertNumber, listOkMsisdns } from './numbers-db.mjs';
 
 export function parseNumbersFromTxt(text) {
   const seen = new Set();
@@ -39,13 +39,23 @@ export function extractAvailableValues(productsBody) {
     }));
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryable(err) {
+  return /429|Too Many|Timeout|fetch failed|ECONNRESET|UND_ERR|socket/i.test(
+    String(err?.message || err),
+  );
+}
+
 export async function ingestMsisdn(msisdn) {
   const number = normalizeBrMobile(msisdn);
   if (!number) {
     throw new Error('Número inválido');
   }
 
-  const generated = await fetchClaroLoginLink(number);
+  const generated = await fetchClaroLoginLink(number, { timeoutMs: 12_000 });
   const parsed = parseLink(generated.link);
   const session = await createSession(parsed.jwt);
   const products = await fetchRechargeProducts(session.id, session.identifier);
@@ -79,34 +89,69 @@ async function mapPool(items, concurrency, worker) {
   );
 }
 
-export async function ingestNumbers(numbers, { concurrency = 5, onProgress } = {}) {
+export async function ingestNumbers(numbers, { concurrency = 5, skipOk = true, onProgress } = {}) {
   const unique = [...new Set(numbers.map(normalizeBrMobile).filter(Boolean))];
+  const already = skipOk ? listOkMsisdns() : new Set();
+  const pending = unique.filter((n) => !already.has(n));
+  const skipped = unique.length - pending.length;
+
   const results = [];
   let done = 0;
   let ok = 0;
   let fail = 0;
+  let pauseUntil = 0;
 
-  await mapPool(unique, concurrency, async (msisdn) => {
-    try {
-      const row = await ingestMsisdn(msisdn);
-      ok += 1;
-      results.push(row);
-    } catch (err) {
+  const emit = () =>
+    onProgress?.({
+      done,
+      total: pending.length,
+      queued: unique.length,
+      skipped,
+      ok,
+      fail,
+    });
+
+  emit();
+
+  await mapPool(pending, concurrency, async (msisdn) => {
+    let lastErr;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const wait = pauseUntil - Date.now();
+      if (wait > 0) await sleep(wait);
+      try {
+        const row = await ingestMsisdn(msisdn);
+        ok += 1;
+        results.push(row);
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (!isRetryable(err) || attempt === 3) break;
+        const msg = String(err?.message || err);
+        const backoff = /429|Too Many/.test(msg)
+          ? Math.min(2500 * 2 ** attempt, 12_000)
+          : 800 * (attempt + 1);
+        pauseUntil = Math.max(pauseUntil, Date.now() + backoff);
+        await sleep(backoff);
+      }
+    }
+
+    if (lastErr) {
       fail += 1;
       const row = {
         msisdn,
         link: null,
         valores: [],
         status: 'error',
-        error: String(err?.message || err),
+        error: String(lastErr?.message || lastErr),
       };
       upsertNumber(row);
       results.push(row);
-    } finally {
-      done += 1;
-      onProgress?.({ done, total: unique.length, ok, fail });
     }
+
+    done += 1;
+    emit();
   });
 
-  return { total: unique.length, ok, fail, results };
+  return { total: unique.length, pending: pending.length, skipped, ok, fail, results };
 }

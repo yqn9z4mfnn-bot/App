@@ -913,31 +913,59 @@ async function handleTxtDocument(chatId, document) {
       parse_mode: 'HTML',
     });
 
+    const t0 = Date.now();
     let lastPaint = 0;
     let finished = false;
     let paintQueue = Promise.resolve();
-    const expectedTotal = numbers.length;
-    const { total, ok, fail, results } = await ingestNumbers(numbers, {
-      concurrency: BULK_CONCURRENCY,
-      onProgress: ({ done, total: tot = expectedTotal, ok: o, fail: f }) => {
-        if (finished || done >= tot) return;
-        const now = Date.now();
-        if (now - lastPaint < 1200) return;
-        lastPaint = now;
-        paintQueue = paintQueue.then(() => {
-          if (finished) return;
-          return tg('editMessageText', {
-            chat_id: chatId,
-            message_id: statusMsg.message_id,
-            text: `⚙️ <b>${done}/${tot}</b>\n✅ ${o}   ❌ ${f}\n<i>${BULK_CONCURRENCY} em paralelo</i>`,
-            parse_mode: 'HTML',
-          }).catch(() => {});
-        });
-      },
-    });
-    finished = true;
-    await paintQueue.catch(() => {});
+    let snapshot = {
+      done: 0,
+      total: numbers.length,
+      queued: numbers.length,
+      skipped: 0,
+      ok: 0,
+      fail: 0,
+    };
 
+    const paint = (force = false) => {
+      if (finished) return;
+      const now = Date.now();
+      if (!force && now - lastPaint < 1500) return;
+      lastPaint = now;
+      const { done, total: tot, skipped, ok: o, fail: f, queued } = snapshot;
+      const elapsed = Math.max(1, Math.round((now - t0) / 1000));
+      paintQueue = paintQueue.then(() => {
+        if (finished) return;
+        return tg('editMessageText', {
+          chat_id: chatId,
+          message_id: statusMsg.message_id,
+          text: [
+            `⚙️ <b>${done}/${tot || queued}</b> deste lote`,
+            `✅ ${o}   ❌ ${f}${skipped ? `   ⏭ ${skipped} já no banco` : ''}`,
+            `<i>${BULK_CONCURRENCY} em paralelo · ${elapsed}s</i>`,
+          ].join('\n'),
+          parse_mode: 'HTML',
+        }).catch(() => {});
+      });
+    };
+
+    const beat = setInterval(() => paint(true), 4000);
+    let ingest;
+    try {
+      ingest = await ingestNumbers(numbers, {
+        concurrency: BULK_CONCURRENCY,
+        skipOk: true,
+        onProgress: (p) => {
+          snapshot = p;
+          paint(false);
+        },
+      });
+    } finally {
+      finished = true;
+      clearInterval(beat);
+      await paintQueue.catch(() => {});
+    }
+
+    const { total, skipped, ok, fail, results } = ingest;
     const withVal = results.filter((r) => r.status === 'ok' && r.valores?.length).length;
     const errors = results.filter((r) => r.status !== 'ok');
     const errorLines = errors.slice(0, 8).map(
@@ -951,14 +979,19 @@ async function handleTxtDocument(chatId, document) {
       text: [
         '<b>📦 Arquivo processado</b>',
         '',
-        `Total: <b>${total}</b>`,
-        `✅ Salvos: <b>${ok}</b>`,
+        `Arquivo: <b>${total}</b>`,
+        skipped ? `⏭ Já no banco: <b>${skipped}</b>` : null,
+        `✅ Novos: <b>${ok}</b>`,
         `❌ Erros: <b>${fail}</b>`,
-        `💰 Com valores: <b>${withVal}</b>`,
+        `💰 Com valores neste lote: <b>${withVal}</b>`,
         ...(errorLines.length ? ['', '<b>Falhas:</b>', ...errorLines] : []),
         '',
-        'Toque em <b>Pedir valor</b> para receber o link.',
-      ].join('\n'),
+        fail
+          ? 'Envie o mesmo .txt de novo para retentar os erros (os já salvos são pulados).'
+          : 'Toque em <b>Pedir valor</b> para receber o link.',
+      ]
+        .filter((line) => line != null)
+        .join('\n'),
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
