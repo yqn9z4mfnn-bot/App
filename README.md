@@ -35,6 +35,7 @@ TELEGRAM_BOT_TOKEN=seu_token
 
 No Telegram:
 - envie um **`.txt`** (um número por linha) → gera JWT, lê valores e **salva** (5 em paralelo)
+- número avulso ou JWT → varredura normal, **não grava** no banco
 - `/valores` ou `/valor 20` (ou só `20`) → o bot **envia o link** de um número que tem esse valor
 - `/lista` — números salvos
 - `/usar 3899…` / `/apagar 3899…` / `/scan 3899…`

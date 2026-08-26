@@ -109,15 +109,8 @@ export function buildConfirmKeyboard(token, action = 'rm') {
 
 export const WELCOME = `<b>Claro Recarga Scanner</b>
 
-1. Envie um <b>.txt</b> (um número por linha)
-2. O bot gera o JWT, lê os valores e <b>salva</b> (5 em paralelo)
-3. Peça um valor — o bot <b>envia o link</b> de um número que tem esse valor
+• <b>.txt</b> (um número por linha) → gera JWT, lê valores e <b>salva no banco</b> (5 em paralelo)
+• <b>número avulso</b> → varredura normal, <b>não salva</b>
+• /valores ou <code>20</code> → envia o <b>link</b> de um número do banco
 
-• /valores — estoque (toque em R$ 20)
-• /valor 20 — mesmo efeito
-• ou só mande <code>20</code>
-• /lista — números
-• /erros — falhas do .txt
-
-<b>Comandos:</b>
-/start · /valores · /lista · /recarga · /status`;
+/valores · /valor 20 · /lista · /erros · /recarga`;

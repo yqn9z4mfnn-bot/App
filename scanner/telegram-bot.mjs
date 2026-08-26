@@ -23,7 +23,6 @@ import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-pa
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
 import {
-  upsertNumber,
   getNumber,
   listNumbers,
   countNumbers,
@@ -343,12 +342,6 @@ async function doScan(chatId, target, { skipWallet = false, editMsg = null } = {
       sessionId: session.id,
       msisdn: session.identifier,
       valores: summary.valoresDisponiveis,
-    });
-    upsertNumber({
-      msisdn: session.identifier,
-      link: toLoginUrl(link),
-      valores: summary.valoresDisponiveis,
-      status: 'ok',
     });
 
     await tg('editMessageText', {
@@ -685,7 +678,6 @@ async function loadSavedNumber(chatId, msisdn, { editMsg = null } = {}) {
       const products = await fetchRechargeProducts(session.id, session.identifier);
       if (products.ok) {
         valores = extractAvailableValues(products.body);
-        upsertNumber({ msisdn: session.identifier, link, valores, status: 'ok' });
       }
     } catch {
       // mantém valores salvos se /products falhar
@@ -1117,14 +1109,6 @@ async function handleMessage(msg) {
         );
       }
       return;
-    }
-
-    if (link?.kind === 'msisdn' && !skipWallet) {
-      const row = getNumber(link.msisdn);
-      if (row?.link && row.status === 'ok') {
-        await loadSavedNumber(chatId, link.msisdn);
-        return;
-      }
     }
 
     await doScan(chatId, link, { skipWallet });
