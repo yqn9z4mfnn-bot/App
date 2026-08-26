@@ -4326,6 +4326,21 @@ const webNeedsOutroNumero = (session) => {
   return Boolean(access && target && target !== access);
 };
 
+const isOnRechargeValueScreen = async (page) => {
+  if (await visibleTextMatch(page, /Escolha um valor de recarga/i)) return true;
+  const url = page.url() || "";
+  if (!/\/numero/i.test(url)) return false;
+  return page
+    .evaluate(() => {
+      for (const el of document.querySelectorAll("button, [role='button'], a, [role='radio']")) {
+        const t = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        if (/R\$\s*\d{1,4}/.test(t) && t.length < 40) return true;
+      }
+      return false;
+    })
+    .catch(() => false);
+};
+
 const ensureWebRechargeReady = async (session) => {
   const { page } = session;
   await dismissCookieBanner(page);
@@ -4333,26 +4348,29 @@ const ensureWebRechargeReady = async (session) => {
   // A→B: landing marketing tem R$ mas não tem "Outro número" — outro helper navega.
   if (webNeedsOutroNumero(session)) return;
 
-  if (await visibleTextMatch(page, /Escolha um valor de recarga/i)) return;
+  if (await isOnRechargeValueScreen(page)) return;
 
   const url = page.url() || "";
-  const hasValueBtn = await page
-    .evaluate(() => {
-      for (const el of document.querySelectorAll("button, [role='button'], a")) {
-        const t = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
-        if (/R\$\s*\d{1,4}/.test(t) && t.length < 40) return true;
-      }
-      return false;
-    })
-    .catch(() => false);
-  if (hasValueBtn) return;
+
+  // Home/landing mostram R$ promocionais — não abrem Smart Checkout; ir para /numero.
+  if (await isWebLandingMarketing(page) || /\/home(?:\/|$|\?)/i.test(url)) {
+    setSessionStep(session, "web_numero", "Abrindo tela de recarga…");
+    if (await isWebLandingMarketing(page)) {
+      await clickLandingMobileRecargaEntry(page);
+      if (await isOnRechargeValueScreen(page)) return;
+    }
+    await page.goto(webPortalPath("numero"), { waitUntil: "domcontentloaded", timeout: 45000 });
+    await dismissCookieBanner(page);
+    await sleep(800);
+    if (await isOnRechargeValueScreen(page)) return;
+  }
 
   if (await clickByText(page, ["Fazer recarga", "Fazer Recarga", "Recarregar"], 15000)) {
     await sleep(800);
-    return;
+    if (await isOnRechargeValueScreen(page)) return;
   }
 
-  if (!/\/numero|\/home/i.test(url)) {
+  if (!/\/numero/i.test(page.url() || "")) {
     setSessionStep(session, "web_numero", "Abrindo tela de recarga…");
     await page.goto(webPortalPath("numero"), { waitUntil: "domcontentloaded", timeout: 45000 });
     await dismissCookieBanner(page);
@@ -5210,6 +5228,7 @@ const runWebLinkRecharge = async (session, payload) => {
   const checkoutReadyDeadline = Date.now() + 20000;
   while (Date.now() < checkoutReadyDeadline) {
     throwIfCheckoutApiBlocked(session);
+    await dismissBonusModalIfVisible(page);
     if (await hasSmartCheckout(page, session)) {
       return runWebLinkSmartCheckout(session, payload);
     }
@@ -5220,6 +5239,7 @@ const runWebLinkRecharge = async (session, payload) => {
     return runWebLinkSmartCheckout(session, payload);
   }
 
+  await saveStepDebug(page, "checkout_timeout");
   throw claroFlowError(
     "checkout_timeout",
     "Checkout não abriu a tempo (20s). Tente novamente."
