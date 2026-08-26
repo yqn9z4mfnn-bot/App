@@ -414,6 +414,7 @@ const restoreSessionFromDisk = async (sessionId, payload = {}) => {
       webPortal: Boolean(meta.webPortal)
     };
     sessions.set(restoredId, session);
+    attachClaroNetworkHooks(context, session);
     releaseSlot();
     ensureIdleSweep();
   } catch (err) {
@@ -1189,13 +1190,30 @@ const shouldLogGateCapture = (url, httpStatus, sum) => {
   return false;
 };
 
-const attachGateCapture = (context) => {
+const attachGateCapture = (context, session = null) => {
   const captures = [];
   const onResponse = async (response) => {
     try {
       const url = response.url();
       if (GATE_SKIP_URL_RE.test(url)) return;
       if (GATE_TELEMETRY_URL_RE.test(url)) return;
+      const httpStatus = response.status();
+      // Doc §7 / §13: POST smartcheckout/v2/url → 201 (URL Eldorado + token)
+      if (session && /smartcheckout\/v2\/url/i.test(url)) {
+        if (httpStatus === 429) {
+          session.checkoutApiError = { httpStatus: 429, code: "rate_limit", url, at: Date.now() };
+        } else if (httpStatus >= 400) {
+          session.checkoutApiError = { httpStatus, code: "checkout_api_error", url, at: Date.now() };
+        } else if (httpStatus === 201) {
+          session.checkoutApiOk = true;
+          session.checkoutApiOkAt = Date.now();
+        }
+      }
+      // Doc §13 passo 2: GET bemobi /api/v1/session → 201
+      if (session && /smart-checkout\.bemobi\.com\/api\/v1\/session/i.test(url) && httpStatus === 201) {
+        session.bemobiSessionOk = true;
+        session.bemobiSessionOkAt = Date.now();
+      }
       const ct = String(response.headers()["content-type"] || "");
       const looksJson = /json|text\/plain|javascript/i.test(ct) || /\/api\/|graphql|\.json/i.test(url);
       if (!looksJson && !GATE_URL_RE.test(url)) return;
@@ -1220,6 +1238,10 @@ const attachGateCapture = (context) => {
         }
       }
       if (body == null) return;
+
+      if (session && /smartcheckout\/v2\/url/i.test(url) && httpStatus === 201 && body?.url) {
+        session.checkoutEldoradoUrl = String(body.url);
+      }
 
       let score = scoreGatePayload(url, body, response.status());
       if (
@@ -1310,7 +1332,7 @@ const attachGateCapture = (context) => {
 };
 
 const attachClaroNetworkHooks = (context, session = null) => {
-  const gateCapture = attachGateCapture(context);
+  const gateCapture = attachGateCapture(context, session);
   const eldoradoBypass = config.bypass3dsEnabled ? attachEldorado3dsBypass(context) : null;
   if (session) {
     session.gateCapture = gateCapture;
@@ -2320,6 +2342,18 @@ const frameEvalWithTimeout = async (frame, fn, timeoutMs = 2500) =>
       setTimeout(() => reject(new Error(`frame evaluate timeout (${timeoutMs}ms)`)), timeoutMs)
     )
   ]);
+
+/** Evita locator.count() travar quando dezenas de iframes Bemobi estão carregando. */
+const withTimeout = async (promise, timeoutMs, fallback = null) =>
+  Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), timeoutMs))
+  ]);
+
+const locatorCountSafe = async (locator, timeoutMs = 1500) => {
+  const n = await withTimeout(locator.count().catch(() => 0), timeoutMs, 0);
+  return typeof n === "number" ? n : 0;
+};
 
 /** cs / web-link: captura HTML + PNG + textos/botões de cada iframe (debug do fluxo). */
 const captureWebLinkStep = async (page, tag, session = null) => {
@@ -4448,17 +4482,54 @@ const ensureWebNumeroChoiceScreen = async (session) => {
   return ready();
 };
 
-const hasSmartCheckout = async (page) => {
-  if ((await page.locator('iframe#checkout, iframe[title="smartCheckout"]').count()) > 0) {
+const hasSmartCheckout = async (page, session = null) => {
+  const pageUrl = page.url() || "";
+  // Doc §9: rota /:channel/smartcheckout
+  if (/\/smartcheckout/i.test(pageUrl)) return true;
+  if (
+    (await locatorCountSafe(
+      page.locator(
+        'iframe#checkout, iframe[title="smartCheckout"], iframe[src*="smart-checkout"], iframe[src*="eldorado"]'
+      ),
+      1500
+    )) > 0
+  ) {
     return true;
   }
-  return page.frames().some((f) => /eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(f.url() || ""));
+  // Doc §7: iframe Eldorado BSC + Bemobi session
+  if (
+    page.frames().some((f) => {
+      const u = f.url() || "";
+      return (
+        /eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(u) || /smart-checkout\.bemobi\.com/i.test(u)
+      );
+    })
+  ) {
+    return true;
+  }
+  // Doc §13 passos 1–2: API confirmou checkout — não bloquear em locator.count()
+  if (session?.checkoutApiOk && session.checkoutApiOkAt) {
+    const elapsed = Date.now() - session.checkoutApiOkAt;
+    if (elapsed >= 1200) {
+      if (session.bemobiSessionOk) return true;
+      if (/\/smartcheckout/i.test(pageUrl)) return true;
+      if (
+        page.frames().some((f) =>
+          /smart-checkout\.bemobi|eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(f.url() || "")
+        )
+      ) {
+        return true;
+      }
+      if (elapsed >= 2500) return true;
+    }
+  }
+  return false;
 };
 
-const waitForSmartCheckout = async (page, timeoutMs = 15000) => {
+const waitForSmartCheckout = async (page, timeoutMs = 15000, session = null) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await hasSmartCheckout(page)) return true;
+    if (await hasSmartCheckout(page, session)) return true;
     await sleep(350);
   }
   return false;
@@ -4472,7 +4543,7 @@ const ensureSmartCheckoutReady = async (page, session) => {
   if ((await iframe.count()) > 0) {
     await iframe.scrollIntoViewIfNeeded().catch(() => {});
   }
-  if (await hasSmartCheckout(page)) {
+  if (await hasSmartCheckout(page, session)) {
     await ensureCardCheckoutOrThrow(page, session);
     await prepareEldoradoCheckoutForm(page);
     await waitForEldoradoCheckoutReady(page, 30000);
@@ -4483,7 +4554,7 @@ const ensureSmartCheckoutReady = async (page, session) => {
   const deadline = Date.now() + 45000;
   while (Date.now() < deadline) {
     await dismissBonusModalIfVisible(page);
-    if (await hasSmartCheckout(page)) {
+    if (await hasSmartCheckout(page, session)) {
       await ensureCardCheckoutOrThrow(page, session);
       await prepareEldoradoCheckoutForm(page);
       await waitForEldoradoCheckoutReady(page, 25000);
@@ -4590,11 +4661,39 @@ const isCardPaymentUnavailable = (text) => {
 
 const isPixOnlyAfterValor = (text) => isCardPaymentUnavailable(text);
 
+const gateCaptureSmartCheckoutBlock = (gateCapture) => {
+  const caps = gateCapture?.captures || [];
+  for (let i = caps.length - 1; i >= 0; i -= 1) {
+    const c = caps[i];
+    const u = String(c.url || "");
+    if (!/smartcheckout\/v2\/url/i.test(u)) continue;
+    if (c.httpStatus === 429) return { httpStatus: 429, code: "rate_limit" };
+    if (c.httpStatus >= 400) return { httpStatus: c.httpStatus, code: "checkout_api_error" };
+  }
+  return null;
+};
+
+const throwIfCheckoutApiBlocked = (session) => {
+  const block =
+    session?.checkoutApiError || gateCaptureSmartCheckoutBlock(session?.gateCapture);
+  if (!block) return;
+  if (block.code === "rate_limit" || block.httpStatus === 429) {
+    throw claroFlowError(
+      "rate_limit",
+      "Muitas tentativas na Claro (429). Aguarde 15–30 minutos e tente novamente."
+    );
+  }
+  throw claroFlowError(
+    "checkout_api_error",
+    `Checkout indisponível (HTTP ${block.httpStatus}). Tente novamente em alguns minutos.`
+  );
+};
+
 const detectPixOnlyCheckout = async (page, session) => {
   if (gateCaptureHasCredit(session?.gateCapture)) return false;
   if (gateCapturePixOnly(session?.gateCapture)) return true;
   // Texto só após iframe Eldorado montar — evita falso "só Pix" enquanto carrega cartão.
-  if (!(await hasSmartCheckout(page))) return false;
+  if (!(await hasSmartCheckout(page, session))) return false;
   const payText = await checkoutTextBlobEldorado(page);
   if (!String(payText || "").trim()) return false;
   return isCardPaymentUnavailable(payText);
@@ -5091,32 +5190,38 @@ const runWebLinkRecharge = async (session, payload) => {
   }
 
   await clickRechargeValueButton(page, session, rechargeValue);
+  setSessionStep(session, "aguardando_checkout", "Aguardando Smart Checkout abrir…");
+
   await delayStep(17);
   await dismissBonusModalIfVisible(page).catch(() => {});
-  await sleep(1200);
-  await captureWebLinkStep(page, "after_valor", session);
+  await sleep(800);
+  captureWebLinkStep(page, "after_valor", session).catch(() => {});
 
   const checkoutDeadline = Date.now() + 35000;
   while (Date.now() < checkoutDeadline) {
-    if (await hasSmartCheckout(page)) break;
+    throwIfCheckoutApiBlocked(session);
+    if (await hasSmartCheckout(page, session)) break;
     if (await detectPixOnlyCheckout(page, session)) {
       await saveStepDebug(page, "valor_pix_only_gate");
       throw claroFlowError("valor_indisponivel", "Valor não disponível nesse número (cartão indisponível nesta linha).");
     }
     await sleep(400);
   }
-  if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 12000))) {
+  throwIfCheckoutApiBlocked(session);
+  if (!(await hasSmartCheckout(page, session)) && !(await waitForSmartCheckout(page, 12000, session))) {
+    throwIfCheckoutApiBlocked(session);
     if (!gateCaptureHasCredit(session?.gateCapture) && (await detectPixOnlyCheckout(page, session))) {
       throw claroFlowError("valor_indisponivel", "Valor não disponível nesse número (cartão indisponível nesta linha).");
     }
   }
   await throwIfPixOnlyCheckout(page, session);
 
-  const hasCheckout = await hasSmartCheckout(page);
+  const hasCheckout = await hasSmartCheckout(page, session);
   if (hasCheckout) {
     return runWebLinkSmartCheckout(session, payload);
   }
 
+  throwIfCheckoutApiBlocked(session);
   await saveStepDebug(page, "valor_sem_cartao");
   throw claroFlowError("valor_indisponivel", "Valor não disponível nesse número.");
 };
@@ -5244,7 +5349,6 @@ export const startSessionFromWebLink = async (payload) => {
     });
     const page = await context.newPage();
     const m4uAuthCapture = attachM4uAuthCapture(context);
-    const { gateCapture, eldoradoBypass } = attachClaroNetworkHooks(context);
 
     sessionId = uuidv4();
     session = {
@@ -5253,8 +5357,6 @@ export const startSessionFromWebLink = async (payload) => {
       context,
       page,
       m4uAuthCapture,
-      gateCapture,
-      eldoradoBypass,
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
       status: "created",
@@ -5269,6 +5371,9 @@ export const startSessionFromWebLink = async (payload) => {
       webPortal: true,
       inspect: Boolean(payload?.inspect)
     };
+    const { gateCapture, eldoradoBypass } = attachClaroNetworkHooks(context, session);
+    session.gateCapture = gateCapture;
+    session.eldoradoBypass = eldoradoBypass;
     sessions.set(sessionId, session);
     releaseSlot();
   } catch (err) {
@@ -5451,7 +5556,6 @@ export const startSession = async (payload) => {
     });
     const page = await context.newPage();
     const m4uAuthCapture = attachM4uAuthCapture(context);
-    const { gateCapture, eldoradoBypass } = attachClaroNetworkHooks(context);
 
     sessionId = uuidv4();
     session = {
@@ -5460,8 +5564,6 @@ export const startSession = async (payload) => {
       context,
       page,
       m4uAuthCapture,
-      gateCapture,
-      eldoradoBypass,
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
       status: "created",
@@ -5476,6 +5578,9 @@ export const startSession = async (payload) => {
       smsAuthenticated: false,
       authStatePath: null
     };
+    const { gateCapture, eldoradoBypass } = attachClaroNetworkHooks(context, session);
+    session.gateCapture = gateCapture;
+    session.eldoradoBypass = eldoradoBypass;
     sessions.set(sessionId, session);
     releaseSlot();
   } catch (err) {
