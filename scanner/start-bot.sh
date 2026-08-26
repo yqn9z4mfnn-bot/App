@@ -1,6 +1,3 @@
 #!/bin/bash
-cd "$(dirname "$0")"
-set -a
-[ -f .env ] && source .env
-set +a
-exec node telegram-bot.mjs
+# Redireciona para instalação em appdata (~/.local/share/linkclaro-bot)
+exec bash "$(dirname "$0")/install-appdata.sh" "$@"

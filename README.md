@@ -15,10 +15,16 @@ Requer Node.js 18+. Documentação completa da API: `docs/CLARO_RECARGA_API_MAP.
 
 ### Bot Telegram
 
+Roda isolado em **appdata** (sem token/logs no projeto):
+
 ```bash
 cd scanner
-export TELEGRAM_BOT_TOKEN="seu_token"
-node telegram-bot.mjs
+bash install-appdata.sh   # instala em ~/.local/share/linkclaro-bot e inicia
 ```
 
-Envie o link JWT ou `/scan <link>` (modo rápido sem wallet).
+Comandos appdata:
+- `~/.local/share/linkclaro-bot/run.sh` — iniciar
+- `~/.local/share/linkclaro-bot/stop.sh` — parar
+- `~/.local/share/linkclaro-bot/clear.sh` — limpar logs/PID
+
+Token fica só em `~/.local/share/linkclaro-bot/.env` (chmod 600).
