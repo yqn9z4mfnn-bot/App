@@ -1932,12 +1932,12 @@ const waitForEldoradoCheckoutReady = async (page, timeoutMs = 45000) => {
     for (const frame of page.frames()) {
       if (!isEldoradoCheckoutUrl(frame.url())) continue;
       try {
-        const ready = await frame.evaluate(() => {
+        const ready = await frameEvalWithTimeout(frame, () => {
           const t = document.body?.innerText || "";
           if (/Escolha como pagar|N[uú]mero do cart/i.test(t)) return true;
           const pan = document.querySelector('input[name="pan"]');
           return pan instanceof HTMLInputElement;
-        });
+        }, 2500);
         if (ready) return frame;
       } catch {
         // frame ainda montando
@@ -4988,7 +4988,7 @@ const runWebLinkSmartCheckout = async (session, payload) => {
     .catch(() => {});
   await waitForEldoradoCheckoutReady(page, 45000);
   await sleep(1200);
-  await captureWebLinkStep(page, "smart_checkout_open", session);
+  captureWebLinkStep(page, "smart_checkout_open", session).catch(() => {});
   await ensureCardCheckoutOrThrow(page, session);
 
   if (payload?.inspect || session.inspect) {
