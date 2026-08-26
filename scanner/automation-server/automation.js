@@ -4536,7 +4536,9 @@ const checkoutTextBlobEldorado = async (page) => {
     const u = frame.url() || "";
     if (!isEldoradoCheckoutUrl(u) && !/eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(u)) continue;
     try {
-      parts.push(await frame.evaluate(() => document.body?.innerText || ""));
+      parts.push(
+        await frameEvalWithTimeout(frame, () => document.body?.innerText || "", 2500)
+      );
     } catch {
       // ignore
     }
@@ -5114,10 +5116,6 @@ const runWebLinkRecharge = async (session, payload) => {
   const checkoutDeadline = Date.now() + 35000;
   while (Date.now() < checkoutDeadline) {
     if (await hasSmartCheckout(page)) break;
-    if (await detectPixOnlyCheckout(page, session)) {
-      await saveStepDebug(page, "valor_pix_only_gate");
-      throw claroFlowError("valor_indisponivel", "Valor não disponível nesse número (cartão indisponível nesta linha).");
-    }
     await sleep(400);
   }
   if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 12000))) {
