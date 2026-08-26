@@ -1476,6 +1476,9 @@ const classifyClaroFlowError = (errText, session) => {
       message: "Muitas tentativas na Claro (429). Aguarde 15–30 minutos e tente novamente."
     };
   }
+  if (/checkout.?timeout|checkout n[aã]o abriu/i.test(t)) {
+    return { code: "checkout_timeout", message: t || "Checkout não abriu a tempo." };
+  }
   if (
     session?.gateCapture &&
     gateCapturePixOnly(session.gateCapture) &&
@@ -1897,7 +1900,7 @@ const findCardFormContext = async (page) => {
     for (const sel of CARD_PAN_SELECTORS) {
       try {
         const pan = frame.locator(sel).first();
-        if ((await pan.count()) === 0) continue;
+        if ((await locatorCountSafe(pan, eldorado ? 1200 : 800)) === 0) continue;
         await pan.waitFor({ state: eldorado ? "attached" : "visible", timeout: eldorado ? 2500 : 800 });
         if (await pan.isDisabled().catch(() => false)) continue;
         return frame;
@@ -1914,12 +1917,16 @@ const prepareEldoradoCheckoutForm = async (page) => {
   for (const frame of page.frames()) {
     if (!isEldoradoCheckoutUrl(frame.url())) continue;
     try {
-      const bodyText = await frame.evaluate(() => document.body?.innerText || "");
+      const bodyText = await frameEvalWithTimeout(
+        frame,
+        () => document.body?.innerText || "",
+        2000
+      );
       if (/Escolha como pagar/i.test(bodyText)) {
         const credito = frame.getByText(/Cart[aã]o\s+Cr[eé]dito/i).first();
-        if ((await credito.count()) > 0) {
+        if ((await locatorCountSafe(credito, 1000)) > 0) {
           await credito.click({ timeout: 3000 }).catch(() => {});
-          await sleep(900);
+          await sleep(400);
         }
       }
       for (const label of [
@@ -1929,10 +1936,10 @@ const prepareEldoradoCheckoutForm = async (page) => {
         "Número do cartao"
       ]) {
         const loc = frame.getByText(new RegExp(label, "i")).first();
-        if ((await loc.count()) > 0 && (await loc.isVisible().catch(() => false))) {
+        if ((await locatorCountSafe(loc, 1000)) > 0 && (await withTimeout(loc.isVisible().catch(() => false), 1000, false))) {
           await loc.click({ timeout: 2500 });
           console.log(`[claro] eldorado: clicou "${label}"`);
-          await sleep(700);
+          await sleep(400);
           break;
         }
       }
@@ -4504,8 +4511,18 @@ const hasSmartCheckout = async (page, session = null) => {
   ) {
     return true;
   }
-  if (session?.checkoutApiOk && session.checkoutApiOkAt && Date.now() - session.checkoutApiOkAt >= 2500) {
-    return true;
+  if (session?.checkoutApiOk && session.checkoutApiOkAt) {
+    const elapsed = Date.now() - session.checkoutApiOkAt;
+    if (elapsed >= 1200) {
+      if (/\/smartcheckout/i.test(pageUrl)) return true;
+      if (
+        page.frames().some((f) =>
+          /smart-checkout\.bemobi|eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(f.url() || "")
+        )
+      ) {
+        return true;
+      }
+    }
   }
   return false;
 };
@@ -4679,7 +4696,7 @@ const detectPixOnlyCheckout = async (page, session) => {
   if (gateCaptureHasCredit(session?.gateCapture)) return false;
   if (gateCapturePixOnly(session?.gateCapture)) return true;
   // Texto só após iframe Eldorado montar — evita falso "só Pix" enquanto carrega cartão.
-  if (!(await hasSmartCheckout(page))) return false;
+  if (!(await hasSmartCheckout(page, session))) return false;
   const payText = await checkoutTextBlobEldorado(page);
   if (!String(payText || "").trim()) return false;
   return isCardPaymentUnavailable(payText);
@@ -4999,8 +5016,8 @@ const runWebLinkCheckoutPayAttempt = async (session, payload) => {
   }
 
   await fillWebLinkCardDirect(session, payload);
-  await delayStep(19);
-  await captureWebLinkStep(page, "after_fill_card", session);
+  await sleep(400);
+  captureWebLinkStep(page, "after_fill_card", session).catch(() => {});
 
   setSessionStep(session, "pagar", "Confirmando pagamento…");
   let payOk = await clickEldoradoPayButton(page, 12000);
@@ -5015,14 +5032,14 @@ const runWebLinkCheckoutPayAttempt = async (session, payload) => {
       "Finalizar pagamento",
       "Recarregar",
       "Continuar"
-    ], 30000);
+    ], 15000);
   }
   if (!payOk) {
-    await saveStepDebug(page, "smart_checkout_pagar_fail");
+    saveStepDebug(page, "smart_checkout_pagar_fail").catch(() => {});
     throw new Error("Botão de confirmar pagamento no checkout não encontrado.");
   }
-  await delayStep(21);
-  await captureWebLinkStep(page, "after_pay_click", session);
+  await sleep(400);
+  captureWebLinkStep(page, "after_pay_click", session).catch(() => {});
 
   setSessionStep(session, "aguardando_gate", "Aguardando retorno da gate…");
   const paymentResult = await waitForPaymentResult(
@@ -5052,14 +5069,22 @@ const runWebLinkCheckoutPayAttempt = async (session, payload) => {
 const runWebLinkSmartCheckout = async (session, payload) => {
   const { page } = session;
   setSessionStep(session, "smart_checkout", "Checkout M4U — pagamento direto…");
-  await dismissCookieBanner(page);
-  await page.locator('iframe#checkout, iframe[title="smartCheckout"]').first()
-    .waitFor({ state: "attached", timeout: 30000 })
-    .catch(() => {});
-  await waitForEldoradoCheckoutReady(page, 45000);
-  await sleep(1200);
-  captureWebLinkStep(page, "smart_checkout_open", session).catch(() => {});
-  await ensureCardCheckoutOrThrow(page, session);
+  await dismissCookieBanner(page).catch(() => {});
+
+  setSessionStep(session, "fill_pan", "Aguardando formulário Eldorado…");
+  let eldoradoFrame = await waitForEldoradoCheckoutReady(page, 20000);
+  if (!eldoradoFrame) {
+    await prepareEldoradoCheckoutForm(page);
+    eldoradoFrame = await waitForEldoradoCheckoutReady(page, 10000);
+  }
+  if (!eldoradoFrame) {
+    throw claroFlowError(
+      "checkout_timeout",
+      "Formulário de cartão não carregou (30s). Tente novamente."
+    );
+  }
+  session.eldoradoReady = true;
+  await prepareEldoradoCheckoutForm(page);
 
   if (payload?.inspect || session.inspect) {
     await persistGateDebug(session.gateCapture?.best?.(), "inspect", session.gateCapture);
@@ -5088,18 +5113,22 @@ const fillWebLinkCardDirect = async (session, payload) => {
 
   setSessionStep(session, "fill_pan", "Aguardando checkout Eldorado…");
   await dismissCookieBanner(page);
-  if (!(await ensureSmartCheckoutReady(page, session))) {
-    if (gateCaptureHasCredit(session?.gateCapture)) {
-      throw new Error(
-        "Checkout Eldorado não carregou a tempo (cartão disponível — campo PAN demorou)."
+  if (!session.eldoradoReady) {
+    if (!(await ensureSmartCheckoutReady(page, session))) {
+      if (gateCaptureHasCredit(session?.gateCapture)) {
+        throw new Error(
+          "Checkout Eldorado não carregou a tempo (cartão disponível — campo PAN demorou)."
+        );
+      }
+      throw claroFlowError(
+        "valor_indisponivel",
+        "Valor não disponível nesse número (checkout sem cartão de crédito)."
       );
     }
-    throw claroFlowError(
-      "valor_indisponivel",
-      "Valor não disponível nesse número (checkout sem cartão de crédito)."
-    );
   }
-  await ensureCardCheckoutOrThrow(page, session);
+  if (!session.checkoutApiOk) {
+    await ensureCardCheckoutOrThrow(page, session);
+  }
   await captureWebLinkStep(page, "before_novo_credito", session);
   await prepareEldoradoCheckoutForm(page);
 
@@ -5178,45 +5207,24 @@ const runWebLinkRecharge = async (session, payload) => {
   await clickRechargeValueButton(page, session, rechargeValue);
   setSessionStep(session, "aguardando_checkout", "Aguardando Smart Checkout abrir…");
 
-  // Falha rápida: detecta 429/4xx da API smartcheckout em ~1–6s (sem esperar 47s)
-  const apiDeadline = Date.now() + 6000;
-  while (Date.now() < apiDeadline) {
+  // Até 8s: falha rápida em 429 ou segue quando checkout OK (API 201 / iframe)
+  const checkoutReadyDeadline = Date.now() + 8000;
+  while (Date.now() < checkoutReadyDeadline) {
     throwIfCheckoutApiBlocked(session);
-    if (await hasSmartCheckout(page, session)) break;
-    await sleep(250);
-  }
-  throwIfCheckoutApiBlocked(session);
-
-  await delayStep(17);
-  await dismissBonusModalIfVisible(page).catch(() => {});
-  await dismissCookieBanner(page).catch(() => {});
-  await sleep(800);
-  captureWebLinkStep(page, "after_valor", session).catch(() => {});
-
-  const checkoutDeadline = Date.now() + 15000;
-  while (Date.now() < checkoutDeadline) {
-    throwIfCheckoutApiBlocked(session);
-    if (await hasSmartCheckout(page, session)) break;
-    await sleep(300);
-  }
-  throwIfCheckoutApiBlocked(session);
-  if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 8000, session))) {
-    throwIfCheckoutApiBlocked(session);
-    if (!gateCaptureHasCredit(session?.gateCapture) && (await detectPixOnlyCheckout(page, session))) {
-      await saveStepDebug(page, "valor_pix_only_gate");
-      throw claroFlowError("valor_indisponivel", "Valor não disponível nesse número (cartão indisponível nesta linha).");
+    if (await hasSmartCheckout(page, session)) {
+      return runWebLinkSmartCheckout(session, payload);
     }
+    await sleep(200);
   }
-  await throwIfPixOnlyCheckout(page, session);
-
-  const hasCheckout = await hasSmartCheckout(page, session);
-  if (hasCheckout) {
+  throwIfCheckoutApiBlocked(session);
+  if (await hasSmartCheckout(page, session)) {
     return runWebLinkSmartCheckout(session, payload);
   }
 
-  throwIfCheckoutApiBlocked(session);
-  await saveStepDebug(page, "valor_sem_cartao");
-  throw claroFlowError("valor_indisponivel", "Valor não disponível nesse número.");
+  throw claroFlowError(
+    "checkout_timeout",
+    "Checkout não abriu a tempo (8s). Tente novamente."
+  );
 };
 
 const runWebLinkRechargeWithRetry = async (session, payload) => runWebLinkRecharge(session, payload);
@@ -5690,7 +5698,8 @@ export const submitCodeAndFinish = async (sessionId, payload) => {
         runError?.claroErrorCode === "cadastro_deletado" ||
         runError?.claroErrorCode === "valor_indisponivel" ||
         runError?.claroErrorCode === "rate_limit" ||
-        runError?.claroErrorCode === "checkout_api_error"
+        runError?.claroErrorCode === "checkout_api_error" ||
+        runError?.claroErrorCode === "checkout_timeout"
       ) {
         keepForRetry = false;
       }

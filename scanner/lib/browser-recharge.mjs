@@ -53,6 +53,14 @@ function mapAutomationStatus(data) {
     };
   }
 
+  if (data?.claroErrorCode === 'checkout_timeout') {
+    return {
+      status: 'TIMEOUT',
+      message: data?.error || data?.message || 'Checkout não abriu a tempo (8s).',
+      negativeReason: 'Checkout timeout',
+    };
+  }
+
   return {
     status: 'UNKNOWN',
     message: data?.message || data?.stepLabel || st || 'Resultado desconhecido',
