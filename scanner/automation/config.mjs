@@ -23,7 +23,7 @@ export const config = {
   actionTimeoutMs: toInt(process.env.ACTION_TIMEOUT_MS, 20000),
   cardIframeTimeoutMs: toInt(process.env.CARD_IFRAME_TIMEOUT_MS, 45000),
   cardFormReadyTimeoutMs: toInt(process.env.CARD_FORM_READY_TIMEOUT_MS, 18000),
-  cardFormSettleMs: toInt(process.env.CARD_FORM_SETTLE_MS, 700),
+  cardFormSettleMs: toInt(process.env.CARD_FORM_SETTLE_MS, 900),
   elementClickTimeoutMs: toInt(process.env.ELEMENT_CLICK_TIMEOUT_MS, 20000),
   pamTypingDelayMs: toInt(process.env.PAM_TYPING_DELAY_MS, 80),
   mobileViewportWidth: toInt(process.env.MOBILE_VIEWPORT_WIDTH, 390),
@@ -34,8 +34,10 @@ export const config = {
   /** Pausas curtas entre cliques/navegação (ms) — aumente no .env se PC lento. */
   pauseAfterNavMs: toInt(process.env.PAUSE_AFTER_NAV_MS, 600),
   pauseAfterClickMs: toInt(process.env.PAUSE_AFTER_CLICK_MS, 450),
-  pauseAfterValueMs: toInt(process.env.PAUSE_AFTER_VALUE_MS, 700),
-  pollIntervalMs: toInt(process.env.POLL_INTERVAL_MS, 250),
+  /** Após clicar no valor — checkout Eldorado demora; não encurtar demais. */
+  pauseAfterValueMs: toInt(process.env.PAUSE_AFTER_VALUE_MS, 1200),
+  pollIntervalMs: toInt(process.env.POLL_INTERVAL_MS, 300),
+  checkoutOpenTimeoutMs: toInt(process.env.CHECKOUT_OPEN_TIMEOUT_MS, 45000),
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';

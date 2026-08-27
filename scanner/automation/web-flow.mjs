@@ -92,6 +92,39 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
   throw new Error(`Valor R$ ${rechargeValue} não disponível na Claro.`);
 };
 
+/** Espera iframe Eldorado após escolher valor (modal bônus atrapalha). */
+async function waitForCheckoutAfterValue(page, session) {
+  setSessionStep(session, 'smart_checkout', 'Aguardando checkout abrir…');
+  const started = Date.now();
+  const deadline = started + config.checkoutOpenTimeoutMs;
+  let lastLog = 0;
+
+  while (Date.now() < deadline) {
+    await dismissBonusModalIfVisible(page).catch(() => {});
+    if (await hasSmartCheckout(page)) return true;
+    if (await detectPixOnlyCheckout(page)) {
+      throw new Error('Valor não disponível nesse número (somente Pix).');
+    }
+    const elapsed = Date.now() - started;
+    if (elapsed - lastLog > 8000) {
+      console.log(
+        `[automation] aguardando checkout… ${Math.round(elapsed / 1000)}s url=${(page.url() || '').slice(0, 80)}`,
+      );
+      lastLog = elapsed;
+    }
+    await sleep(config.pollIntervalMs);
+  }
+
+  await dismissBonusModalIfVisible(page).catch(() => {});
+  if (await hasSmartCheckout(page)) return true;
+  if (await waitForSmartCheckout(page, 15000)) return true;
+
+  if (await detectPixOnlyCheckout(page)) {
+    throw new Error('Valor não disponível nesse número (cartão indisponível).');
+  }
+  return false;
+}
+
 export const runWebLinkRecharge = async (session, payload) => {
   const { page } = session;
   const rechargeValue = String(payload.rechargeValue ?? '').replace(/\D/g, '');
@@ -104,18 +137,13 @@ export const runWebLinkRecharge = async (session, payload) => {
   await dismissBonusModalIfVisible(page).catch(() => {});
   await sleep(config.pauseAfterValueMs);
 
-  const checkoutDeadline = Date.now() + 35000;
-  while (Date.now() < checkoutDeadline) {
-    if (await hasSmartCheckout(page)) break;
-    if (await detectPixOnlyCheckout(page)) {
-      throw new Error('Valor não disponível nesse número (somente Pix).');
-    }
-    await sleep(config.pollIntervalMs);
-  }
-  if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 12000))) {
-    if (await detectPixOnlyCheckout(page)) {
-      throw new Error('Valor não disponível nesse número (cartão indisponível).');
-    }
+  const checkoutOk = await waitForCheckoutAfterValue(page, session);
+  if (!checkoutOk) {
+    const { saveStallDebug } = await import('./debug.mjs');
+    await saveStallDebug(page, session, session.gateCapture, 'checkout_nao_abriu', {
+      rechargeValue,
+      url: page.url(),
+    }).catch(() => {});
     throw new Error('Checkout não abriu após selecionar valor.');
   }
 
