@@ -12,8 +12,8 @@ chmod 700 "$DATA_DIR"
 # Copia código (sem .env do repo)
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
-cp -r "$SCRIPT_DIR"/lib "$SCRIPT_DIR"/*.mjs "$SCRIPT_DIR"/package.json "$APP_DIR/" 2>/dev/null || true
 cp -r "$SCRIPT_DIR/lib" "$APP_DIR/"
+cp -r "$SCRIPT_DIR/automation" "$APP_DIR/"
 for f in "$SCRIPT_DIR"/*.mjs; do [ -f "$f" ] && cp "$f" "$APP_DIR/"; done
 [ -f "$SCRIPT_DIR/package.json" ] && cp "$SCRIPT_DIR/package.json" "$APP_DIR/"
 [ -f "$SCRIPT_DIR/package-lock.json" ] && cp "$SCRIPT_DIR/package-lock.json" "$APP_DIR/"
@@ -35,6 +35,13 @@ else
   exit 1
 fi
 
+# Defaults da automação Edge (JWT)
+touch "$DATA_DIR/.env"
+grep -q '^AUTOMATION_API_URL=' "$DATA_DIR/.env" 2>/dev/null || echo 'AUTOMATION_API_URL=http://127.0.0.1:3000' >> "$DATA_DIR/.env"
+grep -q '^BROWSER_NAME=' "$DATA_DIR/.env" 2>/dev/null || echo 'BROWSER_NAME=edge' >> "$DATA_DIR/.env"
+grep -q '^HEADLESS=' "$DATA_DIR/.env" 2>/dev/null || echo 'HEADLESS=false' >> "$DATA_DIR/.env"
+grep -q '^RECHARGE_MODE=' "$DATA_DIR/.env" 2>/dev/null || echo 'RECHARGE_MODE=browser' >> "$DATA_DIR/.env"
+
 chmod 600 "$DATA_DIR/.env"
 
 cat > "$DATA_DIR/run.sh" << 'RUNEOF'
@@ -42,7 +49,9 @@ cat > "$DATA_DIR/run.sh" << 'RUNEOF'
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/linkclaro-bot"
 APP_DIR="$DATA_DIR/app"
 PID_FILE="$DATA_DIR/bot.pid"
+AUTO_PID_FILE="$DATA_DIR/automation.pid"
 LOG_FILE="$DATA_DIR/bot.log"
+AUTO_LOG_FILE="$DATA_DIR/automation.log"
 
 export HISTFILE=/dev/null
 set -a
@@ -51,6 +60,16 @@ set +a
 export NUMBERS_DB="$DATA_DIR/numbers.db"
 
 cd "$APP_DIR"
+
+# Automação Playwright (Edge + JWT)
+if [ -f "$AUTO_PID_FILE" ] && kill -0 "$(cat "$AUTO_PID_FILE")" 2>/dev/null; then
+  echo "Automação já rodando (PID $(cat "$AUTO_PID_FILE"))"
+else
+  nohup node automation/run.mjs >> "$AUTO_LOG_FILE" 2>&1 &
+  echo $! > "$AUTO_PID_FILE"
+  disown 2>/dev/null || true
+  echo "Automação iniciada PID $(cat "$AUTO_PID_FILE")"
+fi
 
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   echo "Bot já rodando (PID $(cat "$PID_FILE"))"
@@ -68,10 +87,16 @@ cat > "$DATA_DIR/stop.sh" << 'STOPEOF'
 #!/bin/bash
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/linkclaro-bot"
 PID_FILE="$DATA_DIR/bot.pid"
+AUTO_PID_FILE="$DATA_DIR/automation.pid"
 if [ -f "$PID_FILE" ]; then
   kill "$(cat "$PID_FILE")" 2>/dev/null && rm -f "$PID_FILE" && echo "Bot parado"
 else
   pkill -f "$DATA_DIR/app/telegram-bot.mjs" 2>/dev/null && echo "Bot parado" || echo "Bot não estava rodando"
+fi
+if [ -f "$AUTO_PID_FILE" ]; then
+  kill "$(cat "$AUTO_PID_FILE")" 2>/dev/null && rm -f "$AUTO_PID_FILE" && echo "Automação parada"
+else
+  pkill -f "$DATA_DIR/app/automation/run.mjs" 2>/dev/null && echo "Automação parada" || true
 fi
 STOPEOF
 
@@ -79,7 +104,7 @@ cat > "$DATA_DIR/clear.sh" << 'CLEAREOF'
 #!/bin/bash
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/linkclaro-bot"
 "$DATA_DIR/stop.sh" 2>/dev/null || true
-rm -f "$DATA_DIR/bot.log" "$DATA_DIR/bot.pid"
+rm -f "$DATA_DIR/bot.log" "$DATA_DIR/bot.pid" "$DATA_DIR/automation.log" "$DATA_DIR/automation.pid"
 echo "Logs e PID limpos em $DATA_DIR"
 CLEAREOF
 
@@ -87,6 +112,8 @@ chmod +x "$DATA_DIR/run.sh" "$DATA_DIR/stop.sh" "$DATA_DIR/clear.sh"
 
 # Para instâncias antigas (workspace ou appdata)
 pkill -f "telegram-bot.mjs" 2>/dev/null || true
+pkill -f "automation/run.mjs" 2>/dev/null || true
+pkill -f "automation/server.mjs" 2>/dev/null || true
 sleep 1
 
 bash "$DATA_DIR/run.sh"

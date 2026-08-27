@@ -44,7 +44,24 @@ No Telegram:
 
 Também aceita número avulso ou o link JWT direto. SQLite: `~/.local/share/linkclaro-bot/numbers.db`.
 
-Recarga via **API JavaScript** (tokenização Eldorado + pagamento + SSE).
+Recarga via **Playwright + Edge** (link JWT `select-login` → checkout Eldorado). Fallback API: `RECHARGE_MODE=api` no `.env`.
+
+Automação local (porta 3000):
+
+```bash
+cd scanner
+npm install
+npm run automation
+```
+
+Variáveis úteis no `~/.local/share/linkclaro-bot/.env`:
+
+```bash
+AUTOMATION_API_URL=http://127.0.0.1:3000
+BROWSER_NAME=edge
+HEADLESS=false
+RECHARGE_MODE=browser
+```
 
 Gerador de link (padrão):
 

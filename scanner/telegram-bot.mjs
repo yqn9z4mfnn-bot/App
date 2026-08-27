@@ -7,6 +7,7 @@ import {
 } from './lib/eldorado.mjs';
 import { scanClaroEssential, createSession, fetchRechargeProducts } from './lib/claro.mjs';
 import { runRecharge } from './lib/recharge.mjs';
+import { runBrowserRecharge, isBrowserRechargeEnabled } from './lib/automation-client.mjs';
 import {
   formatTelegramReport,
   buildCardKeyboard,
@@ -217,19 +218,29 @@ async function executeRecharge(chatId, card) {
   }
 
   busy.add(chatId);
+  const useBrowser = isBrowserRechargeEnabled() && !card.token;
   const statusMsg = await send(
     chatId,
-    `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
+    useBrowser
+      ? `💳 Processando <b>${flow.productName}</b>…\n<i>Edge → JWT → checkout → confirmação</i>`
+      : `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
   );
 
   try {
-    const outcome = await runRecharge({
-      sessionId: entry.sessionId,
-      msisdn: entry.msisdn,
-      productId: flow.productId,
-      productValue: flow.productValue,
-      card,
-    });
+    const outcome = useBrowser
+      ? await runBrowserRecharge({
+          loginUrl: toLoginUrl(entry.link),
+          msisdn: entry.msisdn,
+          productValue: flow.productValue,
+          card,
+        })
+      : await runRecharge({
+          sessionId: entry.sessionId,
+          msisdn: entry.msisdn,
+          productId: flow.productId,
+          productValue: flow.productValue,
+          card,
+        });
 
     const report = formatRechargeResult(outcome);
     await tg('editMessageText', {
@@ -1181,7 +1192,7 @@ async function main() {
   const me = await tg('getMe');
   const proxy = describeProxy();
   console.log(
-    `[bot] @${me.username} online — recarga via API + banco SQLite` +
+    `[bot] @${me.username} online — recarga ${isBrowserRechargeEnabled() ? 'Edge/browser' : 'API'} + banco SQLite` +
       (proxy ? ` · proxy ${proxy}` : ''),
   );
   await tg('deleteWebhook', { drop_pending_updates: false });

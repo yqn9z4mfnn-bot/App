@@ -5,15 +5,21 @@
   "type": "module",
   "bin": {
     "claro-scan": "./scan.mjs",
-    "claro-telegram-bot": "./telegram-bot.mjs"
+    "claro-telegram-bot": "./telegram-bot.mjs",
+    "claro-automation": "./automation/server.mjs"
   },
   "scripts": {
-    "bot": "node telegram-bot.mjs"
+    "bot": "node telegram-bot.mjs",
+    "automation": "node automation/server.mjs",
+    "postinstall": "npx playwright install msedge || true"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "playwright": "^1.51.0",
     "undici": "^7.29.0"
   }
 }
