@@ -52,9 +52,6 @@ export function formatRechargeResult(outcome) {
   ];
 
   if (reason) lines.push(`<b>Motivo:</b> ${esc(reason)}`);
-  if (status === '3DS_REQUIRED') {
-    lines.push('', '<i>O Edge ficará aberto ~3 min para você concluir o SMS/3DS.</i>');
-  }
   if (paymentId) lines.push(`<b>ID:</b> <code>${esc(paymentId)}</code>`);
   if (latencyMs) lines.push('', `<i>⏱ ${latencyMs}ms</i>`);
 

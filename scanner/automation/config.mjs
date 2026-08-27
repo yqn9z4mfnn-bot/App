@@ -31,8 +31,6 @@ export const config = {
   browserWindowWidth: toInt(process.env.BROWSER_WINDOW_WIDTH, 980),
   browserWindowHeight: toInt(process.env.BROWSER_WINDOW_HEIGHT, 980),
   stepDelayDefaultMs: toInt(process.env.STEP_DELAY_DEFAULT_MS, 700),
-  /** Mantém Edge aberto quando detectar 3DS (segundos). */
-  threedsKeepBrowserSeconds: toInt(process.env.THREEDS_KEEP_BROWSER_SECONDS, 180),
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';

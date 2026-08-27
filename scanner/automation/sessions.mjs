@@ -241,7 +241,7 @@ export const startSessionFromWebLink = async (payload) => {
 
     const closeMs =
       paymentResult?.status === '3ds_required'
-        ? Math.max(1500, (config.threedsKeepBrowserSeconds || 180) * 1000)
+        ? 1500
         : Math.max(1500, (config.keepBrowserOpenSeconds || 5) * 1000);
     scheduleSessionClose(sessionId, closeMs);
 
