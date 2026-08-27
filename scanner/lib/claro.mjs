@@ -34,56 +34,6 @@ export async function scanClaroEssential(sessionId, msisdn, { includeProducts = 
   return Object.fromEntries(entries);
 }
 
-export async function scanClaroApi(sessionId, msisdn) {
-  const base = `/customers/${msisdn}`;
-  const featureFlags = [
-    'maintenance',
-    'loginWithValue',
-    'environmentCheckout',
-    'fraud_analysis',
-    'OTPModal',
-    'upsell_recharge',
-    'recharge_for_others',
-    'value_page_without_banner',
-    'value_page_without_bonus',
-    'channel_without_footer',
-    'value_card_with_no_expiration_date',
-    'url_without_channel',
-  ];
-
-  const jobs = [
-    ['customer', claroGet(base, sessionId)],
-    ['products', claroGet(`${base}/products`, sessionId)],
-    ['paymentMethods', claroGet(`${base}/payment-methods`, sessionId)],
-    ['recharges', claroGet(`${base}/recharges`, sessionId)],
-    ['rechargesRecurring', claroGet(`${base}/recharges?reloadType=recurring`, sessionId)],
-    ['recipients', claroGet(`${base}/recipients`, sessionId)],
-    ['scheduledRecharges', claroGet(`${base}/scheduled-recharges`, sessionId)],
-    ['balance', claroGet(`${base}/recharge/balance`, sessionId)],
-    ['govisa', claroGet(`/govisa/${msisdn}`, sessionId)],
-    ['govisaActivated', claroGet(`/govisa/${msisdn}/activated`, sessionId)],
-    ['banners', claroGet('/banners', sessionId)],
-    ['featuresPublic', claroGet('/v1/features/public', sessionId)],
-    [
-      'featuresSmartcheckout',
-      claroGet('/v1/features/group/smartcheckout/enabled', sessionId),
-    ],
-    ...featureFlags.map((name) => [
-      `feature_${name}`,
-      claroGet(`/v1/features/${name}/enabled`, sessionId),
-    ]),
-  ];
-
-  const entries = await Promise.all(
-    jobs.map(async ([key, promise]) => {
-      const result = await promise;
-      return [key, result];
-    }),
-  );
-
-  return Object.fromEntries(entries);
-}
-
 export async function fetchRechargeProducts(sessionId, msisdn) {
   return claroGet(`/customers/${msisdn}/products`, sessionId);
 }

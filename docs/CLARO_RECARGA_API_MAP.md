@@ -532,7 +532,7 @@ Header: x-session-id: {checkout_code da URL Eldorado}
 
 Headers: `Authorization: Bearer {bemobi_token}`, `x-bsc: client`, `x-session-id: {checkout_code}`
 
-> **Payload mínimo vs browser:** a chamada acima é suficiente para obter `200 PENDING` via API direta. O frontend Eldorado envia um payload **maior** (capturado via browser em 2026-08-26, cartão teste `411111******1111`). Ver `docs/browser-payment-payload.json`.
+> **Payload mínimo vs browser:** a chamada acima é suficiente para obter `200 PENDING` via API direta. O frontend Eldorado envia um payload maior (device, userBehaviour, 3DS).
 
 ### POST `/payments` — payload completo (browser)
 
@@ -700,11 +700,4 @@ Events: pix_code | timeout | success | failure | DENIED
 
 ---
 
-## Artefatos
-
-- `/tmp/claro-analysis/full-capture.json` — 48+ requests com headers/bodies
-- `/tmp/claro-analysis/api-probe.json` — probe de todos endpoints GET
-- `/tmp/claro-analysis/endpoints-parsed.json` — endpoints únicos parseados
-- `docs/final-payment-flow.json` — fluxo pagamento cartão novo (payload API mínimo)
-- `docs/browser-payment-payload.json` — payload completo capturado no browser (device, userBehaviour, 3DS)
-- `docs/ms219-wallet-cards.json` — wallet Eldorado: listar/remover/pagar cartão salvo
+O mapa da API está neste arquivo. Dumps de probe/HAR de teste foram removidos.

@@ -69,10 +69,6 @@ export async function openWalletSession(sessionId, msisdn, productId) {
   };
 }
 
-export async function fetchWalletCardsWithAuth(auth) {
-  return fetchWalletCards(auth.bemobiToken, auth.checkoutCode);
-}
-
 export async function deleteWalletCard(bemobiToken, checkoutCode, cardToken) {
   return request(
     `https://eldorado.m4u.com.br/api-bsc/api/v1/cards/${encodeURIComponent(cardToken)}?all_tokens=true`,
@@ -86,14 +82,6 @@ export async function deleteWalletCard(bemobiToken, checkoutCode, cardToken) {
       },
     },
   );
-}
-
-export async function deleteAllWalletCards(bemobiToken, checkoutCode, cards) {
-  const results = await Promise.all(
-    cards.map((c) => deleteWalletCard(bemobiToken, checkoutCode, c.token)),
-  );
-  const ok = results.filter((r) => r.status === 200 || r.status === 204).length;
-  return { ok, total: cards.length, results };
 }
 
 /** Remove na wallet Eldorado e na API Claro (/payment-methods). */

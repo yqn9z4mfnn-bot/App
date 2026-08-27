@@ -162,10 +162,6 @@ export function listErrors({ limit = 20, offset = 0 } = {}) {
   return rows.map(mapRow);
 }
 
-export function countErrors() {
-  return getDb().prepare("SELECT COUNT(*) AS n FROM numbers WHERE status = 'error'").get().n;
-}
-
 export function deleteNumber(msisdn) {
   const database = getDb();
   database.prepare('DELETE FROM number_values WHERE msisdn = ?').run(msisdn);

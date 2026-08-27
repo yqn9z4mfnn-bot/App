@@ -17,7 +17,6 @@ import {
   formatRechargeResult,
   buildValueKeyboard,
   buildPayMethodKeyboard,
-  RECHARGE_HELP,
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';

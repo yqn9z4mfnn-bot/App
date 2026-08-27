@@ -50,7 +50,7 @@ export async function request(url, options = {}) {
   }
 }
 
-export function claroHeaders(sessionId) {
+function claroHeaders(sessionId) {
   const headers = {
     channel: CHANNEL,
     'content-type': 'application/json',
@@ -79,5 +79,3 @@ export async function claroDelete(path, sessionId) {
     headers: claroHeaders(sessionId),
   });
 }
-
-export { CLARO_API, CHANNEL };

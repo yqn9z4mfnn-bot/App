@@ -1,5 +1,5 @@
 import { parseLink } from './parse-link.mjs';
-import { createSession, scanClaroApi } from './claro.mjs';
+import { createSession, scanClaroEssential } from './claro.mjs';
 import { scanWallet } from './eldorado.mjs';
 import { buildSummary } from './report.mjs';
 
@@ -13,7 +13,7 @@ export async function runScan(link, { skipWallet = false } = {}) {
 
   const session = await createSession(parsed.jwt);
   const msisdn = session.identifier;
-  const claro = await scanClaroApi(session.id, msisdn);
+  const claro = await scanClaroEssential(session.id, msisdn);
 
   const products = claro.products?.body?.rechargeValues ?? [];
   const firstProduct =

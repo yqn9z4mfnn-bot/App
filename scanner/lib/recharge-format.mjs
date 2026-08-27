@@ -84,14 +84,3 @@ export function buildPayMethodKeyboard(cards) {
   rows.push([{ text: '❌ Cancelar', callback_data: 'rcg:cancel' }]);
   return { inline_keyboard: rows };
 }
-
-export const RECHARGE_HELP = `<b>💳 Recarga</b>
-
-1. Número → varredura
-2. /recarga → escolha valor
-3. Envie o cartão:
-
-<code>NUMERO|MM|AAAA|CVV</code>
-
-Ex: <code>4271680002723941|08|2033|999</code>
-<i>Nome aleatório automático.</i>`;
