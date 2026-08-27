@@ -62,7 +62,7 @@ const busy = new Set();
 const cache = new Map();
 const rechargeFlow = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
-const BULK_CONCURRENCY = Number(process.env.BULK_CONCURRENCY || 5);
+const BULK_CONCURRENCY = Math.max(1, Number(process.env.BULK_CONCURRENCY || 1));
 
 function formatBRL(cents) {
   return `R$ ${(Number(cents) / 100).toFixed(2).replace('.', ',')}`;
@@ -910,7 +910,7 @@ async function handleTxtDocument(chatId, document) {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
-      text: `⚙️ <b>${numbers.length}</b> números — gerando links em paralelo (${BULK_CONCURRENCY}x)…`,
+      text: `⚙️ <b>${numbers.length}</b> números — um por vez…`,
       parse_mode: 'HTML',
     });
 
@@ -942,7 +942,7 @@ async function handleTxtDocument(chatId, document) {
           text: [
             `⚙️ <b>${done}/${tot || queued}</b> deste lote`,
             `✅ ${o}   ❌ ${f}${skipped ? `   ⏭ ${skipped} já no banco` : ''}`,
-            `<i>${BULK_CONCURRENCY} em paralelo · ${elapsed}s</i>`,
+            `<i>1 por vez · ${elapsed}s</i>`,
           ].join('\n'),
           parse_mode: 'HTML',
         }).catch(() => {});

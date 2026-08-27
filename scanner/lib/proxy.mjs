@@ -9,6 +9,8 @@ function env(name) {
 }
 
 export function getProxyUrl() {
+  const enabled = (env('PROXY_ENABLED') || '').toLowerCase();
+  if (enabled !== '1' && enabled !== 'true' && enabled !== 'yes') return null;
   const explicit = env('PROXY_URL');
   if (explicit) return explicit;
 
@@ -25,6 +27,7 @@ export function getProxyUrl() {
 }
 
 export function describeProxy() {
+  if (!getProxyUrl()) return null;
   const host = env('PROXY_SERVER') || env('PROXY_HOST');
   const port = env('PROXY_PORT');
   if (env('PROXY_URL')) {

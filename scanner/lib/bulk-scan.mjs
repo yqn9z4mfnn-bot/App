@@ -89,7 +89,7 @@ async function mapPool(items, concurrency, worker) {
   );
 }
 
-export async function ingestNumbers(numbers, { concurrency = 5, skipOk = true, onProgress } = {}) {
+export async function ingestNumbers(numbers, { concurrency = 1, skipOk = true, onProgress } = {}) {
   const unique = [...new Set(numbers.map(normalizeBrMobile).filter(Boolean))];
   const already = skipOk ? listOkMsisdns() : new Set();
   const pending = unique.filter((n) => !already.has(n));
