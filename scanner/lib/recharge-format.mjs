@@ -13,6 +13,7 @@ function normalizeStatus(raw) {
   const st = String(raw ?? 'UNKNOWN').toUpperCase();
   if (st === 'CONFIRMED' || st === 'APPROVED' || st === 'OK') return 'SUCCESS';
   if (st === 'REJECTED' || st === 'FAILURE' || st === 'NOK') return 'DENIED';
+  if (st === '3DS_REQUIRED' || st === '3DS') return '3DS_REQUIRED';
   return st;
 }
 
@@ -31,6 +32,9 @@ export function formatRechargeResult(outcome) {
   if (status === 'SUCCESS') {
     icon = '✅';
     title = 'Recarga aprovada';
+  } else if (status === '3DS_REQUIRED') {
+    icon = '🔐';
+    title = '3DS — confirme no Edge';
   } else if (status === 'DENIED') {
     icon = '❌';
     title = 'Recarga negada';
@@ -48,6 +52,9 @@ export function formatRechargeResult(outcome) {
   ];
 
   if (reason) lines.push(`<b>Motivo:</b> ${esc(reason)}`);
+  if (status === '3DS_REQUIRED') {
+    lines.push('', '<i>O Edge ficará aberto ~3 min para você concluir o SMS/3DS.</i>');
+  }
   if (paymentId) lines.push(`<b>ID:</b> <code>${esc(paymentId)}</code>`);
   if (latencyMs) lines.push('', `<i>⏱ ${latencyMs}ms</i>`);
 

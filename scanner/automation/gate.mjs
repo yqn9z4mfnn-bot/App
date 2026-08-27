@@ -1,5 +1,6 @@
 import { sleep } from './helpers.mjs';
 import { saveStallDebug, summarizeGateBody, summarizeGateCaptures } from './debug.mjs';
+import { detect3dsChallenge, build3dsRequiredResult } from './threeds.mjs';
 
 const GATE_URL_RE =
   /eldorado\.m4u|claro-recarga-api|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|wallet|card/i;
@@ -233,6 +234,11 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
     }
     if (/pagamento-erro/i.test(url)) {
       return buildPaymentResult(page, 'error', url, gateCapture);
+    }
+
+    const threeDs = await detect3dsChallenge(page, gateCapture);
+    if (threeDs?.detected) {
+      return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
     }
 
     await sleep(500);

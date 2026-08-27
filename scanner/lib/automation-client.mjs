@@ -42,29 +42,33 @@ export async function runBrowserRecharge({
   });
 
   const pr = data.paymentResult ?? {};
-  const status = String(pr.status || data.status || 'UNKNOWN').toUpperCase();
+  const rawStatus = String(pr.status || data.status || 'UNKNOWN').toLowerCase();
   const mapped =
-    status === 'SUCCESS' || pr.status === 'success'
+    rawStatus === 'success'
       ? 'CONFIRMED'
-      : status === 'TIMEOUT' || pr.status === 'timeout'
-        ? 'TIMEOUT'
-        : 'DENIED';
+      : rawStatus === '3ds_required'
+        ? '3DS_REQUIRED'
+        : rawStatus === 'timeout'
+          ? 'TIMEOUT'
+          : 'DENIED';
 
   const debugReport = pr.debug ?? null;
+  const threeDsHint = pr.threeDs?.hint ? String(pr.threeDs.hint).slice(0, 120) : null;
   const debugHint = debugReport?.pageUrl
     ? `URL final: ${debugReport.pageUrl}`
     : pr.url
       ? `URL: ${pr.url}`
       : null;
 
+  const baseMessage = pr.gateMessage || pr.message || data.lastError || null;
+  const messageParts = [baseMessage, threeDsHint, debugHint].filter(Boolean);
+
   return {
     paymentId: pr.gateCode ?? data.sessionId ?? null,
     pending: null,
     result: {
       status: mapped,
-      message:
-        [pr.gateMessage || pr.message || data.lastError || null, debugHint].filter(Boolean).join(' · ') ||
-        null,
+      message: messageParts.join(' · ') || null,
       negativeReason: pr.gateMessage || null,
     },
     valueCents: productValue,

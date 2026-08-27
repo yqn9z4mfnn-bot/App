@@ -1,0 +1,95 @@
+import { saveStallDebug } from './debug.mjs';
+
+/** URLs típicas de fluxo 3DS (Cardinal, Visa, Eldorado challenge). */
+const THREEDS_URL_RE =
+  /cardinalcommerce\.com|centinelapi\.|authentication\.cardinal|auth\.visa\.com|secure\.checkout\.visa\.com|ThreeDSecure|\/3ds\/challenge|src\.mastercard\.com\/sdk/i;
+
+/** Texto visível em telas 3DS / SMS do banco. */
+const THREEDS_TEXT_RE =
+  /verifica[cç][aã]o necess[aá]ria|valida[cç][aã]o de seguran[cç]a|enviar sms|autentica[cç][aã]o.*cart[aã]o|secure code|c[oó]digo.*sms|confirme.*compra|clique em continuar/i;
+
+const describe3dsKind = (kind, hint = '') => {
+  if (kind === 'sms' || /enviar sms/i.test(hint)) {
+    return '3DS por SMS — confirme manualmente no Edge (Enviar SMS → CONTINUAR)';
+  }
+  if (kind === 'challenge_api') {
+    return '3DS acionado pelo banco — confirme manualmente no Edge';
+  }
+  return 'Validação 3DS do cartão — confirme manualmente no Edge';
+};
+
+/** Detecta desafio 3DS via rede capturada + iframes abertos. */
+export async function detect3dsChallenge(page, gateCapture = null) {
+  for (const cap of gateCapture?.captures ?? []) {
+    const u = cap.url || '';
+    if (/\/3ds\/challenge/i.test(u)) {
+      return { detected: true, source: 'api', url: u, kind: 'challenge_api' };
+    }
+    if (/cardinalcommerce\.com/i.test(u) && /ThreeDSecure|CReq|centinelapi/i.test(u)) {
+      return { detected: true, source: 'network', url: u, kind: 'cardinal' };
+    }
+  }
+
+  for (const frame of page.frames()) {
+    const frameUrl = frame.url() || '';
+    if (!THREEDS_URL_RE.test(frameUrl)) continue;
+
+    let text = '';
+    try {
+      text = await frame.evaluate(() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim());
+    } catch {
+      if (/ThreeDSecure|CReq|3ds\/challenge/i.test(frameUrl)) {
+        return { detected: true, source: 'frame_url', url: frameUrl, kind: 'cardinal' };
+      }
+      continue;
+    }
+
+    if (!text && !/ThreeDSecure|CReq/i.test(frameUrl)) continue;
+
+    const isSms = /enviar sms/i.test(text);
+    const is3dsUi = THREEDS_TEXT_RE.test(text) || /ThreeDSecure|CReq/i.test(frameUrl);
+    if (!is3dsUi) continue;
+
+    return {
+      detected: true,
+      source: 'frame',
+      url: frameUrl,
+      kind: isSms ? 'sms' : 'cardinal',
+      hint: text.slice(0, 400),
+    };
+  }
+
+  return null;
+}
+
+/** Encerra gate-wait cedo quando 3DS aparece (não espera 120s). */
+export async function build3dsRequiredResult(page, session, gateCapture, threeDs, waitedMs) {
+  const msg = describe3dsKind(threeDs.kind, threeDs.hint || '');
+  console.log(
+    `[automation][3ds] detectado em ${Math.round(waitedMs / 1000)}s ` +
+      `kind=${threeDs.kind} source=${threeDs.source} url=${String(threeDs.url).slice(0, 100)}`,
+  );
+  if (threeDs.hint) {
+    console.log(`[automation][3ds] tela: ${threeDs.hint.slice(0, 160)}`);
+  }
+
+  const debugInfo = session
+    ? await saveStallDebug(page, session, gateCapture, 'gate_3ds', {
+        waitedMs,
+        threeDs,
+      })
+    : null;
+
+  return {
+    status: '3ds_required',
+    url: page.url(),
+    gateCode: '3DS',
+    gateMessage: msg,
+    message: msg,
+    threeDs,
+    pagamentoErro: false,
+    debug: debugInfo
+      ? { ...debugInfo.report, jsonPath: debugInfo.jsonPath, pngPath: debugInfo.pngPath }
+      : null,
+  };
+}

@@ -128,6 +128,8 @@ export const runWebLinkRecharge = async (session, payload) => {
   const paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture, session);
   if (paymentResult?.status === 'success') {
     setSessionStep(session, 'sucesso', 'Pagamento confirmado com sucesso');
+  } else if (paymentResult?.status === '3ds_required') {
+    setSessionStep(session, '3ds_required', paymentResult.gateMessage || '3DS — confirme no Edge');
   } else if (paymentResult?.status === 'error') {
     setSessionStep(session, 'erro_gate', paymentResult.gateMessage || 'Pagamento recusado');
     const { saveStallDebug } = await import('./debug.mjs');

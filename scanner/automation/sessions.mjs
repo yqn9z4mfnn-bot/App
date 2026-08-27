@@ -231,8 +231,19 @@ export const startSessionFromWebLink = async (payload) => {
     }
 
     session.paymentResult = paymentResult;
-    session.status = paymentResult?.status === 'success' ? 'done' : 'error_manual';
-    scheduleSessionClose(sessionId, Math.max(1500, (config.keepBrowserOpenSeconds || 5) * 1000));
+    if (paymentResult?.status === 'success') {
+      session.status = 'done';
+    } else if (paymentResult?.status === '3ds_required') {
+      session.status = '3ds_required';
+    } else {
+      session.status = 'error_manual';
+    }
+
+    const closeMs =
+      paymentResult?.status === '3ds_required'
+        ? Math.max(1500, (config.threedsKeepBrowserSeconds || 180) * 1000)
+        : Math.max(1500, (config.keepBrowserOpenSeconds || 5) * 1000);
+    scheduleSessionClose(sessionId, closeMs);
 
     return {
       sessionId,
