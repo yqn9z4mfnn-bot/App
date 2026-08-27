@@ -11,6 +11,9 @@ import {
   isRechargeValueSelected,
   detectPaymentMethodModal,
   clickPrezaoRenewBanner,
+  clickValueGridCard,
+  hasPrezaoBanner,
+  selectRechargeValue,
   setSessionStep,
   webPortalPath,
   visibleTextMatch,
@@ -146,21 +149,31 @@ async function openPaymentMethodModal(page, session, rechargeValue) {
   await confirmProceedAfterValue(page);
   if (await waitForPaymentMethodModal(page, 3000)) return true;
 
-  const hasPrezao = await visibleTextMatch(page, /renove seu prez/i);
+  const hasPrezao = await hasPrezaoBanner(page);
   if (hasPrezao) {
     await clickPrezaoRenewBanner(page, session, rechargeValue);
     if (await waitForPaymentMethodModal(page, 5000)) return true;
   }
 
   if (await isRechargeValueSelected(page, rechargeValue)) {
-    console.log('[automation] valor selecionado — segundo clique para abrir pagamento…');
-    await clickRechargeValueButton(page, session, rechargeValue, { quiet: true });
+    console.log('[automation] valor selecionado — clique para abrir pagamento…');
+    await confirmProceedAfterValue(page);
+    if (await waitForPaymentMethodModal(page, 3000)) return true;
+    if (!hasPrezao) {
+      await clickValueGridCard(page, session, rechargeValue);
+    } else {
+      await clickPrezaoRenewBanner(page, session, rechargeValue);
+    }
+    if (await waitForPaymentMethodModal(page, 5000)) return true;
+  } else {
+    console.log('[automation] valor não selecionado — clicando grade/banner…');
+    if (hasPrezao) {
+      await clickPrezaoRenewBanner(page, session, rechargeValue);
+    } else {
+      await clickValueGridCard(page, session, rechargeValue);
+    }
     if (await waitForPaymentMethodModal(page, 5000)) return true;
   }
-
-  console.log('[automation] tentando duplo clique no valor…');
-  await clickRechargeValueButton(page, session, rechargeValue, { quiet: true, doubleTap: true });
-  if (await waitForPaymentMethodModal(page, 5000)) return true;
 
   await confirmProceedAfterValue(page);
   return waitForPaymentMethodModal(page, 3000);
@@ -235,19 +248,20 @@ export const runWebLinkRecharge = async (session, payload) => {
 
   const checkoutApiSince = Date.now();
 
-  // Prezão (ex. 21992358933): banner "Renove seu Prezão" abre checkout direto
-  let valueClicked = await clickPrezaoRenewBanner(page, session, rechargeValue);
+  const { source, clicked: valueClicked } = await selectRechargeValue(page, session, rechargeValue);
   if (!valueClicked) {
-    valueClicked = await clickRechargeValueButton(page, session, rechargeValue);
-    await sleep(800);
-    if (!(await detectPaymentMethodModal(page)) && !(await hasSmartCheckout(page))) {
-      valueClicked = await clickRechargeValueButton(page, session, rechargeValue, {
-        quiet: true,
-        doubleTap: true,
-      });
+    throw new Error(`Valor R$ ${rechargeValue} não disponível na Claro.`);
+  }
+  console.log(`[automation] valor selecionado via ${source}`);
+
+  await sleep(config.pauseAfterValueMs);
+  if (!(await detectPaymentMethodModal(page)) && !(await hasSmartCheckout(page))) {
+    if (source === 'grid' && (await isRechargeValueSelected(page, rechargeValue))) {
+      await confirmProceedAfterValue(page);
+    } else if (source === 'grid') {
+      await clickValueGridCard(page, session, rechargeValue);
     }
   }
-  if (!valueClicked) throw new Error(`Valor R$ ${rechargeValue} não disponível na Claro.`);
 
   await proceedToCheckoutAfterValue(page, session, rechargeValue, checkoutApiSince);
 

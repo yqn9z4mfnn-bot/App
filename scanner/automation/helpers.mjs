@@ -238,22 +238,161 @@ export const waitForPaymentMethodModal = async (page, timeoutMs = 15000) => {
   return false;
 };
 
+const rechargeValueRegex = (valor) => new RegExp(`R\\$\\s*${valor}(?:,00)?(?:\\b|\\+|\\s)`);
+
+const skipPrezaoText = /renove seu prez|prez[aã]o de r\$/i;
+
+/** Detecta se o card da grade (não Prezão) está selecionado. */
 export const isRechargeValueSelected = async (page, rechargeValue) =>
   page
     .evaluate((valor) => {
-      const re = new RegExp(`R\\$\\s*${valor}(?:,00)?\\b`);
+      const re = new RegExp(`R\\$\\s*${valor}(?:,00)?(?:\\b|\\+|\\s)`);
       const skip = /renove seu prez|prez[aã]o de r\$/i;
+
+      const looksSelected = (el) => {
+        if (!el) return false;
+        if (el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-selected') === 'true') {
+          return true;
+        }
+        const cls = String(el.className || '');
+        if (/selected|active|checked|highlight|chosen|pressed/i.test(cls)) return true;
+        const style = window.getComputedStyle(el);
+        const bg = style.backgroundColor || '';
+        const borderW = parseFloat(style.borderWidth || '0');
+        if (
+          borderW >= 2 &&
+          style.borderColor &&
+          !/rgba?\(\s*255,\s*255,\s*255|transparent/i.test(style.borderColor)
+        ) {
+          return true;
+        }
+        if (bg && !/rgba?\(\s*255,\s*255,\s*255|transparent|rgba?\(\s*0,\s*0,\s*0,\s*0\)/i.test(bg)) {
+          return true;
+        }
+        return false;
+      };
+
       for (const el of document.querySelectorAll(
-        '[aria-checked="true"], [aria-selected="true"], [class*="selected" i], [class*="active" i], button, div, [role="radio"]',
+        'button, [role="button"], [role="radio"], [role="option"], label, div, li',
       )) {
         const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-        if (skip.test(t) || !re.test(t) || !/b[oô]nus|recomendado/i.test(t)) continue;
+        if (skip.test(t) || !re.test(t) || t.length > 120) continue;
         const r = el.getBoundingClientRect();
-        if (r.width > 40 && r.height > 40) return true;
+        if (r.width < 50 || r.height < 36) continue;
+        if (looksSelected(el)) return true;
+        const parent = el.closest(
+          '[aria-checked="true"], [aria-selected="true"], [class*="selected" i], [class*="active" i]',
+        );
+        if (parent && re.test((parent.innerText || '').replace(/\s+/g, ' ').trim())) return true;
       }
       return false;
     }, rechargeValue)
     .catch(() => false);
+
+/** Clica no card da grade de valores (ex. R$35 +10GB) — um clique, mouse no centro. */
+export const clickValueGridCard = async (page, session, rechargeValue) => {
+  if (session) setSessionStep(session, 'valor', `Selecionando valor R$ ${rechargeValue}…`);
+  await dismissBlockingModals(page);
+
+  const valRe = rechargeValueRegex(rechargeValue);
+  const coords = await page
+    .evaluate((valor) => {
+      const re = new RegExp(`R\\$\\s*${valor}(?:,00)?(?:\\b|\\+|\\s)`);
+      const skip = /renove seu prez|prez[aã]o de r\$/i;
+
+      const findCard = (el) => {
+        let node = el;
+        for (let i = 0; i < 6 && node; i += 1) {
+          const r = node.getBoundingClientRect();
+          if (r.width >= 70 && r.width <= 380 && r.height >= 44 && r.height <= 220) return node;
+          node = node.parentElement;
+        }
+        return el;
+      };
+
+      const hits = [];
+      for (const el of document.querySelectorAll('button, [role="button"], [role="radio"], label, div, li, span')) {
+        const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (skip.test(t) || !re.test(t) || t.length > 90) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 40 || r.height < 30 || r.top < 0 || r.top > window.innerHeight) continue;
+        const card = findCard(el);
+        const cr = card.getBoundingClientRect();
+        if (cr.width < 70 || cr.height < 44) continue;
+        hits.push({ card, area: cr.width * cr.height, y: cr.top, text: t.slice(0, 60) });
+      }
+
+      hits.sort((a, b) => {
+        const aGrid = /b[oô]nus|gb|\+/i.test(a.text) ? 0 : 1;
+        const bGrid = /b[oô]nus|gb|\+/i.test(b.text) ? 0 : 1;
+        if (aGrid !== bGrid) return aGrid - bGrid;
+        return a.area - b.area || a.y - b.y;
+      });
+
+      const pick = hits[0]?.card;
+      if (!pick) return null;
+      const r = pick.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, rechargeValue)
+    .catch(() => null);
+
+  if (coords) {
+    await page.mouse.click(coords.x, coords.y);
+    await sleep(config.pauseAfterClickMs);
+    await dismissBonusModalIfVisible(page).catch(() => {});
+    console.log(`[automation] clicou grade R$ ${rechargeValue} (mouse centro)`);
+    return true;
+  }
+
+  const valueCard = page
+    .locator("button, [role='button'], [role='radio'], label, div, li")
+    .filter({ hasText: valRe })
+    .filter({ hasNotText: skipPrezaoText });
+  const candidates = [
+    valueCard.filter({ hasText: /\+|gb|b[oô]nus/i }).first(),
+    page.getByRole('button', { name: valRe }).first(),
+    page.getByRole('radio', { name: valRe }).first(),
+    valueCard.first(),
+  ];
+
+  for (const loc of candidates) {
+    try {
+      if ((await loc.count()) === 0) continue;
+      await loc.waitFor({ state: 'visible', timeout: 5000 });
+      await loc.scrollIntoViewIfNeeded().catch(() => {});
+      const box = await loc.boundingBox().catch(() => null);
+      if (box) {
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      } else {
+        await loc.click({ timeout: config.actionTimeoutMs, force: true });
+      }
+      await sleep(config.pauseAfterClickMs);
+      await dismissBonusModalIfVisible(page).catch(() => {});
+      console.log(`[automation] clicou grade R$ ${rechargeValue} (locator)`);
+      return true;
+    } catch {
+      // próximo
+    }
+  }
+  return false;
+};
+
+export const hasPrezaoBanner = async (page) => visibleTextMatch(page, /renove seu prez/i);
+
+/** Escolhe valor: banner Prezão (se existir) ou card da grade. */
+export const selectRechargeValue = async (page, session, rechargeValue) => {
+  await dismissBlockingModals(page);
+
+  if (await hasPrezaoBanner(page)) {
+    const prezao = await clickPrezaoRenewBanner(page, session, rechargeValue);
+    if (prezao) return { source: 'prezao', clicked: true };
+  }
+
+  const grid = await clickValueGridCard(page, session, rechargeValue);
+  if (grid) return { source: 'grid', clicked: true };
+
+  return { source: 'none', clicked: false };
+};
 
 /** Escolhe Cartão de Crédito no modal de método de pagamento (antes do iframe Eldorado). */
 export const selectCreditCardPaymentMethod = async (page, session = null) => {
