@@ -50,12 +50,21 @@ export async function runBrowserRecharge({
         ? 'TIMEOUT'
         : 'DENIED';
 
+  const debugReport = pr.debug ?? null;
+  const debugHint = debugReport?.pageUrl
+    ? `URL final: ${debugReport.pageUrl}`
+    : pr.url
+      ? `URL: ${pr.url}`
+      : null;
+
   return {
     paymentId: pr.gateCode ?? data.sessionId ?? null,
     pending: null,
     result: {
       status: mapped,
-      message: pr.gateMessage || pr.message || data.lastError || null,
+      message:
+        [pr.gateMessage || pr.message || data.lastError || null, debugHint].filter(Boolean).join(' · ') ||
+        null,
       negativeReason: pr.gateMessage || null,
     },
     valueCents: productValue,
@@ -66,6 +75,9 @@ export async function runBrowserRecharge({
       browser: data.browser,
       url: data.url,
       raw: pr,
+      debugJson: debugReport?.jsonPath ?? pr.debug?.jsonPath ?? null,
+      gateCaptureCount: debugReport?.gateCaptureCount ?? null,
+      lastGateStatus: debugReport?.gateCaptures?.slice(-1)?.[0]?.status ?? null,
     },
   };
 }

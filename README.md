@@ -63,6 +63,8 @@ HEADLESS=false
 RECHARGE_MODE=browser
 ```
 
+Pasta de debug quando trava/timeout na gate: `~/.local/share/linkclaro-bot/debug/` (JSON + PNG).
+
 Gerador de link (padrão):
 
 ```bash

@@ -122,13 +122,23 @@ export const runWebLinkRecharge = async (session, payload) => {
   const pam = payload._pamParsed;
   await runWebLinkCheckoutPay(session, pam);
   setSessionStep(session, 'aguardando_gate', 'Aguardando retorno da gate…');
-  const paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture);
+  console.log(
+    `[automation] gate-wait iniciado msisdn=${session.accessNumber} valor=R$${rechargeValue} url=${page.url()}`,
+  );
+  const paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture, session);
   if (paymentResult?.status === 'success') {
     setSessionStep(session, 'sucesso', 'Pagamento confirmado com sucesso');
   } else if (paymentResult?.status === 'error') {
     setSessionStep(session, 'erro_gate', paymentResult.gateMessage || 'Pagamento recusado');
+    const { saveStallDebug } = await import('./debug.mjs');
+    await saveStallDebug(page, session, session.gateCapture, 'gate_error', {
+      gateMessage: paymentResult.gateMessage,
+      gateCode: paymentResult.gateCode,
+    }).catch(() => {});
   } else {
-    setSessionStep(session, 'timeout', paymentResult?.message || 'Timeout no pagamento');
+    const dbg = paymentResult?.debug;
+    const hint = dbg?.jsonPath ? ` (debug: ${dbg.jsonPath})` : paymentResult?.debug?.jsonPath ? ` (debug: ${paymentResult.debug.jsonPath})` : '';
+    setSessionStep(session, 'timeout', `${paymentResult?.message || 'Timeout no pagamento'}${hint}`);
   }
   return paymentResult;
 };

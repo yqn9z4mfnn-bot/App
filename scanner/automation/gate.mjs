@@ -1,7 +1,13 @@
 import { sleep } from './helpers.mjs';
+import { saveStallDebug, summarizeGateBody, summarizeGateCaptures } from './debug.mjs';
 
 const GATE_URL_RE =
   /eldorado\.m4u|claro-recarga-api|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|wallet|card/i;
+
+const PAYMENT_ERROR_TEXT_RE =
+  /n[aã]o conseguimos processar|n[aã]o foi poss[ií]vel processar|pagamento recusad|transa[cç][aã]o negad|cart[aã]o recusad|algo deu errado/i;
+const PAYMENT_SUCCESS_TEXT_RE =
+  /recarga realizada|pagamento aprovad|recarga efetuada|sucesso na recarga|obrigado pela recarga|pronto!\s*sua recarga/i;
 
 const parseSseJson = (text) => {
   const line = String(text || '')
@@ -32,7 +38,24 @@ const pickGateFields = (body) => {
   if (Array.isArray(body) && body[0]?.status === 'ok' && body[0]?.paymentMethod?.nsu) {
     return { code: 'OK', message: 'Recarga confirmada' };
   }
+  const loopSt = body.tags?.transaction?.status ?? body.tags?.status;
+  if (loopSt) {
+    return {
+      code: String(loopSt),
+      message: body.tags?.transaction?.reason || body.message || null,
+    };
+  }
   return { code: body.status || null, message: body.message || null };
+};
+
+const logGateCapture = (cap) => {
+  const sum = summarizeGateBody(cap.body);
+  console.log(
+    `[automation][gate] http=${cap.httpStatus} status=${sum?.status ?? '?'} ` +
+      `url=${String(cap.url).slice(0, 100)} ` +
+      (sum?.negativeReason ? `reason=${String(sum.negativeReason).slice(0, 80)} ` : '') +
+      (sum?.loopReason ? `loop=${String(sum.loopReason).slice(0, 80)} ` : ''),
+  );
 };
 
 export const attachGateCapture = (context) => {
@@ -54,13 +77,15 @@ export const attachGateCapture = (context) => {
         }
       }
       if (!body) return;
-      captures.push({
+      const cap = {
         ts: Date.now(),
         url,
         httpStatus: response.status(),
         body,
-      });
+      };
+      captures.push(cap);
       if (captures.length > 40) captures.splice(0, captures.length - 40);
+      logGateCapture(cap);
     } catch {
       // ignore
     }
@@ -83,11 +108,14 @@ export const attachGateCapture = (context) => {
         const u = c.url || '';
         if (/\/payments/i.test(u) && (b?.status === 'CONFIRMED' || b?.payments?.[0]?.status === 'CONFIRMED')) r += 40;
         if (/\/payments/i.test(u) && (b?.status === 'DENIED' || b?.payments?.[0]?.status === 'DENIED')) r += 32;
+        if (/\/loop\/events/i.test(u) && b?.tags?.transaction?.status === 'DENIED') r += 28;
         if (Array.isArray(b) && b[0]?.status === 'ok') r += 22;
+        if (/\/payments/i.test(u) && /^PENDING$/i.test(String(b?.status || b?.payments?.[0]?.status || ''))) r += 5;
         return r * 1e6 + c.ts;
       };
       return [...captures].sort((a, b) => rank(b) - rank(a))[0];
     },
+    tail: (n = 8) => summarizeGateCaptures({ captures }, n),
   };
 };
 
@@ -106,10 +134,36 @@ export const gateIndicatesError = (gateResponse) => {
   if (/^DENIED$/i.test(String(b.status || ''))) return true;
   if (b.payments?.[0]?.status === 'DENIED') return true;
   if (Array.isArray(b) && b[0]?.status === 'nok') return true;
+  if (String(b.tags?.transaction?.status || '').toUpperCase() === 'DENIED') return true;
   return false;
 };
 
-const buildPaymentResult = (page, status, url, gateCapture, hint = '') => {
+const scanPageForPaymentOutcome = async (page) => {
+  for (const frame of page.frames()) {
+    try {
+      const text = await frame.evaluate(() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim());
+      if (!text) continue;
+      if (PAYMENT_ERROR_TEXT_RE.test(text)) {
+        return { status: 'error', hint: text.slice(0, 500), frameUrl: frame.url() };
+      }
+      if (PAYMENT_SUCCESS_TEXT_RE.test(text)) {
+        return { status: 'success', hint: text.slice(0, 500), frameUrl: frame.url() };
+      }
+    } catch {
+      // cross-origin
+    }
+  }
+  try {
+    const text = (await page.locator('body').innerText({ timeout: 1500 })).replace(/\s+/g, ' ').trim();
+    if (PAYMENT_ERROR_TEXT_RE.test(text)) return { status: 'error', hint: text.slice(0, 500), frameUrl: page.url() };
+    if (PAYMENT_SUCCESS_TEXT_RE.test(text)) return { status: 'success', hint: text.slice(0, 500), frameUrl: page.url() };
+  } catch {
+    // ignore
+  }
+  return null;
+};
+
+const buildPaymentResult = (page, status, url, gateCapture, hint = '', debugInfo = null) => {
   const best = gateCapture?.best?.() || null;
   const fields = best ? pickGateFields(best.body) : { code: null, message: null };
   return {
@@ -120,12 +174,43 @@ const buildPaymentResult = (page, status, url, gateCapture, hint = '') => {
     gateMessage: fields.message || hint || null,
     pagamentoErro: status === 'error',
     message: fields.message || hint || status,
+    debug: debugInfo,
   };
 };
 
-export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture = null) => {
+const logGateWaitHeartbeat = (elapsedMs, page, gateCapture, lastPending) => {
+  const best = gateCapture?.best?.() || null;
+  const sum = best ? summarizeGateBody(best.body) : null;
+  const pending = sum?.status && /^PENDING$/i.test(String(sum.status));
+  const pendingChanged = pending !== lastPending.value;
+  lastPending.value = pending;
+
+  console.log(
+    `[automation][gate-wait] ${Math.round(elapsedMs / 1000)}s ` +
+      `url=${(page.url() || '').slice(0, 90)} ` +
+      `captures=${gateCapture?.captures?.length ?? 0} ` +
+      `best_status=${sum?.status ?? 'none'} ` +
+      (pending ? 'PENDING ' : '') +
+      (sum?.negativeReason ? `reason=${String(sum.negativeReason).slice(0, 60)} ` : ''),
+  );
+
+  if (pendingChanged && pending) {
+    console.log('[automation][gate-wait] ⚠ pagamento PENDING na gate — aguardando final…');
+  }
+};
+
+export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture = null, session = null) => {
   const start = Date.now();
+  let lastHeartbeat = 0;
+  const lastPending = { value: false };
+
   while (Date.now() - start < timeoutMs) {
+    const elapsed = Date.now() - start;
+    if (elapsed - lastHeartbeat >= 15000) {
+      lastHeartbeat = elapsed;
+      logGateWaitHeartbeat(elapsed, page, gateCapture, lastPending);
+    }
+
     const url = page.url();
     const best = gateCapture?.best?.() || null;
     if (best && gateIndicatesSuccess(best)) {
@@ -134,23 +219,47 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
     if (best && gateIndicatesError(best)) {
       return buildPaymentResult(page, 'error', url, gateCapture);
     }
+
+    const visible = await scanPageForPaymentOutcome(page);
+    if (visible?.status === 'success' && !/pagamento-erro/i.test(url)) {
+      return buildPaymentResult(page, 'success', url, gateCapture, visible.hint);
+    }
+    if (visible?.status === 'error' && !/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
+      return buildPaymentResult(page, 'error', url, gateCapture, visible.hint);
+    }
+
     if (/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
       return buildPaymentResult(page, 'success', url, gateCapture);
     }
     if (/pagamento-erro/i.test(url)) {
       return buildPaymentResult(page, 'error', url, gateCapture);
     }
-    const bodyText = await page
-      .locator('body')
-      .innerText({ timeout: 3000 })
-      .catch(() => '');
-    if (/recarga realizada|pagamento aprovado|sucesso/i.test(bodyText)) {
-      return buildPaymentResult(page, 'success', url, gateCapture, bodyText.slice(0, 200));
-    }
-    if (/recusad|negad|não foi possível|nao foi possivel/i.test(bodyText)) {
-      return buildPaymentResult(page, 'error', url, gateCapture, bodyText.slice(0, 200));
-    }
+
     await sleep(500);
   }
-  return buildPaymentResult(page, 'timeout', page.url(), gateCapture, 'Timeout aguardando gate');
+
+  const elapsed = Date.now() - start;
+  const debugInfo = session
+    ? await saveStallDebug(page, session, gateCapture, 'gate_timeout', {
+        waitedMs: elapsed,
+        timeoutMs,
+        lastCaptures: gateCapture?.tail?.(12) ?? [],
+      })
+    : null;
+
+  console.log(
+    `[automation][gate-wait] TIMEOUT após ${Math.round(elapsed / 1000)}s — ` +
+      'ver debug JSON/PNG em linkclaro-bot/debug/',
+  );
+
+  return buildPaymentResult(
+    page,
+    'timeout',
+    page.url(),
+    gateCapture,
+    'Timeout aguardando gate',
+    debugInfo
+      ? { ...debugInfo.report, jsonPath: debugInfo.jsonPath, pngPath: debugInfo.pngPath }
+      : null,
+  );
 };
