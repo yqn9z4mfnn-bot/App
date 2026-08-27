@@ -258,48 +258,79 @@ export const isRechargeValueSelected = async (page, rechargeValue) =>
 /** Escolhe Cartão de Crédito no modal de método de pagamento (antes do iframe Eldorado). */
 export const selectCreditCardPaymentMethod = async (page, session = null) => {
   if (!(await detectPaymentMethodModal(page))) return false;
+  if (session?.creditMethodClicked) return false;
+
   if (session) setSessionStep(session, 'metodo_pagamento', 'Selecionando Cartão de Crédito…');
   console.log('[automation] modal método de pagamento — clicando Cartão de Crédito');
 
-  const row = page
-    .locator('button, [role="button"], li, a, div')
-    .filter({ hasText: /cart[aã]o de cr[eé]dito/i })
-    .first();
-  if ((await row.count()) > 0) {
+  const tryClick = async (loc) => {
+    if ((await loc.count()) === 0) return false;
     try {
-      await row.scrollIntoViewIfNeeded().catch(() => {});
-      await row.click({ timeout: config.actionTimeoutMs, force: true });
-      await sleep(config.pauseAfterClickMs);
-      return true;
+      await loc.scrollIntoViewIfNeeded().catch(() => {});
+      const box = await loc.boundingBox().catch(() => null);
+      if (box && box.height > 8) {
+        await loc.click({
+          timeout: config.actionTimeoutMs,
+          force: true,
+          position: { x: Math.min(box.width - 8, Math.max(8, box.width * 0.5)), y: box.height * 0.5 },
+        });
+      } else {
+        await loc.click({ timeout: config.actionTimeoutMs, force: true });
+      }
+      await sleep(config.pauseAfterClickMs + 400);
+      return !(await detectPaymentMethodModal(page));
     } catch {
-      // fallback abaixo
+      return false;
     }
-  }
+  };
 
-  const clicked = await clickByText(page, ['Cartão de Crédito', 'Cartao de Credito'], 6000);
-  if (clicked) {
-    await sleep(config.pauseAfterClickMs);
-    return true;
+  const rowCandidates = [
+    page.getByRole('button', { name: /cart[aã]o de cr[eé]dito/i }).first(),
+    page.getByRole('radio', { name: /cart[aã]o de cr[eé]dito/i }).first(),
+    page.locator('li, button, [role="button"], a, div').filter({ hasText: /^cart[aã]o de cr[eé]dito$/i }).first(),
+    page.locator('li, button, [role="button"], a, div').filter({ hasText: /cart[aã]o de cr[eé]dito/i }).filter({ hasNotText: /pix/i }).first(),
+    page.getByText(/^cart[aã]o de cr[eé]dito$/i).first(),
+  ];
+
+  for (const loc of rowCandidates) {
+    if (await tryClick(loc)) {
+      if (session) session.creditMethodClicked = true;
+      return true;
+    }
   }
 
   const viaEval = await page
     .evaluate(() => {
+      const matches = [];
       for (const el of document.querySelectorAll('button, [role="button"], li, a, div, span')) {
         const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-        if (!/cart[aã]o de cr[eé]dito/i.test(t)) continue;
+        if (!/^cart[aã]o de cr[eé]dito$/i.test(t) && !/cart[aã]o de cr[eé]dito/i.test(t)) continue;
+        if (/pix/i.test(t)) continue;
         const r = el.getBoundingClientRect();
-        if (r.width < 40 || r.height < 16) continue;
-        const clickable =
-          el.closest('button, [role="button"], li, a') ||
-          (['button', 'a', 'li'].includes(el.tagName?.toLowerCase()) ? el : el.parentElement);
-        (clickable || el).click();
-        return true;
+        if (r.width < 60 || r.height < 20) continue;
+        matches.push({ el, area: r.width * r.height, y: r.top });
       }
-      return false;
+      matches.sort((a, b) => a.y - b.y || a.area - b.area);
+      const pick = matches[0]?.el;
+      if (!pick) return false;
+      const clickable =
+        pick.closest('button, [role="button"], li, a') ||
+        pick.parentElement ||
+        pick;
+      clickable.click();
+      return true;
     })
     .catch(() => false);
-  if (viaEval) await sleep(config.pauseAfterClickMs);
-  return viaEval;
+
+  if (viaEval) {
+    await sleep(config.pauseAfterClickMs + 500);
+    if (!(await detectPaymentMethodModal(page))) {
+      if (session) session.creditMethodClicked = true;
+      return true;
+    }
+  }
+
+  return false;
 };
 
 /** Banner "Renove seu Prezão" — números Prezão abrem checkout por aqui (ex. 21992358933). */

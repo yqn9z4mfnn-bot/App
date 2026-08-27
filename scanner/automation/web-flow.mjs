@@ -160,9 +160,11 @@ async function advanceToEldoradoCheckout(page, session, rechargeValue, sinceTs) 
     return selectCreditCardPaymentMethod(page, session);
   }
   if (rechargeValue) {
-    await openPaymentMethodModal(page, session, rechargeValue);
+    if (!(await detectPaymentMethodModal(page))) {
+      await openPaymentMethodModal(page, session, rechargeValue);
+    }
     if (await detectPaymentMethodModal(page)) {
-      return selectCreditCardPaymentMethod(page, session);
+      await selectCreditCardPaymentMethod(page, session);
     }
   }
   return false;
@@ -176,7 +178,7 @@ async function proceedToCheckoutAfterValue(page, session, rechargeValue, sinceTs
 }
 
 /** Espera iframe Eldorado após escolher valor (modal bônus atrapalha). */
-async function waitForCheckoutAfterValue(page, session, sinceTs) {
+async function waitForCheckoutAfterValue(page, session, rechargeValue, sinceTs) {
   setSessionStep(session, 'smart_checkout', 'Aguardando checkout abrir…');
   const started = Date.now();
   const deadline = started + config.checkoutOpenTimeoutMs;
@@ -231,7 +233,7 @@ export const runWebLinkRecharge = async (session, payload) => {
 
   await proceedToCheckoutAfterValue(page, session, rechargeValue, checkoutApiSince);
 
-  const checkoutOk = await waitForCheckoutAfterValue(page, session, checkoutApiSince);
+  const checkoutOk = await waitForCheckoutAfterValue(page, session, rechargeValue, checkoutApiSince);
   if (!checkoutOk) {
     const { saveStallDebug } = await import('./debug.mjs');
     await saveStallDebug(page, session, session.gateCapture, 'checkout_nao_abriu', {
