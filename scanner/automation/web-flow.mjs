@@ -6,6 +6,7 @@ import {
   dismissBonusModalIfVisible,
   dismissBlockingModals,
   confirmProceedAfterValue,
+  selectCreditCardPaymentMethod,
   setSessionStep,
   webPortalPath,
   visibleTextMatch,
@@ -59,10 +60,16 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
   setSessionStep(session, 'valor', `Selecionando valor R$ ${rechargeValue}…`);
   await dismissBlockingModals(page);
   const valRe = new RegExp(`R\\$\\s*${rechargeValue}(?:,00)?\\b`);
+  const valueCard = page
+    .locator("button, [role='button'], [role='radio'], label, a, div")
+    .filter({ hasText: valRe })
+    .filter({ hasNotText: /renove seu prez/i })
+    .filter({ hasNotText: /prez[aã]o de r\$/i });
   const candidates = [
+    valueCard.filter({ hasText: /b[oô]nus|recomendado|v[aá]l/i }).first(),
     page.getByRole('button', { name: valRe }).first(),
     page.getByRole('radio', { name: valRe }).first(),
-    page.locator("button, [role='button'], [role='radio'], label, a").filter({ hasText: valRe }).first(),
+    valueCard.first(),
     page.getByText(valRe).first(),
   ];
   for (const loc of candidates) {
@@ -79,12 +86,15 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
   }
   const clicked = await page.evaluate((valor) => {
     const re = new RegExp(`R\\$\\s*${valor}(?:,00)?\\b`);
+    const skip = /renove seu prez|prez[aã]o de r\$/i;
     const nodes = [...document.querySelectorAll('button, [role="button"], [role="radio"], label, a, div, span')];
-    const hit = nodes.find((n) => {
+    const hits = nodes.filter((n) => {
       const t = (n.innerText || n.textContent || '').replace(/\s+/g, ' ').trim();
-      return t.length < 80 && re.test(t);
+      if (t.length >= 120 || skip.test(t)) return false;
+      return re.test(t);
     });
-    if (!hit) return false;
+    const prefer = hits.find((n) => /b[oô]nus|recomendado|escolha um valor/i.test(n.innerText || '')) || hits[0];
+    if (!prefer) return false;
     const findClickable = (el) => {
       let node = el;
       for (let i = 0; i < 7 && node; i += 1) {
@@ -95,7 +105,7 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
       }
       return el;
     };
-    findClickable(hit).click();
+    findClickable(prefer).click();
     return true;
   }, rechargeValue);
   if (clicked) {
@@ -108,21 +118,28 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
 const checkoutIsReady = async (page, gateCapture, sinceTs) =>
   (await hasSmartCheckout(page)) || hasSmartCheckoutApiCall(gateCapture, sinceTs);
 
-/** Após valor: Continuar + retry se API smartcheckout não disparar. */
+/** Avança do valor até o iframe Eldorado (modal Cartão de Crédito incluso). */
+async function advanceToEldoradoCheckout(page, session) {
+  await selectCreditCardPaymentMethod(page, session);
+}
+
+/** Após valor: Continuar + modal cartão + retry se API smartcheckout não disparar. */
 async function proceedToCheckoutAfterValue(page, session, rechargeValue, sinceTs) {
   await confirmProceedAfterValue(page);
   await sleep(config.pauseAfterValueMs);
+  await advanceToEldoradoCheckout(page, session);
 
   if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return;
 
   await sleep(1500);
-  await dismissBlockingModals(page);
+  await advanceToEldoradoCheckout(page, session);
   if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return;
 
   console.log('[automation] checkout não iniciou — repetindo clique no valor…');
   await clickRechargeValueButton(page, session, rechargeValue);
   await confirmProceedAfterValue(page);
   await sleep(config.pauseAfterValueMs);
+  await advanceToEldoradoCheckout(page, session);
 }
 
 /** Espera iframe Eldorado após escolher valor (modal bônus atrapalha). */
@@ -133,6 +150,7 @@ async function waitForCheckoutAfterValue(page, session, sinceTs) {
   let lastLog = 0;
 
   while (Date.now() < deadline) {
+    await advanceToEldoradoCheckout(page, session);
     await dismissBlockingModals(page).catch(() => {});
     if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return true;
     if (await detectPixOnlyCheckout(page)) {
@@ -150,6 +168,7 @@ async function waitForCheckoutAfterValue(page, session, sinceTs) {
     await sleep(config.pollIntervalMs);
   }
 
+  await advanceToEldoradoCheckout(page, session);
   await dismissBlockingModals(page).catch(() => {});
   if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return true;
   if (await waitForSmartCheckout(page, 15000)) return true;

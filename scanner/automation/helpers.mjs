@@ -154,6 +154,8 @@ export const dismissBonusModalIfVisible = async (page) => {
 
 /** Fecha modais de bônus, upsell e overlays que bloqueiam o checkout. */
 export const dismissBlockingModals = async (page) => {
+  if (await detectPaymentMethodModal(page)) return false;
+
   let dismissed = false;
   dismissed = (await dismissCookieBanner(page)) || dismissed;
   dismissed = (await dismissBonusModalIfVisible(page)) || dismissed;
@@ -199,6 +201,65 @@ export const dismissBlockingModals = async (page) => {
     }
   }
   return dismissed;
+};
+
+/** Modal intermediário: "Como deseja pagar sua recarga?" */
+export const detectPaymentMethodModal = async (page) => {
+  try {
+    return await page.evaluate(() => {
+      const t = (document.body?.innerText || '').replace(/\s+/g, ' ');
+      return /como deseja pagar/i.test(t) && /cart[aã]o de cr[eé]dito/i.test(t);
+    });
+  } catch {
+    return false;
+  }
+};
+
+/** Escolhe Cartão de Crédito no modal de método de pagamento (antes do iframe Eldorado). */
+export const selectCreditCardPaymentMethod = async (page, session = null) => {
+  if (!(await detectPaymentMethodModal(page))) return false;
+  if (session) setSessionStep(session, 'metodo_pagamento', 'Selecionando Cartão de Crédito…');
+  console.log('[automation] modal método de pagamento — clicando Cartão de Crédito');
+
+  const row = page
+    .locator('button, [role="button"], li, a, div')
+    .filter({ hasText: /cart[aã]o de cr[eé]dito/i })
+    .first();
+  if ((await row.count()) > 0) {
+    try {
+      await row.scrollIntoViewIfNeeded().catch(() => {});
+      await row.click({ timeout: config.actionTimeoutMs, force: true });
+      await sleep(config.pauseAfterClickMs);
+      return true;
+    } catch {
+      // fallback abaixo
+    }
+  }
+
+  const clicked = await clickByText(page, ['Cartão de Crédito', 'Cartao de Credito'], 6000);
+  if (clicked) {
+    await sleep(config.pauseAfterClickMs);
+    return true;
+  }
+
+  const viaEval = await page
+    .evaluate(() => {
+      for (const el of document.querySelectorAll('button, [role="button"], li, a, div, span')) {
+        const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!/cart[aã]o de cr[eé]dito/i.test(t)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 40 || r.height < 16) continue;
+        const clickable =
+          el.closest('button, [role="button"], li, a') ||
+          (['button', 'a', 'li'].includes(el.tagName?.toLowerCase()) ? el : el.parentElement);
+        (clickable || el).click();
+        return true;
+      }
+      return false;
+    })
+    .catch(() => false);
+  if (viaEval) await sleep(config.pauseAfterClickMs);
+  return viaEval;
 };
 
 /** Após escolher valor — alguns fluxos exigem Continuar antes do iframe Eldorado. */
