@@ -7,6 +7,9 @@ import {
   dismissBlockingModals,
   confirmProceedAfterValue,
   selectCreditCardPaymentMethod,
+  waitForPaymentMethodModal,
+  isRechargeValueSelected,
+  detectPaymentMethodModal,
   setSessionStep,
   webPortalPath,
   visibleTextMatch,
@@ -56,8 +59,9 @@ export const ensureWebRechargeReady = async (session) => {
   }
 };
 
-export const clickRechargeValueButton = async (page, session, rechargeValue) => {
-  setSessionStep(session, 'valor', `Selecionando valor R$ ${rechargeValue}…`);
+export const clickRechargeValueButton = async (page, session, rechargeValue, opts = {}) => {
+  const { quiet = false, doubleTap = false } = opts;
+  if (!quiet) setSessionStep(session, 'valor', `Selecionando valor R$ ${rechargeValue}…`);
   await dismissBlockingModals(page);
   const valRe = new RegExp(`R\\$\\s*${rechargeValue}(?:,00)?\\b`);
   const valueCard = page
@@ -77,9 +81,15 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
       if ((await loc.count()) === 0) continue;
       await loc.waitFor({ state: 'visible', timeout: 5000 });
       await loc.scrollIntoViewIfNeeded().catch(() => {});
-      await loc.click({ timeout: config.actionTimeoutMs, force: true });
-      await dismissBlockingModals(page);
-      return;
+      if (doubleTap) {
+        await loc.click({ timeout: config.actionTimeoutMs, force: true });
+        await sleep(350);
+        await loc.click({ timeout: config.actionTimeoutMs, force: true });
+      } else {
+        await loc.click({ timeout: config.actionTimeoutMs, force: true });
+      }
+      await dismissBonusModalIfVisible(page).catch(() => {});
+      return true;
     } catch {
       // próximo
     }
@@ -109,8 +119,8 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
     return true;
   }, rechargeValue);
   if (clicked) {
-    await dismissBlockingModals(page);
-    return;
+    await dismissBonusModalIfVisible(page).catch(() => {});
+    return true;
   }
   throw new Error(`Valor R$ ${rechargeValue} não disponível na Claro.`);
 };
@@ -118,28 +128,50 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
 const checkoutIsReady = async (page, gateCapture, sinceTs) =>
   (await hasSmartCheckout(page)) || hasSmartCheckoutApiCall(gateCapture, sinceTs);
 
-/** Avança do valor até o iframe Eldorado (modal Cartão de Crédito incluso). */
-async function advanceToEldoradoCheckout(page, session) {
-  await selectCreditCardPaymentMethod(page, session);
+/** Abre modal "Como deseja pagar?" — duplo clique / scroll / Continuar. */
+async function openPaymentMethodModal(page, session, rechargeValue) {
+  if (await detectPaymentMethodModal(page)) return true;
+  if (await waitForPaymentMethodModal(page, 2500)) return true;
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+  await sleep(400);
+  await confirmProceedAfterValue(page);
+  if (await waitForPaymentMethodModal(page, 3000)) return true;
+
+  if (await isRechargeValueSelected(page, rechargeValue)) {
+    console.log('[automation] valor selecionado — segundo clique para abrir pagamento…');
+    await clickRechargeValueButton(page, session, rechargeValue, { quiet: true });
+    if (await waitForPaymentMethodModal(page, 5000)) return true;
+  }
+
+  console.log('[automation] tentando duplo clique no valor…');
+  await clickRechargeValueButton(page, session, rechargeValue, { quiet: true, doubleTap: true });
+  if (await waitForPaymentMethodModal(page, 6000)) return true;
+
+  await confirmProceedAfterValue(page);
+  return waitForPaymentMethodModal(page, 4000);
 }
 
-/** Após valor: Continuar + modal cartão + retry se API smartcheckout não disparar. */
+/** Avança do valor até o iframe Eldorado (modal Cartão de Crédito incluso). */
+async function advanceToEldoradoCheckout(page, session, rechargeValue, sinceTs) {
+  if (sinceTs && (await checkoutIsReady(page, session.gateCapture, sinceTs))) return true;
+  if (await detectPaymentMethodModal(page)) {
+    return selectCreditCardPaymentMethod(page, session);
+  }
+  if (rechargeValue) {
+    await openPaymentMethodModal(page, session, rechargeValue);
+    if (await detectPaymentMethodModal(page)) {
+      return selectCreditCardPaymentMethod(page, session);
+    }
+  }
+  return false;
+}
+
+/** Após valor: aguarda modal pagamento → Cartão de Crédito. */
 async function proceedToCheckoutAfterValue(page, session, rechargeValue, sinceTs) {
-  await confirmProceedAfterValue(page);
   await sleep(config.pauseAfterValueMs);
-  await advanceToEldoradoCheckout(page, session);
-
-  if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return;
-
-  await sleep(1500);
-  await advanceToEldoradoCheckout(page, session);
-  if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return;
-
-  console.log('[automation] checkout não iniciou — repetindo clique no valor…');
-  await clickRechargeValueButton(page, session, rechargeValue);
-  await confirmProceedAfterValue(page);
-  await sleep(config.pauseAfterValueMs);
-  await advanceToEldoradoCheckout(page, session);
+  await openPaymentMethodModal(page, session, rechargeValue);
+  await advanceToEldoradoCheckout(page, session, rechargeValue, sinceTs);
 }
 
 /** Espera iframe Eldorado após escolher valor (modal bônus atrapalha). */
@@ -150,7 +182,7 @@ async function waitForCheckoutAfterValue(page, session, sinceTs) {
   let lastLog = 0;
 
   while (Date.now() < deadline) {
-    await advanceToEldoradoCheckout(page, session);
+    await advanceToEldoradoCheckout(page, session, rechargeValue, sinceTs);
     await dismissBlockingModals(page).catch(() => {});
     if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return true;
     if (await detectPixOnlyCheckout(page)) {
@@ -168,7 +200,7 @@ async function waitForCheckoutAfterValue(page, session, sinceTs) {
     await sleep(config.pollIntervalMs);
   }
 
-  await advanceToEldoradoCheckout(page, session);
+  await advanceToEldoradoCheckout(page, session, rechargeValue);
   await dismissBlockingModals(page).catch(() => {});
   if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return true;
   if (await waitForSmartCheckout(page, 15000)) return true;
@@ -188,7 +220,7 @@ export const runWebLinkRecharge = async (session, payload) => {
   await dismissBlockingModals(page);
 
   const checkoutApiSince = Date.now();
-  await clickRechargeValueButton(page, session, rechargeValue);
+  await clickRechargeValueButton(page, session, rechargeValue, { doubleTap: true });
   await proceedToCheckoutAfterValue(page, session, rechargeValue, checkoutApiSince);
 
   const checkoutOk = await waitForCheckoutAfterValue(page, session, checkoutApiSince);

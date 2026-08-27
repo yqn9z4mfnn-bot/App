@@ -206,6 +206,20 @@ export const dismissBlockingModals = async (page) => {
 /** Modal intermediário: "Como deseja pagar sua recarga?" */
 export const detectPaymentMethodModal = async (page) => {
   try {
+    const title = page.getByText(/como deseja pagar/i).first();
+    if ((await title.count()) > 0 && (await title.isVisible().catch(() => false))) return true;
+
+    const credit = page.getByText(/cart[aã]o de cr[eé]dito/i).first();
+    const pix = page.getByText(/^\s*pix\s*$/i).first();
+    if (
+      (await credit.count()) > 0 &&
+      (await credit.isVisible().catch(() => false)) &&
+      (await pix.count()) > 0 &&
+      (await pix.isVisible().catch(() => false))
+    ) {
+      return true;
+    }
+
     return await page.evaluate(() => {
       const t = (document.body?.innerText || '').replace(/\s+/g, ' ');
       return /como deseja pagar/i.test(t) && /cart[aã]o de cr[eé]dito/i.test(t);
@@ -214,6 +228,32 @@ export const detectPaymentMethodModal = async (page) => {
     return false;
   }
 };
+
+export const waitForPaymentMethodModal = async (page, timeoutMs = 15000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await detectPaymentMethodModal(page)) return true;
+    await sleep(config.pollIntervalMs);
+  }
+  return false;
+};
+
+export const isRechargeValueSelected = async (page, rechargeValue) =>
+  page
+    .evaluate((valor) => {
+      const re = new RegExp(`R\\$\\s*${valor}(?:,00)?\\b`);
+      const skip = /renove seu prez|prez[aã]o de r\$/i;
+      for (const el of document.querySelectorAll(
+        '[aria-checked="true"], [aria-selected="true"], [class*="selected" i], [class*="active" i], button, div, [role="radio"]',
+      )) {
+        const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (skip.test(t) || !re.test(t) || !/b[oô]nus|recomendado/i.test(t)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 40 && r.height > 40) return true;
+      }
+      return false;
+    }, rechargeValue)
+    .catch(() => false);
 
 /** Escolhe Cartão de Crédito no modal de método de pagamento (antes do iframe Eldorado). */
 export const selectCreditCardPaymentMethod = async (page, session = null) => {
@@ -262,8 +302,9 @@ export const selectCreditCardPaymentMethod = async (page, session = null) => {
   return viaEval;
 };
 
-/** Após escolher valor — alguns fluxos exigem Continuar antes do iframe Eldorado. */
+/** Após escolher valor — Continuar (não fecha modal de pagamento). */
 export const confirmProceedAfterValue = async (page) => {
+  if (await detectPaymentMethodModal(page)) return false;
   await dismissBlockingModals(page);
   return clickByText(
     page,
@@ -276,7 +317,7 @@ export const confirmProceedAfterValue = async (page) => {
       'Recarregar agora',
       'Finalizar',
     ],
-    6000,
+    4000,
   );
 };
 
