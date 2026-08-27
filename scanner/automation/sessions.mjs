@@ -197,7 +197,7 @@ export const startSessionFromWebLink = async (payload) => {
     console.log(`[automation] goto ${loginUrl.slice(0, 90)}…`);
     await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await dismissCookieBanner(page);
-    await sleep(1200);
+    await sleep(config.pauseAfterNavMs);
 
     if (!(await waitForWebPortalAuth(page))) {
       throw new Error(`Login JWT não completou. url=${page.url() || '?'}`);

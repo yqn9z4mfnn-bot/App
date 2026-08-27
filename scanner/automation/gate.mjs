@@ -1,4 +1,5 @@
 import { sleep } from './helpers.mjs';
+import { config } from './config.mjs';
 import { saveStallDebug, summarizeGateBody, summarizeGateCaptures } from './debug.mjs';
 import { detect3dsChallenge, build3dsRequiredResult } from './threeds.mjs';
 
@@ -241,7 +242,7 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
     }
 
-    await sleep(500);
+    await sleep(config.pollIntervalMs);
   }
 
   const elapsed = Date.now() - start;

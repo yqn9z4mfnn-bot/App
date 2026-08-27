@@ -23,14 +23,19 @@ export const config = {
   actionTimeoutMs: toInt(process.env.ACTION_TIMEOUT_MS, 20000),
   cardIframeTimeoutMs: toInt(process.env.CARD_IFRAME_TIMEOUT_MS, 45000),
   cardFormReadyTimeoutMs: toInt(process.env.CARD_FORM_READY_TIMEOUT_MS, 18000),
-  cardFormSettleMs: toInt(process.env.CARD_FORM_SETTLE_MS, 1200),
+  cardFormSettleMs: toInt(process.env.CARD_FORM_SETTLE_MS, 700),
   elementClickTimeoutMs: toInt(process.env.ELEMENT_CLICK_TIMEOUT_MS, 20000),
-  pamTypingDelayMs: toInt(process.env.PAM_TYPING_DELAY_MS, 120),
+  pamTypingDelayMs: toInt(process.env.PAM_TYPING_DELAY_MS, 80),
   mobileViewportWidth: toInt(process.env.MOBILE_VIEWPORT_WIDTH, 390),
   mobileViewportHeight: toInt(process.env.MOBILE_VIEWPORT_HEIGHT, 844),
   browserWindowWidth: toInt(process.env.BROWSER_WINDOW_WIDTH, 980),
   browserWindowHeight: toInt(process.env.BROWSER_WINDOW_HEIGHT, 980),
   stepDelayDefaultMs: toInt(process.env.STEP_DELAY_DEFAULT_MS, 700),
+  /** Pausas curtas entre cliques/navegação (ms) — aumente no .env se PC lento. */
+  pauseAfterNavMs: toInt(process.env.PAUSE_AFTER_NAV_MS, 600),
+  pauseAfterClickMs: toInt(process.env.PAUSE_AFTER_CLICK_MS, 450),
+  pauseAfterValueMs: toInt(process.env.PAUSE_AFTER_VALUE_MS, 700),
+  pollIntervalMs: toInt(process.env.POLL_INTERVAL_MS, 250),
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';

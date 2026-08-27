@@ -40,7 +40,7 @@ export const ensureWebRechargeReady = async (session) => {
   if (hasValueBtn) return;
 
   if (await clickByText(page, ['Fazer recarga', 'Fazer Recarga', 'Recarregar'], 15000)) {
-    await sleep(800);
+    await sleep(config.pauseAfterClickMs);
     return;
   }
 
@@ -49,7 +49,7 @@ export const ensureWebRechargeReady = async (session) => {
     setSessionStep(session, 'web_numero', 'Abrindo tela de recarga…');
     await page.goto(webPortalPath('numero'), { waitUntil: 'domcontentloaded', timeout: 45000 });
     await dismissCookieBanner(page);
-    await sleep(800);
+    await sleep(config.pauseAfterClickMs);
   }
 };
 
@@ -102,7 +102,7 @@ export const runWebLinkRecharge = async (session, payload) => {
 
   await clickRechargeValueButton(page, session, rechargeValue);
   await dismissBonusModalIfVisible(page).catch(() => {});
-  await sleep(1200);
+  await sleep(config.pauseAfterValueMs);
 
   const checkoutDeadline = Date.now() + 35000;
   while (Date.now() < checkoutDeadline) {
@@ -110,7 +110,7 @@ export const runWebLinkRecharge = async (session, payload) => {
     if (await detectPixOnlyCheckout(page)) {
       throw new Error('Valor não disponível nesse número (somente Pix).');
     }
-    await sleep(400);
+    await sleep(config.pollIntervalMs);
   }
   if (!(await hasSmartCheckout(page)) && !(await waitForSmartCheckout(page, 12000))) {
     if (await detectPixOnlyCheckout(page)) {

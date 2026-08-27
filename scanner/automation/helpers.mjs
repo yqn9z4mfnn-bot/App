@@ -106,7 +106,7 @@ export const clickByText = async (page, texts, timeoutMs = config.actionTimeoutM
         }
       }
     }
-    await sleep(300);
+    await sleep(200);
   }
   return false;
 };
@@ -183,12 +183,12 @@ export const waitForWebPortalAuth = async (page, timeoutMs = 45000) => {
   while (Date.now() < deadline) {
     const u = page.url() || '';
     if (/\/select-login/i.test(u)) {
-      await sleep(400);
+      await sleep(config.pollIntervalMs);
       continue;
     }
     if (isWebPortalAuthed(u)) return true;
     if (await hasAuthenticatedUiMarkers(page)) return true;
-    await sleep(400);
+    await sleep(config.pollIntervalMs);
   }
   return false;
 };
@@ -209,7 +209,7 @@ export const clickInAnyFrame = async (page, labels, timeoutMs = 8000) => {
         }
       }
     }
-    await sleep(300);
+    await sleep(config.pollIntervalMs);
   }
   return false;
 };

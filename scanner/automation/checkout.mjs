@@ -29,7 +29,7 @@ export const waitForSmartCheckout = async (page, timeoutMs = 15000) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await hasSmartCheckout(page)) return true;
-    await sleep(350);
+    await sleep(config.pollIntervalMs);
   }
   return false;
 };
@@ -70,7 +70,7 @@ export const waitForEldoradoCheckoutReady = async (page, timeoutMs = 30000) => {
         }
       }
     }
-    await sleep(350);
+    await sleep(config.pollIntervalMs);
   }
   return null;
 };
@@ -81,7 +81,7 @@ export const prepareEldoradoCheckoutForm = async (page) => {
     await iframe.scrollIntoViewIfNeeded().catch(() => {});
   }
   await dismissBonusModalIfVisible(page).catch(() => {});
-  await sleep(400);
+  await sleep(config.pollIntervalMs);
 };
 
 export const fillCardFormDirectly = async (page, pam) => {
@@ -146,7 +146,7 @@ export const ensureCheckoutNewCardForm = async (page, session) => {
   for (let i = 0; i < 6; i += 1) {
     if (await isPanFormReady(page)) return true;
     await clickCheckoutNewCard(page);
-    await sleep(config.cardFormSettleMs || 1200);
+    await sleep(config.cardFormSettleMs || 700);
   }
   return isPanFormReady(page);
 };
@@ -168,7 +168,7 @@ export const ensureSmartCheckoutReady = async (page, session) => {
       await waitForEldoradoCheckoutReady(page, 25000);
       return true;
     }
-    await sleep(400);
+    await sleep(config.pollIntervalMs);
   }
   return false;
 };
