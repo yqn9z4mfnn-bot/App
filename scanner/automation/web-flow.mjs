@@ -129,15 +129,28 @@ export const clickRechargeValueButton = async (page, session, rechargeValue, opt
 const checkoutIsReady = async (page, gateCapture, sinceTs) =>
   (await hasSmartCheckout(page)) || hasSmartCheckoutApiCall(gateCapture, sinceTs);
 
-/** Abre modal "Como deseja pagar?" — duplo clique / scroll / Continuar. */
+/** Abre modal "Como deseja pagar?" — no máx. 2 tentativas por sessão (evita loop infinito). */
 async function openPaymentMethodModal(page, session, rechargeValue) {
   if (await detectPaymentMethodModal(page)) return true;
-  if (await waitForPaymentMethodModal(page, 2500)) return true;
+
+  session.checkoutModalAttempts = session.checkoutModalAttempts ?? 0;
+  if (session.checkoutModalAttempts >= 2) return false;
+  session.checkoutModalAttempts += 1;
+
+  console.log(`[automation] abrindo modal pagamento (tentativa ${session.checkoutModalAttempts}/2)…`);
+
+  if (await waitForPaymentMethodModal(page, 3500)) return true;
 
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
   await sleep(400);
   await confirmProceedAfterValue(page);
   if (await waitForPaymentMethodModal(page, 3000)) return true;
+
+  const hasPrezao = await visibleTextMatch(page, /renove seu prez/i);
+  if (hasPrezao) {
+    await clickPrezaoRenewBanner(page, session, rechargeValue);
+    if (await waitForPaymentMethodModal(page, 5000)) return true;
+  }
 
   if (await isRechargeValueSelected(page, rechargeValue)) {
     console.log('[automation] valor selecionado — segundo clique para abrir pagamento…');
@@ -147,25 +160,17 @@ async function openPaymentMethodModal(page, session, rechargeValue) {
 
   console.log('[automation] tentando duplo clique no valor…');
   await clickRechargeValueButton(page, session, rechargeValue, { quiet: true, doubleTap: true });
-  if (await waitForPaymentMethodModal(page, 6000)) return true;
+  if (await waitForPaymentMethodModal(page, 5000)) return true;
 
   await confirmProceedAfterValue(page);
-  return waitForPaymentMethodModal(page, 4000);
+  return waitForPaymentMethodModal(page, 3000);
 }
 
-/** Avança do valor até o iframe Eldorado (modal Cartão de Crédito incluso). */
+/** Só escolhe Cartão de Crédito se o modal já estiver aberto. */
 async function advanceToEldoradoCheckout(page, session, rechargeValue, sinceTs) {
   if (sinceTs && (await checkoutIsReady(page, session.gateCapture, sinceTs))) return true;
   if (await detectPaymentMethodModal(page)) {
     await selectCreditCardPaymentMethod(page, session);
-  }
-  if (rechargeValue) {
-    if (!(await detectPaymentMethodModal(page))) {
-      await openPaymentMethodModal(page, session, rechargeValue);
-    }
-    if (await detectPaymentMethodModal(page)) {
-      await selectCreditCardPaymentMethod(page, session);
-    }
   }
   return false;
 }
@@ -184,6 +189,8 @@ async function waitForCheckoutAfterValue(page, session, rechargeValue, sinceTs) 
   const deadline = started + config.checkoutOpenTimeoutMs;
   let lastLog = 0;
 
+  let lastNudge = 0;
+
   while (Date.now() < deadline) {
     await advanceToEldoradoCheckout(page, session, rechargeValue, sinceTs);
     await dismissBlockingModals(page).catch(() => {});
@@ -192,6 +199,10 @@ async function waitForCheckoutAfterValue(page, session, rechargeValue, sinceTs) 
       throw new Error('Valor não disponível nesse número (somente Pix).');
     }
     const elapsed = Date.now() - started;
+    if (elapsed - lastNudge > 15000 && !(await detectPaymentMethodModal(page))) {
+      await openPaymentMethodModal(page, session, rechargeValue);
+      lastNudge = elapsed;
+    }
     if (elapsed - lastLog > 8000) {
       const apiHit = hasSmartCheckoutApiCall(session.gateCapture, sinceTs);
       console.log(
@@ -227,7 +238,14 @@ export const runWebLinkRecharge = async (session, payload) => {
   // Prezão (ex. 21992358933): banner "Renove seu Prezão" abre checkout direto
   let valueClicked = await clickPrezaoRenewBanner(page, session, rechargeValue);
   if (!valueClicked) {
-    valueClicked = await clickRechargeValueButton(page, session, rechargeValue, { doubleTap: true });
+    valueClicked = await clickRechargeValueButton(page, session, rechargeValue);
+    await sleep(800);
+    if (!(await detectPaymentMethodModal(page)) && !(await hasSmartCheckout(page))) {
+      valueClicked = await clickRechargeValueButton(page, session, rechargeValue, {
+        quiet: true,
+        doubleTap: true,
+      });
+    }
   }
   if (!valueClicked) throw new Error(`Valor R$ ${rechargeValue} não disponível na Claro.`);
 
