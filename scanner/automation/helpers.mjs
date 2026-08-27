@@ -242,51 +242,89 @@ const rechargeValueRegex = (valor) => new RegExp(`R\\$\\s*${valor}(?:,00)?(?:\\b
 
 const skipPrezaoText = /renove seu prez|prez[aã]o de r\$/i;
 
+/** Lógica da grade de valores — roda no contexto do browser via page.evaluate. */
+const valueGridBrowserLogic = ({ valor, mode }) => {
+  const re = new RegExp(`R\\$\\s*${valor}(?:,00)?(?:\\b|\\+|\\s)`);
+  const primaryRe = new RegExp(`^R\\$\\s*${valor}(?:,00)?\\b`, 'i');
+  const skip = /renove seu prez|prez[aã]o de r\$|\(\d{2}\)\s*\d|\boutro n[uú]mero/i;
+
+  const headings = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,div,label')].filter((el) => {
+    const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+    return /^escolha um valor de recarga/i.test(t) && t.length < 80;
+  });
+  const heading = headings[0];
+  const root =
+    heading?.closest('section, form, main, [class*="value" i], [class*="recarga" i]') ||
+    heading?.parentElement?.parentElement ||
+    heading?.parentElement ||
+    document.body;
+
+  const isRedBorder = (style) => {
+    const bc = style.borderColor || '';
+    return /rgb\(\s*2(?:2[0-9]|3[0-9]|4[0-9])|rgb\(\s*227|rgb\(\s*237|#e[0-9a-f]{2}/i.test(bc) &&
+      parseFloat(style.borderWidth || '0') >= 1.5;
+  };
+
+  const looksSelected = (el) => {
+    if (!el) return false;
+    if (el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-selected') === 'true') return true;
+    const cls = String(el.className || '');
+    if (/selected|active|checked|highlight|chosen|pressed/i.test(cls)) return true;
+    const style = window.getComputedStyle(el);
+    if (isRedBorder(style)) return true;
+    const parent = el.parentElement;
+    if (parent && isRedBorder(window.getComputedStyle(parent))) return true;
+    return false;
+  };
+
+  const findCard = (el) => {
+    let node = el;
+    for (let i = 0; i < 6 && node; i += 1) {
+      const r = node.getBoundingClientRect();
+      if (r.width >= 90 && r.width <= 260 && r.height >= 70 && r.height <= 200) return node;
+      node = node.parentElement;
+    }
+    return el;
+  };
+
+  const hits = [];
+  for (const el of root.querySelectorAll('button, [role="button"], [role="radio"], label, div, li, span')) {
+    const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (skip.test(t) || !re.test(t) || t.length > 75) continue;
+    const card = findCard(el);
+    const cr = card.getBoundingClientRect();
+    if (cr.width < 90 || cr.height < 70) continue;
+    const cardText = (card.innerText || card.textContent || '').replace(/\s+/g, ' ').trim();
+    if (cardText.length > 75 || skip.test(cardText)) continue;
+    hits.push({
+      card,
+      area: cr.width * cr.height,
+      y: cr.top,
+      primary: primaryRe.test(cardText),
+      text: cardText.slice(0, 60),
+      selected: looksSelected(card),
+    });
+  }
+
+  hits.sort((a, b) => {
+    if (a.primary !== b.primary) return a.primary ? -1 : 1;
+    return a.area - b.area || a.y - b.y;
+  });
+
+  if (mode === 'selected') return hits.some((h) => h.selected);
+  if (mode === 'coords') {
+    const pick = hits[0]?.card;
+    if (!pick) return null;
+    const r = pick.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: hits[0].text };
+  }
+  return null;
+};
+
 /** Detecta se o card da grade (não Prezão) está selecionado. */
 export const isRechargeValueSelected = async (page, rechargeValue) =>
   page
-    .evaluate((valor) => {
-      const re = new RegExp(`R\\$\\s*${valor}(?:,00)?(?:\\b|\\+|\\s)`);
-      const skip = /renove seu prez|prez[aã]o de r\$/i;
-
-      const looksSelected = (el) => {
-        if (!el) return false;
-        if (el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-selected') === 'true') {
-          return true;
-        }
-        const cls = String(el.className || '');
-        if (/selected|active|checked|highlight|chosen|pressed/i.test(cls)) return true;
-        const style = window.getComputedStyle(el);
-        const bg = style.backgroundColor || '';
-        const borderW = parseFloat(style.borderWidth || '0');
-        if (
-          borderW >= 2 &&
-          style.borderColor &&
-          !/rgba?\(\s*255,\s*255,\s*255|transparent/i.test(style.borderColor)
-        ) {
-          return true;
-        }
-        if (bg && !/rgba?\(\s*255,\s*255,\s*255|transparent|rgba?\(\s*0,\s*0,\s*0,\s*0\)/i.test(bg)) {
-          return true;
-        }
-        return false;
-      };
-
-      for (const el of document.querySelectorAll(
-        'button, [role="button"], [role="radio"], [role="option"], label, div, li',
-      )) {
-        const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-        if (skip.test(t) || !re.test(t) || t.length > 120) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width < 50 || r.height < 36) continue;
-        if (looksSelected(el)) return true;
-        const parent = el.closest(
-          '[aria-checked="true"], [aria-selected="true"], [class*="selected" i], [class*="active" i]',
-        );
-        if (parent && re.test((parent.innerText || '').replace(/\s+/g, ' ').trim())) return true;
-      }
-      return false;
-    }, rechargeValue)
+    .evaluate(valueGridBrowserLogic, { valor: rechargeValue, mode: 'selected' })
     .catch(() => false);
 
 /** Clica no card da grade de valores (ex. R$35 +10GB) — um clique, mouse no centro. */
@@ -294,53 +332,30 @@ export const clickValueGridCard = async (page, session, rechargeValue) => {
   if (session) setSessionStep(session, 'valor', `Selecionando valor R$ ${rechargeValue}…`);
   await dismissBlockingModals(page);
 
+  await page
+    .evaluate(() => {
+      const h = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,div,label')].find((el) =>
+        /escolha um valor de recarga/i.test((el.innerText || '').replace(/\s+/g, ' ').trim()),
+      );
+      h?.scrollIntoView({ block: 'center', behavior: 'instant' });
+    })
+    .catch(() => {});
+  await sleep(350);
+
   const valRe = rechargeValueRegex(rechargeValue);
   const coords = await page
-    .evaluate((valor) => {
-      const re = new RegExp(`R\\$\\s*${valor}(?:,00)?(?:\\b|\\+|\\s)`);
-      const skip = /renove seu prez|prez[aã]o de r\$/i;
-
-      const findCard = (el) => {
-        let node = el;
-        for (let i = 0; i < 6 && node; i += 1) {
-          const r = node.getBoundingClientRect();
-          if (r.width >= 70 && r.width <= 380 && r.height >= 44 && r.height <= 220) return node;
-          node = node.parentElement;
-        }
-        return el;
-      };
-
-      const hits = [];
-      for (const el of document.querySelectorAll('button, [role="button"], [role="radio"], label, div, li, span')) {
-        const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-        if (skip.test(t) || !re.test(t) || t.length > 90) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width < 40 || r.height < 30 || r.top < 0 || r.top > window.innerHeight) continue;
-        const card = findCard(el);
-        const cr = card.getBoundingClientRect();
-        if (cr.width < 70 || cr.height < 44) continue;
-        hits.push({ card, area: cr.width * cr.height, y: cr.top, text: t.slice(0, 60) });
-      }
-
-      hits.sort((a, b) => {
-        const aGrid = /b[oô]nus|gb|\+/i.test(a.text) ? 0 : 1;
-        const bGrid = /b[oô]nus|gb|\+/i.test(b.text) ? 0 : 1;
-        if (aGrid !== bGrid) return aGrid - bGrid;
-        return a.area - b.area || a.y - b.y;
-      });
-
-      const pick = hits[0]?.card;
-      if (!pick) return null;
-      const r = pick.getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    }, rechargeValue)
+    .evaluate(valueGridBrowserLogic, { valor: rechargeValue, mode: 'coords' })
     .catch(() => null);
 
   if (coords) {
-    await page.mouse.click(coords.x, coords.y);
+    try {
+      await page.touchscreen.tap(coords.x, coords.y);
+    } catch {
+      await page.mouse.click(coords.x, coords.y);
+    }
     await sleep(config.pauseAfterClickMs);
     await dismissBonusModalIfVisible(page).catch(() => {});
-    console.log(`[automation] clicou grade R$ ${rechargeValue} (mouse centro)`);
+    console.log(`[automation] clicou grade R$ ${rechargeValue} (tap centro) card="${coords.text}"`);
     return true;
   }
 
@@ -362,9 +377,17 @@ export const clickValueGridCard = async (page, session, rechargeValue) => {
       await loc.scrollIntoViewIfNeeded().catch(() => {});
       const box = await loc.boundingBox().catch(() => null);
       if (box) {
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        try {
+          await page.touchscreen.tap(x, y);
+        } catch {
+          await page.mouse.click(x, y);
+        }
       } else {
-        await loc.click({ timeout: config.actionTimeoutMs, force: true });
+        await loc.tap({ timeout: config.actionTimeoutMs, force: true }).catch(() =>
+          loc.click({ timeout: config.actionTimeoutMs, force: true }),
+        );
       }
       await sleep(config.pauseAfterClickMs);
       await dismissBonusModalIfVisible(page).catch(() => {});
