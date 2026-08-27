@@ -302,6 +302,54 @@ export const selectCreditCardPaymentMethod = async (page, session = null) => {
   return viaEval;
 };
 
+/** Banner "Renove seu Prezão" — números Prezão abrem checkout por aqui (ex. 21992358933). */
+export const clickPrezaoRenewBanner = async (page, session, rechargeValue) => {
+  const hasBanner = await visibleTextMatch(page, /renove seu prez/i);
+  if (!hasBanner) return false;
+
+  const valRe = new RegExp(`R\\$\\s*${rechargeValue}(?:,00)?\\b`);
+  const banner = page
+    .locator('button, [role="button"], a, div')
+    .filter({ hasText: /renove seu prez/i })
+    .filter({ hasText: valRe })
+    .first();
+
+  if ((await banner.count()) > 0) {
+    try {
+      await banner.scrollIntoViewIfNeeded().catch(() => {});
+      await banner.click({ timeout: config.actionTimeoutMs, force: true });
+      if (session) setSessionStep(session, 'valor', `Renove Prezão R$ ${rechargeValue}…`);
+      console.log('[automation] clicou banner Renove seu Prezão');
+      await sleep(config.pauseAfterClickMs);
+      return true;
+    } catch {
+      // fallback evaluate
+    }
+  }
+
+  const clicked = await page
+    .evaluate((valor) => {
+      const re = new RegExp(`R\\$\\s*${valor}(?:,00)?\\b`);
+      for (const el of document.querySelectorAll('button, [role="button"], a, div')) {
+        const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!/renove seu prez/i.test(t) || !re.test(t)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 80 || r.height < 24) continue;
+        el.click();
+        return true;
+      }
+      return false;
+    }, rechargeValue)
+    .catch(() => false);
+
+  if (clicked) {
+    if (session) setSessionStep(session, 'valor', `Renove Prezão R$ ${rechargeValue}…`);
+    console.log('[automation] clicou banner Renove seu Prezão (evaluate)');
+    await sleep(config.pauseAfterClickMs);
+  }
+  return clicked;
+};
+
 /** Após escolher valor — Continuar (não fecha modal de pagamento). */
 export const confirmProceedAfterValue = async (page) => {
   if (await detectPaymentMethodModal(page)) return false;

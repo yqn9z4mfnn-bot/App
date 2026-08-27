@@ -10,6 +10,7 @@ import {
   waitForPaymentMethodModal,
   isRechargeValueSelected,
   detectPaymentMethodModal,
+  clickPrezaoRenewBanner,
   setSessionStep,
   webPortalPath,
   visibleTextMatch,
@@ -200,7 +201,7 @@ async function waitForCheckoutAfterValue(page, session, sinceTs) {
     await sleep(config.pollIntervalMs);
   }
 
-  await advanceToEldoradoCheckout(page, session, rechargeValue);
+  await advanceToEldoradoCheckout(page, session, rechargeValue, sinceTs);
   await dismissBlockingModals(page).catch(() => {});
   if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return true;
   if (await waitForSmartCheckout(page, 15000)) return true;
@@ -220,7 +221,14 @@ export const runWebLinkRecharge = async (session, payload) => {
   await dismissBlockingModals(page);
 
   const checkoutApiSince = Date.now();
-  await clickRechargeValueButton(page, session, rechargeValue, { doubleTap: true });
+
+  // Prezão (ex. 21992358933): banner "Renove seu Prezão" abre checkout direto
+  let valueClicked = await clickPrezaoRenewBanner(page, session, rechargeValue);
+  if (!valueClicked) {
+    valueClicked = await clickRechargeValueButton(page, session, rechargeValue, { doubleTap: true });
+  }
+  if (!valueClicked) throw new Error(`Valor R$ ${rechargeValue} não disponível na Claro.`);
+
   await proceedToCheckoutAfterValue(page, session, rechargeValue, checkoutApiSince);
 
   const checkoutOk = await waitForCheckoutAfterValue(page, session, checkoutApiSince);
