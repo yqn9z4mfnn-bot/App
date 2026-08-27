@@ -157,7 +157,7 @@ async function openPaymentMethodModal(page, session, rechargeValue) {
 async function advanceToEldoradoCheckout(page, session, rechargeValue, sinceTs) {
   if (sinceTs && (await checkoutIsReady(page, session.gateCapture, sinceTs))) return true;
   if (await detectPaymentMethodModal(page)) {
-    return selectCreditCardPaymentMethod(page, session);
+    await selectCreditCardPaymentMethod(page, session);
   }
   if (rechargeValue) {
     if (!(await detectPaymentMethodModal(page))) {
@@ -261,6 +261,9 @@ export const runWebLinkRecharge = async (session, payload) => {
     await saveStallDebug(page, session, session.gateCapture, 'gate_error', {
       gateMessage: paymentResult.gateMessage,
       gateCode: paymentResult.gateCode,
+      gateResponseBody: paymentResult.gateResponse?.body ?? null,
+      gateResponseUrl: paymentResult.gateResponse?.url ?? null,
+      gateHttpStatus: paymentResult.gateResponse?.httpStatus ?? null,
     }).catch(() => {});
   } else {
     const dbg = paymentResult?.debug;

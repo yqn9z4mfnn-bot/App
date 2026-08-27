@@ -47,7 +47,41 @@ const pickGateFields = (body) => {
       message: body.tags?.transaction?.reason || body.message || null,
     };
   }
-  return { code: body.status || null, message: body.message || null };
+  if (body.exception?.message) {
+    return {
+      code: body.status || body.exception?.name || 'ERROR',
+      message: String(body.exception.message).split('\n')[0].slice(0, 500),
+    };
+  }
+  if (body.error?.message) {
+    return {
+      code: body.status || body.error?.code || 'ERROR',
+      message: String(body.error.message).slice(0, 500),
+    };
+  }
+  if (body.message) {
+    return { code: body.status || body.code || null, message: String(body.message).slice(0, 500) };
+  }
+  return { code: body.status || null, message: null };
+};
+
+/** Última captura relevante de erro (422, DENIED, 502 Braspag…). */
+export const findBestGateErrorCapture = (gateCapture) => {
+  const list = gateCapture?.captures ?? [];
+  const ranked = list
+    .map((c) => {
+      let score = 0;
+      const u = c.url || '';
+      const b = c.body;
+      if (c.httpStatus >= 400) score += 50;
+      if (/\/recharges/i.test(u) && c.httpStatus === 422) score += 40;
+      if (/braspag/i.test(u)) score += 35;
+      if (gateIndicatesError(c)) score += 30;
+      if (b?.negativeReason || b?.payments?.[0]?.negativeReason) score += 25;
+      return { c, score: score * 1e6 + c.ts };
+    })
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.c ?? null;
 };
 
 const logGateCapture = (cap) => {
@@ -175,13 +209,14 @@ const scanPageForPaymentOutcome = async (page) => {
 };
 
 const buildPaymentResult = (page, status, url, gateCapture, hint = '', debugInfo = null) => {
-  const best = gateCapture?.best?.() || null;
+  const errCap = status === 'error' ? findBestGateErrorCapture(gateCapture) : null;
+  const best = errCap || gateCapture?.best?.() || null;
   const fields = best ? pickGateFields(best.body) : { code: null, message: null };
   return {
     status,
     url,
     gateResponse: best,
-    gateCode: fields.code,
+    gateCode: fields.code ?? best?.httpStatus ?? null,
     gateMessage: fields.message || hint || null,
     pagamentoErro: status === 'error',
     message: fields.message || hint || status,
