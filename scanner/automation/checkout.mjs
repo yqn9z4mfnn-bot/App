@@ -20,9 +20,21 @@ export const findCardPaymentFrame = (page) =>
   page.frames().find((f) => f.url().includes('new-claro-recarga.html') || isEldoradoCheckoutUrl(f.url())) ??
   null;
 
+const isCheckoutFrameUrl = (url) =>
+  isEldoradoCheckoutUrl(url) ||
+  /smart-checkout|bemobi\.com|new-claro-recarga\.html/i.test(url || '');
+
 export const hasSmartCheckout = async (page) => {
-  if ((await page.locator('iframe#checkout, iframe[title="smartCheckout"]').count()) > 0) return true;
-  return page.frames().some((f) => isEldoradoCheckoutUrl(f.url()));
+  const pageUrl = page.url() || '';
+  if (/\/smartcheckout/i.test(pageUrl)) return true;
+  const iframeSel =
+    'iframe#checkout, iframe[title="smartCheckout"], iframe[src*="eldorado"], iframe[src*="bemobi"], iframe[src*="smart-checkout"]';
+  if ((await page.locator(iframeSel).count()) > 0) return true;
+  if (page.frames().some((f) => isCheckoutFrameUrl(f.url()))) return true;
+  if ((await page.locator('#pan, input[name="pan"], input[autocomplete="cc-number"]').count()) > 0) {
+    return true;
+  }
+  return false;
 };
 
 export const waitForSmartCheckout = async (page, timeoutMs = 15000) => {

@@ -60,6 +60,15 @@ const logGateCapture = (cap) => {
   );
 };
 
+export const hasSmartCheckoutApiCall = (gateCapture, sinceTs = 0) =>
+  (gateCapture?.captures ?? []).some(
+    (c) =>
+      c.ts >= sinceTs &&
+      /smartcheckout\/v2\/url/i.test(c.url || '') &&
+      c.httpStatus >= 200 &&
+      c.httpStatus < 300,
+  );
+
 export const attachGateCapture = (context) => {
   const captures = [];
   const onResponse = async (response) => {

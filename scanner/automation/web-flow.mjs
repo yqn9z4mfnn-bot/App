@@ -4,6 +4,8 @@ import {
   clickByText,
   dismissCookieBanner,
   dismissBonusModalIfVisible,
+  dismissBlockingModals,
+  confirmProceedAfterValue,
   setSessionStep,
   webPortalPath,
   visibleTextMatch,
@@ -14,7 +16,7 @@ import {
   detectPixOnlyCheckout,
   runWebLinkCheckoutPay,
 } from './checkout.mjs';
-import { waitForPaymentResult } from './gate.mjs';
+import { waitForPaymentResult, hasSmartCheckoutApiCall } from './gate.mjs';
 
 const webNeedsOutroNumero = (session) => {
   const access = String(session?.accessNumber || '').replace(/\D/g, '');
@@ -55,8 +57,8 @@ export const ensureWebRechargeReady = async (session) => {
 
 export const clickRechargeValueButton = async (page, session, rechargeValue) => {
   setSessionStep(session, 'valor', `Selecionando valor R$ ${rechargeValue}…`);
-  await dismissCookieBanner(page);
-  const valRe = new RegExp(`R\\$\\s*${rechargeValue}\\b`);
+  await dismissBlockingModals(page);
+  const valRe = new RegExp(`R\\$\\s*${rechargeValue}(?:,00)?\\b`);
   const candidates = [
     page.getByRole('button', { name: valRe }).first(),
     page.getByRole('radio', { name: valRe }).first(),
@@ -67,56 +69,89 @@ export const clickRechargeValueButton = async (page, session, rechargeValue) => 
     try {
       if ((await loc.count()) === 0) continue;
       await loc.waitFor({ state: 'visible', timeout: 5000 });
+      await loc.scrollIntoViewIfNeeded().catch(() => {});
       await loc.click({ timeout: config.actionTimeoutMs, force: true });
-      await dismissBonusModalIfVisible(page);
+      await dismissBlockingModals(page);
       return;
     } catch {
       // próximo
     }
   }
   const clicked = await page.evaluate((valor) => {
-    const re = new RegExp(`R\\$\\s*${valor}\\b`);
+    const re = new RegExp(`R\\$\\s*${valor}(?:,00)?\\b`);
     const nodes = [...document.querySelectorAll('button, [role="button"], [role="radio"], label, a, div, span')];
-    const el = nodes.find((n) => {
+    const hit = nodes.find((n) => {
       const t = (n.innerText || n.textContent || '').replace(/\s+/g, ' ').trim();
       return t.length < 80 && re.test(t);
     });
-    if (!el) return false;
-    el.click();
+    if (!hit) return false;
+    const findClickable = (el) => {
+      let node = el;
+      for (let i = 0; i < 7 && node; i += 1) {
+        const tag = node.tagName?.toLowerCase() || '';
+        const role = node.getAttribute?.('role') || '';
+        if (tag === 'button' || tag === 'a' || role === 'button' || role === 'radio') return node;
+        node = node.parentElement;
+      }
+      return el;
+    };
+    findClickable(hit).click();
     return true;
   }, rechargeValue);
   if (clicked) {
-    await dismissBonusModalIfVisible(page);
+    await dismissBlockingModals(page);
     return;
   }
   throw new Error(`Valor R$ ${rechargeValue} não disponível na Claro.`);
 };
 
+const checkoutIsReady = async (page, gateCapture, sinceTs) =>
+  (await hasSmartCheckout(page)) || hasSmartCheckoutApiCall(gateCapture, sinceTs);
+
+/** Após valor: Continuar + retry se API smartcheckout não disparar. */
+async function proceedToCheckoutAfterValue(page, session, rechargeValue, sinceTs) {
+  await confirmProceedAfterValue(page);
+  await sleep(config.pauseAfterValueMs);
+
+  if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return;
+
+  await sleep(1500);
+  await dismissBlockingModals(page);
+  if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return;
+
+  console.log('[automation] checkout não iniciou — repetindo clique no valor…');
+  await clickRechargeValueButton(page, session, rechargeValue);
+  await confirmProceedAfterValue(page);
+  await sleep(config.pauseAfterValueMs);
+}
+
 /** Espera iframe Eldorado após escolher valor (modal bônus atrapalha). */
-async function waitForCheckoutAfterValue(page, session) {
+async function waitForCheckoutAfterValue(page, session, sinceTs) {
   setSessionStep(session, 'smart_checkout', 'Aguardando checkout abrir…');
   const started = Date.now();
   const deadline = started + config.checkoutOpenTimeoutMs;
   let lastLog = 0;
 
   while (Date.now() < deadline) {
-    await dismissBonusModalIfVisible(page).catch(() => {});
-    if (await hasSmartCheckout(page)) return true;
+    await dismissBlockingModals(page).catch(() => {});
+    if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return true;
     if (await detectPixOnlyCheckout(page)) {
       throw new Error('Valor não disponível nesse número (somente Pix).');
     }
     const elapsed = Date.now() - started;
     if (elapsed - lastLog > 8000) {
+      const apiHit = hasSmartCheckoutApiCall(session.gateCapture, sinceTs);
       console.log(
-        `[automation] aguardando checkout… ${Math.round(elapsed / 1000)}s url=${(page.url() || '').slice(0, 80)}`,
+        `[automation] aguardando checkout… ${Math.round(elapsed / 1000)}s ` +
+          `api=${apiHit ? 'ok' : 'pendente'} url=${(page.url() || '').slice(0, 80)}`,
       );
       lastLog = elapsed;
     }
     await sleep(config.pollIntervalMs);
   }
 
-  await dismissBonusModalIfVisible(page).catch(() => {});
-  if (await hasSmartCheckout(page)) return true;
+  await dismissBlockingModals(page).catch(() => {});
+  if (await checkoutIsReady(page, session.gateCapture, sinceTs)) return true;
   if (await waitForSmartCheckout(page, 15000)) return true;
 
   if (await detectPixOnlyCheckout(page)) {
@@ -131,18 +166,19 @@ export const runWebLinkRecharge = async (session, payload) => {
   if (!rechargeValue) throw new Error('rechargeValue é obrigatório.');
 
   await ensureWebRechargeReady(session);
-  await dismissBonusModalIfVisible(page);
+  await dismissBlockingModals(page);
 
+  const checkoutApiSince = Date.now();
   await clickRechargeValueButton(page, session, rechargeValue);
-  await dismissBonusModalIfVisible(page).catch(() => {});
-  await sleep(config.pauseAfterValueMs);
+  await proceedToCheckoutAfterValue(page, session, rechargeValue, checkoutApiSince);
 
-  const checkoutOk = await waitForCheckoutAfterValue(page, session);
+  const checkoutOk = await waitForCheckoutAfterValue(page, session, checkoutApiSince);
   if (!checkoutOk) {
     const { saveStallDebug } = await import('./debug.mjs');
     await saveStallDebug(page, session, session.gateCapture, 'checkout_nao_abriu', {
       rechargeValue,
       url: page.url(),
+      smartcheckoutApi: hasSmartCheckoutApiCall(session.gateCapture, checkoutApiSince),
     }).catch(() => {});
     throw new Error('Checkout não abriu após selecionar valor.');
   }

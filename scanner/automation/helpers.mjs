@@ -152,6 +152,73 @@ export const dismissBonusModalIfVisible = async (page) => {
   return false;
 };
 
+/** Fecha modais de bônus, upsell e overlays que bloqueiam o checkout. */
+export const dismissBlockingModals = async (page) => {
+  let dismissed = false;
+  dismissed = (await dismissCookieBanner(page)) || dismissed;
+  dismissed = (await dismissBonusModalIfVisible(page)) || dismissed;
+
+  const dismissPatterns = [
+    /agora n[aã]o/i,
+    /n[aã]o,?\s*obrigad/i,
+    /continuar sem/i,
+    /pular/i,
+    /fechar/i,
+    /ignorar/i,
+  ];
+  for (const re of dismissPatterns) {
+    const btn = page.getByRole('button', { name: re }).first();
+    if ((await btn.count()) === 0) continue;
+    try {
+      if (await btn.isVisible().catch(() => false)) {
+        await btn.click({ timeout: 1500, force: true });
+        await sleep(280);
+        dismissed = true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const closeSelectors = [
+    page.locator('[aria-label="Fechar"]').first(),
+    page.locator('[aria-label="Close"]').first(),
+    page.locator('button[class*="close" i]').first(),
+  ];
+  for (const close of closeSelectors) {
+    if ((await close.count()) === 0) continue;
+    try {
+      if (await close.isVisible().catch(() => false)) {
+        await close.click({ timeout: 1200, force: true });
+        await sleep(250);
+        dismissed = true;
+        break;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return dismissed;
+};
+
+/** Após escolher valor — alguns fluxos exigem Continuar antes do iframe Eldorado. */
+export const confirmProceedAfterValue = async (page) => {
+  await dismissBlockingModals(page);
+  return clickByText(
+    page,
+    [
+      'Continuar',
+      'Avançar',
+      'Ir para pagamento',
+      'Confirmar',
+      'Pagar',
+      'Recarregar agora',
+      'Finalizar',
+    ],
+    6000,
+  );
+};
+
 export const visibleTextMatch = async (page, re) =>
   page.evaluate((pattern) => new RegExp(pattern, 'i').test(document.body?.innerText || ''), re.source);
 
