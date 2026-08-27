@@ -105,28 +105,115 @@ export const fillCardFormDirectly = async (page, pam) => {
   const holderInput = await resolveLocator(ctx, CARD_HOLDER_SELECTORS);
 
   await panInput.fill(String(pam.pan).replace(/\D/g, ''), { force: true });
-  await expirationInput.fill('', { force: true });
-  await expirationInput.type(String(pam.mmYY), { delay: config.pamTypingDelayMs, force: true });
+  await expirationInput.fill(String(pam.mmYY), { force: true });
   await cvvInput.fill(String(pam.cvv || config.defaultCvv), { force: true });
-  await holderInput.fill('', { force: true });
-  await holderInput.type(String(randomName(config.defaultCardholderMaxLen)), {
-    delay: config.pamTypingDelayMs,
-    force: true,
-  });
+  await holderInput.fill(String(randomName(config.defaultCardholderMaxLen)), { force: true });
+  await holderInput.press('Tab').catch(() => {});
+  await sleep(config.cardFormSettleMs);
 };
 
-export const fillEldoradoBscCheckout = async (page, pam) => {
-  const frame = (await waitForEldoradoCheckoutReady(page, 45000)) || findCardPaymentFrame(page);
-  if (!frame) throw new Error('Iframe Eldorado checkout não encontrado');
+export const fillEldoradoBscCheckout = async (page, pam, frame = null) => {
+  const checkoutFrame =
+    frame || findCardPaymentFrame(page) || (await waitForEldoradoCheckoutReady(page, 8000));
+  if (!checkoutFrame) throw new Error('Iframe Eldorado checkout não encontrado');
   await fillCardFormDirectly(page, pam);
 };
 
-export const clickEldoradoPayButton = async (page, timeoutMs = 30000) =>
-  clickInAnyFrame(
-    page,
-    ['Pagar R$', 'Pagar', 'Pagar agora', 'Confirmar pagamento', 'Confirmar', 'Finalizar', 'Recarregar'],
-    timeoutMs,
-  );
+const PAY_BUTTON_LABELS = [
+  'Pagar R$',
+  'Pagar',
+  'Pagar agora',
+  'Confirmar pagamento',
+  'Confirmar',
+  'Finalizar pagamento',
+  'Finalizar',
+  'Recarregar',
+  'Continuar',
+];
+
+const clickPayButtonInFrame = async (frame) => {
+  try {
+    const clicked = await frame.evaluate(() => {
+      const skip = /novo\s+(cr[eé]dito|cart[aã]o)|cadastrar|voltar|cancelar/i;
+      const prefer = /pagar\s*r?\$?|confirmar\s*pagamento|finalizar\s*pagamento|recarregar\s*agora/i;
+      const hits = [];
+      for (const el of document.querySelectorAll(
+        'button, [role="button"], input[type="submit"], a, div[class*="button" i]',
+      )) {
+        const t = (el.innerText || el.textContent || el.value || '').replace(/\s+/g, ' ').trim();
+        if (!t || t.length > 60 || skip.test(t)) continue;
+        if (!prefer.test(t) && !/^pagar$/i.test(t) && !/^confirmar$/i.test(t)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 48 || r.height < 28 || r.top < 0) continue;
+        const disabled =
+          el.disabled ||
+          el.getAttribute('aria-disabled') === 'true' ||
+          /disabled|inactive/i.test(String(el.className || ''));
+        hits.push({ el, t, y: r.top, area: r.width * r.height, disabled });
+      }
+      hits.sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        const aPay = /pagar/i.test(a.t) ? 0 : 1;
+        const bPay = /pagar/i.test(b.t) ? 0 : 1;
+        if (aPay !== bPay) return aPay - bPay;
+        return b.y - a.y || b.area - a.area;
+      });
+      const pick = hits.find((h) => !h.disabled) || hits[0];
+      if (!pick) return null;
+      pick.el.scrollIntoView({ block: 'center', behavior: 'instant' });
+      pick.el.click();
+      return pick.t;
+    });
+    return clicked || null;
+  } catch {
+    return null;
+  }
+};
+
+const waitForPayButtonReady = async (page, timeoutMs = 5000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      if (!isCheckoutFrameUrl(frame.url())) continue;
+      const ready = await frame
+        .evaluate(() => {
+          const skip = /novo\s+(cr[eé]dito|cart[aã]o)|cadastrar|voltar|cancelar/i;
+          for (const el of document.querySelectorAll('button, [role="button"], input[type="submit"]')) {
+            const t = (el.innerText || el.textContent || el.value || '').replace(/\s+/g, ' ').trim();
+            if (!/pagar|confirmar|finalizar|recarregar/i.test(t) || skip.test(t)) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width < 48 || r.height < 28) continue;
+            const disabled = el.disabled || el.getAttribute('aria-disabled') === 'true';
+            if (!disabled) return t;
+          }
+          return null;
+        })
+        .catch(() => null);
+      if (ready) return ready;
+    }
+    await sleep(config.pollIntervalMs);
+  }
+  return null;
+};
+
+export const clickEldoradoPayButton = async (page, timeoutMs = 12000) => {
+  const deadline = Date.now() + timeoutMs;
+  await waitForPayButtonReady(page, Math.min(5000, timeoutMs));
+
+  while (Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      if (!isCheckoutFrameUrl(frame.url())) continue;
+      const label = await clickPayButtonInFrame(frame);
+      if (label) {
+        console.log(`[automation] clicou pagar Eldorado: "${label}" frame=${frame.url().slice(0, 90)}`);
+        return true;
+      }
+    }
+    if (await clickInAnyFrame(page, PAY_BUTTON_LABELS, 1200)) return true;
+    await sleep(Math.min(config.pollIntervalMs, 150));
+  }
+  return false;
+};
 
 const clickCheckoutNewCard = async (page) => {
   for (const frame of page.frames()) {
@@ -155,10 +242,10 @@ export const ensureCheckoutNewCardForm = async (page, session) => {
   if (await isPanFormReady(page)) return true;
   setSessionStep(session, 'checkout_novo_cartao', 'Selecionando novo cartão no checkout…');
   await prepareEldoradoCheckoutForm(page);
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     if (await isPanFormReady(page)) return true;
     await clickCheckoutNewCard(page);
-    await sleep(config.cardFormSettleMs || 700);
+    await sleep(Math.min(config.cardFormSettleMs || 450, 500));
   }
   return isPanFormReady(page);
 };
@@ -168,16 +255,16 @@ export const ensureSmartCheckoutReady = async (page, session) => {
   await dismissBonusModalIfVisible(page);
   if (await hasSmartCheckout(page)) {
     await prepareEldoradoCheckoutForm(page);
-    await waitForEldoradoCheckoutReady(page, 30000);
+    await waitForEldoradoCheckoutReady(page, 10000);
     return true;
   }
   setSessionStep(session, 'smart_checkout', 'Aguardando checkout abrir…');
-  const deadline = Date.now() + 45000;
+  const deadline = Date.now() + 25000;
   while (Date.now() < deadline) {
     await dismissBonusModalIfVisible(page);
     if (await hasSmartCheckout(page)) {
       await prepareEldoradoCheckoutForm(page);
-      await waitForEldoradoCheckoutReady(page, 25000);
+      await waitForEldoradoCheckoutReady(page, 8000);
       return true;
     }
     await sleep(config.pollIntervalMs);
@@ -200,9 +287,9 @@ export const fillWebLinkCardDirect = async (session, pam) => {
   await prepareEldoradoCheckoutForm(page);
   await ensureCheckoutNewCardForm(page, session);
   setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');
-  const frame = await waitForEldoradoCheckoutReady(page, 15000);
+  const frame = findCardPaymentFrame(page) || (await waitForEldoradoCheckoutReady(page, 6000));
   if (frame) {
-    await fillEldoradoBscCheckout(page, pam);
+    await fillEldoradoBscCheckout(page, pam, frame);
   } else {
     await fillCardFormDirectly(page, pam);
   }
@@ -215,11 +302,14 @@ export const runWebLinkCheckoutPay = async (session, pam) => {
   setSessionStep(session, 'pagar', 'Confirmando pagamento…');
   let payOk = await clickEldoradoPayButton(page, 12000);
   if (!payOk) {
-    payOk = await clickInAnyFrame(
-      page,
-      ['Continuar', 'Finalizar pagamento', 'Recarregar'],
-      30000,
-    );
+    payOk = await clickInAnyFrame(page, PAY_BUTTON_LABELS, 4000);
   }
-  if (!payOk) throw new Error('Botão de confirmar pagamento no checkout não encontrado.');
+  if (!payOk) {
+    const { saveStallDebug } = await import('./debug.mjs');
+    await saveStallDebug(page, session, session.gateCapture, 'pay_button_missing', {
+      url: page.url(),
+      frames: page.frames().map((f) => f.url()).slice(0, 12),
+    }).catch(() => {});
+    throw new Error('Botão de confirmar pagamento no checkout não encontrado.');
+  }
 };

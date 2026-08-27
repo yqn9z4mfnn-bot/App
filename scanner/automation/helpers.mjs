@@ -340,7 +340,7 @@ export const clickValueGridCard = async (page, session, rechargeValue) => {
       h?.scrollIntoView({ block: 'center', behavior: 'instant' });
     })
     .catch(() => {});
-  await sleep(350);
+  await sleep(150);
 
   const valRe = rechargeValueRegex(rechargeValue);
   const coords = await page
@@ -439,7 +439,7 @@ export const selectCreditCardPaymentMethod = async (page, session = null) => {
       } else {
         await loc.click({ timeout: config.actionTimeoutMs, force: true });
       }
-      await sleep(config.pauseAfterClickMs + 400);
+      await sleep(config.pauseAfterClickMs + 150);
       return !(await detectPaymentMethodModal(page));
     } catch {
       return false;

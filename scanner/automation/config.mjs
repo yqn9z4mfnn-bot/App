@@ -18,25 +18,29 @@ export const config = {
   defaultCvv: process.env.DEFAULT_CVV ?? '0000',
   defaultCardholderMaxLen: toInt(process.env.DEFAULT_CARDHOLDER_MAX_LEN, 7),
   keepBrowserOpenSeconds: toInt(process.env.KEEP_BROWSER_OPEN_SECONDS, 5),
+  /** Após 3DS: mantém Edge aberto para confirmação manual (segundos). */
+  keepBrowserOpen3dsSeconds: toInt(process.env.KEEP_BROWSER_OPEN_3DS_SECONDS, 300),
+  /** Tempo extra de gate-wait após detectar 3DS (ms). */
+  threedsExtraWaitMs: toInt(process.env.THREEDS_EXTRA_WAIT_MS, 180000),
   maxConcurrentSessions: toInt(process.env.MAX_CONCURRENT_SESSIONS, 3),
   sessionSlotWaitMs: toInt(process.env.SESSION_SLOT_WAIT_MS, 600000),
   actionTimeoutMs: toInt(process.env.ACTION_TIMEOUT_MS, 20000),
   cardIframeTimeoutMs: toInt(process.env.CARD_IFRAME_TIMEOUT_MS, 45000),
   cardFormReadyTimeoutMs: toInt(process.env.CARD_FORM_READY_TIMEOUT_MS, 18000),
-  cardFormSettleMs: toInt(process.env.CARD_FORM_SETTLE_MS, 900),
+  cardFormSettleMs: toInt(process.env.CARD_FORM_SETTLE_MS, 450),
   elementClickTimeoutMs: toInt(process.env.ELEMENT_CLICK_TIMEOUT_MS, 20000),
-  pamTypingDelayMs: toInt(process.env.PAM_TYPING_DELAY_MS, 80),
+  pamTypingDelayMs: toInt(process.env.PAM_TYPING_DELAY_MS, 35),
   mobileViewportWidth: toInt(process.env.MOBILE_VIEWPORT_WIDTH, 390),
   mobileViewportHeight: toInt(process.env.MOBILE_VIEWPORT_HEIGHT, 844),
   browserWindowWidth: toInt(process.env.BROWSER_WINDOW_WIDTH, 980),
   browserWindowHeight: toInt(process.env.BROWSER_WINDOW_HEIGHT, 980),
   stepDelayDefaultMs: toInt(process.env.STEP_DELAY_DEFAULT_MS, 700),
   /** Pausas curtas entre cliques/navegação (ms) — aumente no .env se PC lento. */
-  pauseAfterNavMs: toInt(process.env.PAUSE_AFTER_NAV_MS, 600),
-  pauseAfterClickMs: toInt(process.env.PAUSE_AFTER_CLICK_MS, 450),
+  pauseAfterNavMs: toInt(process.env.PAUSE_AFTER_NAV_MS, 400),
+  pauseAfterClickMs: toInt(process.env.PAUSE_AFTER_CLICK_MS, 280),
   /** Após clicar no valor — checkout Eldorado demora; não encurtar demais. */
-  pauseAfterValueMs: toInt(process.env.PAUSE_AFTER_VALUE_MS, 1200),
-  pollIntervalMs: toInt(process.env.POLL_INTERVAL_MS, 300),
+  pauseAfterValueMs: toInt(process.env.PAUSE_AFTER_VALUE_MS, 650),
+  pollIntervalMs: toInt(process.env.POLL_INTERVAL_MS, 180),
   checkoutOpenTimeoutMs: toInt(process.env.CHECKOUT_OPEN_TIMEOUT_MS, 45000),
 };
 
