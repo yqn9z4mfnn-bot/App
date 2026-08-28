@@ -303,13 +303,26 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       threedsUiWaitMs: config.threedsUiWaitMs,
     });
     if (threeDs?.detected) {
-      return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+      if (session && !session.threeDsSeen) {
+        session.threeDsSeen = threeDs;
+        console.log(
+          `[automation][3ds] detectado (${threeDs.kind}) — continuando gate-wait até CONFIRMED/DENIED…`,
+        );
+        if (threeDs.hint) {
+          console.log(`[automation][3ds] tela: ${threeDs.hint.slice(0, 160)}`);
+        }
+      }
+      // Não encerra aqui — aguarda resposta final da gate (ex. PENDING → CONFIRMED).
     }
 
     await sleep(config.pollIntervalMs);
   }
 
   const elapsed = Date.now() - start;
+  if (session?.threeDsSeen) {
+    return build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed);
+  }
+
   const debugInfo = session
     ? await saveStallDebug(page, session, gateCapture, 'gate_timeout', {
         waitedMs: elapsed,
