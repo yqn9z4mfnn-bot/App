@@ -20,6 +20,24 @@ export const findCardPaymentFrame = (page) =>
   page.frames().find((f) => f.url().includes('new-claro-recarga.html') || isEldoradoCheckoutUrl(f.url())) ??
   null;
 
+/** Procura iframe (ou página) que contém o campo PAN. */
+export const findPanContext = async (page) => {
+  const preferred = findCardPaymentFrame(page);
+  if (preferred) {
+    for (const sel of CARD_PAN_SELECTORS) {
+      const pan = preferred.locator(sel).first();
+      if ((await pan.count()) > 0) return preferred;
+    }
+  }
+  for (const frame of page.frames()) {
+    for (const sel of CARD_PAN_SELECTORS) {
+      const pan = frame.locator(sel).first();
+      if ((await pan.count()) > 0) return frame;
+    }
+  }
+  return page;
+};
+
 const isCheckoutFrameUrl = (url) =>
   isEldoradoCheckoutUrl(url) ||
   /smart-checkout|bemobi\.com|new-claro-recarga\.html/i.test(url || '');
@@ -55,16 +73,33 @@ const resolveLocator = async (ctx, selectors) => {
 };
 
 export const isPanFormReady = async (page) => {
-  const frame = findCardPaymentFrame(page);
-  const ctx = frame || page;
-  for (const sel of CARD_PAN_SELECTORS) {
-    const pan = ctx.locator(sel).first();
-    if ((await pan.count()) === 0) continue;
-    try {
-      await pan.waitFor({ state: 'visible', timeout: 1200 });
-      if (!(await pan.isDisabled())) return true;
-    } catch {
-      // try next selector
+  for (const ctx of [page, ...page.frames()]) {
+    for (const sel of CARD_PAN_SELECTORS) {
+      const pan = ctx.locator(sel).first();
+      if ((await pan.count()) === 0) continue;
+      try {
+        await pan.waitFor({ state: 'visible', timeout: 1200 });
+        if (!(await pan.isDisabled())) return true;
+      } catch {
+        // try next selector
+      }
+    }
+  }
+  return false;
+};
+
+const isCvvOnlyFormReady = async (page) => {
+  if (await isPanFormReady(page)) return false;
+  for (const ctx of [page, ...page.frames()]) {
+    for (const sel of CARD_CVV_SELECTORS) {
+      const cvv = ctx.locator(sel).first();
+      if ((await cvv.count()) === 0) continue;
+      try {
+        await cvv.waitFor({ state: 'visible', timeout: 800 });
+        if (!(await cvv.isDisabled())) return true;
+      } catch {
+        // continue
+      }
     }
   }
   return false;
@@ -100,8 +135,7 @@ export const prepareEldoradoCheckoutForm = async (page) => {
 };
 
 export const fillCardFormDirectly = async (page, pam) => {
-  const frame = findCardPaymentFrame(page);
-  const ctx = frame || page;
+  const ctx = await findPanContext(page);
   const panInput = await resolveLocator(ctx, CARD_PAN_SELECTORS);
   const expirationInput = await resolveLocator(ctx, CARD_EXP_SELECTORS);
   const cvvInput = await resolveLocator(ctx, CARD_CVV_SELECTORS);
@@ -218,32 +252,52 @@ export const clickEldoradoPayButton = async (page, timeoutMs = 12000) => {
   return false;
 };
 
+const MANUAL_CARD_LABELS = [
+  'Inserir dados do cartão manualmente',
+  'Enter card details manually',
+  'Usar outro cartão',
+  'Pagar com outro cartão',
+  'Outro cartão',
+  'Cadastrar novo cartão',
+  'Novo crédito',
+  'Novo cartão',
+  'Novo',
+];
+
+const dismissCheckoutOverlays = async (page) => {
+  await dismissBonusModalIfVisible(page).catch(() => {});
+  await clickInAnyFrame(page, MANUAL_CARD_LABELS, 600).catch(() => {});
+};
+
 const clickCheckoutNewCard = async (page) => {
+  await dismissCheckoutOverlays(page);
   for (const frame of page.frames()) {
-    if (!isEldoradoCheckoutUrl(frame.url())) continue;
     try {
       const hit = await frame.evaluate(() => {
-        for (const el of document.querySelectorAll('*')) {
-          const t = (el.innerText || '').replace(/\s+/g, ' ').trim();
-          if (
-            !/^novo(\s+cr[eé]dito|\s+cart[aã]o)?$/i.test(t) &&
-            !/^cadastrar novo cart[aã]o$/i.test(t)
-          ) {
-            continue;
-          }
+        const patterns = [
+          /^novo(\s+cr[eé]dito|\s+cart[aã]o)?$/i,
+          /^cadastrar novo cart[aã]o$/i,
+          /^inserir dados do cart[aã]o manualmente$/i,
+          /^usar outro cart[aã]o$/i,
+          /^pagar com outro cart[aã]o$/i,
+          /^outro cart[aã]o$/i,
+        ];
+        for (const el of document.querySelectorAll('button, a, [role="button"], span, div')) {
+          const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!patterns.some((re) => re.test(t))) continue;
           const r = el.getBoundingClientRect();
           if (r.width < 20 || r.height < 20) continue;
           el.click();
-          return true;
+          return t;
         }
-        return false;
+        return null;
       });
       if (hit) return true;
     } catch {
       // ignore
     }
   }
-  return clickInAnyFrame(page, ['Novo crédito', 'Novo cartão', 'Cadastrar novo cartão', 'Novo'], 5000);
+  return clickInAnyFrame(page, MANUAL_CARD_LABELS, 1200);
 };
 
 export const ensureCheckoutNewCardForm = async (page, session) => {
@@ -299,13 +353,23 @@ export const fillWebLinkCardDirect = async (session, pam) => {
 
   if (session.checkoutLinkMode) {
     await prepareEldoradoCheckoutForm(page);
-    const panDeadline = Date.now() + 22000;
+    await waitForEldoradoCheckoutReady(page, 12000);
+    const panDeadline = Date.now() + 28000;
     while (Date.now() < panDeadline) {
       if (await isPanFormReady(page)) break;
-      await clickCheckoutNewCard(page);
+      if (await isCvvOnlyFormReady(page)) {
+        await clickCheckoutNewCard(page);
+      } else {
+        await dismissCheckoutOverlays(page);
+        await clickCheckoutNewCard(page);
+      }
       await sleep(config.cardFormSettleMs || 450);
     }
     if (!(await isPanFormReady(page))) {
+      const { saveStallDebug } = await import('./debug.mjs');
+      await saveStallDebug(page, session, session.gateCapture, 'pan_missing_checkout_link', {
+        cvvOnly: await isCvvOnlyFormReady(page),
+      }).catch(() => {});
       throw new Error('Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).');
     }
     setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');

@@ -19,7 +19,14 @@ import { runWebLinkRecharge } from './web-flow.mjs';
 import { runWebLinkCheckoutPay, ensureSmartCheckoutReady } from './checkout.mjs';
 import { waitForPaymentResult } from './gate.mjs';
 import { prepareCheckoutViaHttp } from '../lib/prepare-checkout-http.mjs';
-import { fetchWalletCards, deleteAllWalletCards, openWalletSession } from '../lib/eldorado.mjs';
+import {
+  fetchWalletCards,
+  deleteAllWalletCards,
+  openWalletSession,
+  unifySavedCards,
+  deleteCardEverywhere,
+} from '../lib/eldorado.mjs';
+import { scanClaroEssential } from '../lib/claro.mjs';
 import { stopVncIfIdle } from './vnc.mjs';
 import { removeUsedCardAfterRecharge } from './card-cleanup.mjs';
 
@@ -401,12 +408,27 @@ export const startSessionFromCheckoutLink = async (payload) => {
   if (prep.bemobiToken && prep.checkoutCode) {
     try {
       const cardsRes = await fetchWalletCards(prep.bemobiToken, prep.checkoutCode);
-      const saved = Array.isArray(cardsRes.body) ? cardsRes.body : [];
+      const claroEssential = await scanClaroEssential(prep.claroSessionId, accessNumber, {
+        includeProducts: false,
+      }).catch(() => null);
+      const saved = unifySavedCards(
+        Array.isArray(cardsRes.body) ? cardsRes.body : [],
+        claroEssential?.paymentMethods?.body,
+      );
       if (saved.length) {
         console.log(
           `[automation] checkout-link: limpando ${saved.length} cartão(ões) salvos via HTTP…`,
         );
         await deleteAllWalletCards(prep.bemobiToken, prep.checkoutCode, saved);
+        for (const card of saved) {
+          await deleteCardEverywhere({
+            bemobiToken: prep.bemobiToken,
+            checkoutCode: prep.checkoutCode,
+            sessionId: prep.claroSessionId,
+            msisdn: accessNumber,
+            cardToken: card.token,
+          }).catch(() => {});
+        }
         const wallet2 = await openWalletSession(prep.claroSessionId, accessNumber, prep.product.id);
         if (wallet2.error) {
           console.log(
