@@ -22,7 +22,7 @@ export const describe3dsKind = (kind, hint = '', opts = {}) => {
       : 'VBV visual — aprove no app/SMS do banco (Edge fechado)';
   }
   if (kind === 'challenge_api') {
-    return '3DS acionado pelo banco — aguardando confirmação frictionless';
+    return '3DS acionado pelo banco — confirme no app/SMS do banco';
   }
   return browserOpen
     ? 'Validação 3DS do cartão — confirme manualmente no Edge'
@@ -49,15 +49,9 @@ export function isVisualVbv(threeDs) {
   return false;
 }
 
-/** VBV visual / SMS → para na hora; só API frictionless continua gate-wait. */
+/** Qualquer 3DS detectado → encerra gate-wait na hora (sem esperar CONFIRMED). */
 export function threedsRequiresImmediateAction(threeDs) {
-  if (!threeDs?.detected) return false;
-  if (isVisualVbv(threeDs)) return true;
-  if (threeDs.kind === 'sms') return true;
-  const hint = String(threeDs.hint || '');
-  if (/enviar sms|digite o c[oó]digo|c[oó]digo.*sms|token.*seguran/i.test(hint)) return true;
-  if (threeDs.kind === 'challenge_api' && !threeDs.uiVisible) return false;
-  return false;
+  return Boolean(threeDs?.detected);
 }
 
 /** Procura iframe/tela 3DS visível (prioridade sobre API). */
@@ -95,8 +89,7 @@ async function scan3dsUiFrames(page) {
 }
 
 /**
- * Detecta 3DS: tela visível primeiro; API /3ds/challenge só após threedsUiWaitMs
- * (evita sinalizar 3DS antes do iframe do banco abrir).
+ * Detecta 3DS: tela visível primeiro; API /3ds/challenge → para na hora.
  */
 export async function detect3dsChallenge(page, gateCapture = null, opts = {}) {
   const uiHit = await scan3dsUiFrames(page);
@@ -113,10 +106,10 @@ export async function detect3dsChallenge(page, gateCapture = null, opts = {}) {
   if (!apiCap) return null;
 
   const firstSeen = opts.challengeApiFirstSeen ?? apiCap.ts ?? Date.now();
-  const waitMs = opts.threedsUiWaitMs ?? config.threedsUiWaitMs ?? 25000;
+  const waitMs = opts.threedsUiWaitMs ?? config.threedsUiWaitMs ?? 0;
   const elapsedSinceApi = Date.now() - firstSeen;
 
-  if (elapsedSinceApi < waitMs) return null;
+  if (waitMs > 0 && elapsedSinceApi < waitMs) return null;
 
   return {
     detected: true,

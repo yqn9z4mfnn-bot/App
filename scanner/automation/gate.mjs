@@ -263,7 +263,6 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
   const start = Date.now();
   let lastHeartbeat = 0;
   let challengeApiFirstSeen = null;
-  let threedsWaitLogged = false;
   const lastPending = { value: false };
   const pollMs = opts.pollMs ?? config.pollIntervalMs;
   const threedsResultOpts = () => ({
@@ -301,32 +300,19 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
     if (apiCap && challengeApiFirstSeen == null) {
       challengeApiFirstSeen = apiCap.ts || Date.now();
     }
-    if (challengeApiFirstSeen != null && !threedsWaitLogged) {
-      threedsWaitLogged = true;
-      console.log(
-        `[automation][3ds] API challenge — aguardando tela do banco (até ${Math.round((config.threedsUiWaitMs || 25000) / 1000)}s)…`,
-      );
-    }
 
     const threeDs = await detect3dsChallenge(page, gateCapture, {
       challengeApiFirstSeen,
       threedsUiWaitMs: config.threedsUiWaitMs,
     });
     if (threeDs?.detected) {
-      const stopNow = threedsRequiresImmediateAction(threeDs);
       if (session && !session.threeDsSeen) {
         session.threeDsSeen = threeDs;
         session.threeDsSeenAt = Date.now();
-        if (stopNow) {
-          console.log('[automation][3ds] VBV visual — parando na hora');
-        } else {
-          console.log(
-            `[automation][3ds] API frictionless — aguardando CONFIRMED até ${Math.round((config.threedsExtraWaitMs || 60000) / 1000)}s…`,
-          );
-        }
       }
-      const continueWait = config.threedsContinueGateWait !== false;
-      if (!continueWait || stopNow) {
+      const continueWait = config.threedsContinueGateWait === true;
+      if (!continueWait || threedsRequiresImmediateAction(threeDs)) {
+        console.log('[automation][3ds] detectado — encerrando gate-wait');
         return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, threedsResultOpts());
       }
       const extraMs = config.threedsExtraWaitMs ?? 60000;
