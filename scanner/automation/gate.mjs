@@ -6,6 +6,7 @@ import {
   build3dsRequiredResult,
   get3dsChallengeApiCapture,
 } from './threeds.mjs';
+import { absorbCheckoutCtxFromCapture, createCheckoutCtx } from './card-cleanup.mjs';
 
 const GATE_URL_RE =
   /eldorado\.m4u|claro-recarga-api|bemobi\.com|smart-checkout|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|\/tokenizer\/|wallet|card/i;
@@ -107,6 +108,7 @@ export const hasSmartCheckoutApiCall = (gateCapture, sinceTs = 0) =>
 
 export const attachGateCapture = (context) => {
   const captures = [];
+  const checkoutCtx = createCheckoutCtx();
   const onResponse = async (response) => {
     try {
       const url = response.url();
@@ -130,8 +132,9 @@ export const attachGateCapture = (context) => {
         httpStatus: response.status(),
         body,
       };
+      absorbCheckoutCtxFromCapture(checkoutCtx, cap);
       captures.push(cap);
-      if (captures.length > 40) captures.splice(0, captures.length - 40);
+      if (captures.length > 80) captures.splice(0, captures.length - 80);
       logGateCapture(cap);
     } catch {
       // ignore
@@ -140,6 +143,7 @@ export const attachGateCapture = (context) => {
   context.on('response', onResponse);
   return {
     captures,
+    checkoutCtx,
     detach: () => {
       try {
         context.off('response', onResponse);

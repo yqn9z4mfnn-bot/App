@@ -13,49 +13,70 @@ const pickCheckoutCode = (...candidates) => {
   return null;
 };
 
-/** Extrai tokens/códigos das capturas HTTP + frames Eldorado. */
+const codeFromUrl = (url) => pickCheckoutCode(String(url ?? '').match(/[?&]code=([^&]+)/i)?.[1]);
+
+/** Atualiza contexto de checkout — persiste mesmo quando captures[] roda (limite 40). */
+export const absorbCheckoutCtxFromCapture = (ctx, cap) => {
+  if (!ctx || !cap) return ctx;
+  const u = cap.url || '';
+  const b = cap.body;
+  const ok = cap.httpStatus >= 200 && cap.httpStatus < 300;
+
+  const urlCode = codeFromUrl(u);
+  if (urlCode) ctx.checkoutCode = urlCode;
+
+  if (b && typeof b === 'object') {
+    if (ok && /\/sessions\/?(?:\?|$)/i.test(u)) {
+      ctx.claroSessionId = b.id || b.sessionId || ctx.claroSessionId;
+    }
+    if (ok && /smartcheckout\/v2\/url/i.test(u)) {
+      ctx.checkoutCode = pickCheckoutCode(b.token, b.code, b.checkoutCode, ctx.checkoutCode);
+      ctx.checkoutUrl = b.url || b.checkoutUrl || ctx.checkoutUrl;
+    }
+    if (ok && /bemobi\.com\/api\/v1\/session/i.test(u)) {
+      ctx.bemobiToken = b.token || ctx.bemobiToken;
+      ctx.checkoutCode = pickCheckoutCode(urlCode, ctx.checkoutCode);
+    }
+    if (ok && /tokenizer\/validation/i.test(u)) {
+      ctx.cardToken = b.card_token || ctx.cardToken;
+    }
+    if (/api-bsc\/api\/v1\/payments/i.test(u) && !/\/sse/i.test(u)) {
+      const tok = b?.card?.token || b?.payments?.[0]?.card?.token;
+      if (tok) ctx.cardToken = tok;
+    }
+  }
+
+  if (/eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(u)) {
+    ctx.checkoutUrl = ctx.checkoutUrl || u.split('?')[0] + (u.includes('?') ? '?' + u.split('?')[1] : '');
+    ctx.checkoutCode = pickCheckoutCode(urlCode, ctx.checkoutCode);
+  }
+
+  return ctx;
+};
+
+export const createCheckoutCtx = () => ({
+  checkoutCode: null,
+  checkoutUrl: null,
+  bemobiToken: null,
+  cardToken: null,
+  claroSessionId: null,
+});
+
+/** Extrai tokens/códigos das capturas HTTP + frames Eldorado + ctx persistido. */
 export const extractCheckoutContext = (gateCapture, page) => {
+  const ctx = { ...createCheckoutCtx(), ...(gateCapture?.checkoutCtx ?? {}) };
   const captures = gateCapture?.captures ?? [];
-  let checkoutCode = null;
-  let checkoutUrl = null;
-  let bemobiToken = null;
-  let cardToken = null;
-  let claroSessionId = null;
 
   for (const c of captures) {
-    const u = c.url || '';
-    const b = c.body;
-    if (!b || typeof b !== 'object') continue;
-
-    if (/\/sessions\/?(?:\?|$)/i.test(u) && c.httpStatus >= 200 && c.httpStatus < 300) {
-      claroSessionId = b.id || b.sessionId || claroSessionId;
-    }
-
-    if (/smartcheckout\/v2\/url/i.test(u) && c.httpStatus >= 200 && c.httpStatus < 300) {
-      checkoutCode = pickCheckoutCode(b.token, b.code, b.checkoutCode, checkoutCode);
-      checkoutUrl = b.url || b.checkoutUrl || checkoutUrl;
-    }
-
-    if (/bemobi\.com\/api\/v1\/session/i.test(u) && c.httpStatus >= 200 && c.httpStatus < 300) {
-      bemobiToken = b.token || bemobiToken;
-    }
-
-    if (/tokenizer\/validation/i.test(u) && c.httpStatus >= 200 && c.httpStatus < 300) {
-      cardToken = b.card_token || cardToken;
-    }
-
-    if (/api-bsc\/api\/v1\/payments/i.test(u)) {
-      const tok = b?.card?.token || b?.payments?.[0]?.card?.token;
-      if (tok) cardToken = tok;
-    }
+    absorbCheckoutCtxFromCapture(ctx, c);
   }
 
   try {
     for (const frame of page?.frames?.() ?? []) {
       const fu = frame.url() || '';
-      checkoutCode = pickCheckoutCode(fu.match(/[?&]code=([^&]+)/i)?.[1], checkoutCode);
-      if (/eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(fu) && !checkoutUrl) {
-        checkoutUrl = fu;
+      ctx.checkoutCode = pickCheckoutCode(fu.match(/[?&]code=([^&]+)/i)?.[1], ctx.checkoutCode);
+      if (/eldorado\.m4u\.com\.br\/bsc\/checkout/i.test(fu)) {
+        ctx.checkoutUrl = ctx.checkoutUrl || fu;
       }
     }
   } catch {
@@ -64,12 +85,12 @@ export const extractCheckoutContext = (gateCapture, page) => {
 
   try {
     const pageUrl = page?.url?.() || '';
-    checkoutCode = pickCheckoutCode(pageUrl.match(/[?&]code=([^&]+)/i)?.[1], checkoutCode);
+    ctx.checkoutCode = pickCheckoutCode(pageUrl.match(/[?&]code=([^&]+)/i)?.[1], ctx.checkoutCode);
   } catch {
     // ignore
   }
 
-  return { checkoutCode, checkoutUrl, bemobiToken, cardToken, claroSessionId };
+  return ctx;
 };
 
 /** Remove cartão tokenizado na wallet Eldorado (e Claro se possível) após a recarga. */
@@ -87,13 +108,13 @@ export const removeUsedCardAfterRecharge = async (session, _paymentResult = null
   }
 
   if (!ctx.bemobiToken && ctx.checkoutCode) {
-    const urlForBemobi =
-      ctx.checkoutUrl ||
-      (config.bemobiCheckoutBase || 'https://smart-checkout.bemobi.com/');
+    const urlForBemobi = ctx.checkoutUrl || 'https://smart-checkout.bemobi.com/';
     try {
       const bemobiRes = await fetchBemobiSession(urlForBemobi, ctx.checkoutCode);
       if (bemobiRes.status >= 200 && bemobiRes.status < 300) {
         ctx.bemobiToken = bemobiRes.body?.token || ctx.bemobiToken;
+      } else {
+        console.log(`[automation][card] bemobi session HTTP ${bemobiRes.status}`);
       }
     } catch (err) {
       console.log(
@@ -102,10 +123,10 @@ export const removeUsedCardAfterRecharge = async (session, _paymentResult = null
     }
   }
 
-  if (!ctx.bemobiToken || !ctx.checkoutCode) {
-    console.log(
-      `[automation][card] wallet incompleta (bemobi=${Boolean(ctx.bemobiToken)} code=${Boolean(ctx.checkoutCode)}) — tentando Claro`,
-    );
+  if (!ctx.checkoutCode) {
+    console.log('[automation][card] checkoutCode ausente — não dá para DELETE na wallet Eldorado');
+  } else if (!ctx.bemobiToken) {
+    console.log('[automation][card] bemobiToken ausente após fetch — tentando DELETE mesmo assim');
   }
 
   try {
@@ -116,9 +137,11 @@ export const removeUsedCardAfterRecharge = async (session, _paymentResult = null
       msisdn: accessNumber,
       cardToken: ctx.cardToken,
     });
+    const walletSt = results?.find((r) => r?.status != null && r.status !== 0)?.status ?? results?.[0]?.status;
     console.log(
       `[automation][card] removido *${ctx.cardToken.slice(-4)} ok=${ok} ` +
-        `wallet=${results?.[0]?.status ?? '?'} claro=${results?.[1]?.status ?? '—'}`,
+        `code=${ctx.checkoutCode ? 'sim' : 'nao'} bemobi=${Boolean(ctx.bemobiToken)} ` +
+        `wallet=${walletSt ?? '?'} claro=${results?.[1]?.status ?? '—'}`,
     );
     return { ok, cardToken: ctx.cardToken, results };
   } catch (err) {
