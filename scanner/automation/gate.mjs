@@ -1,7 +1,11 @@
 import { sleep } from './helpers.mjs';
 import { config } from './config.mjs';
 import { saveStallDebug, summarizeGateBody, summarizeGateCaptures } from './debug.mjs';
-import { detect3dsChallenge, build3dsRequiredResult } from './threeds.mjs';
+import {
+  detect3dsChallenge,
+  build3dsRequiredResult,
+  get3dsChallengeApiCapture,
+} from './threeds.mjs';
 
 const GATE_URL_RE =
   /eldorado\.m4u|claro-recarga-api|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|wallet|card/i;
@@ -248,6 +252,8 @@ const logGateWaitHeartbeat = (elapsedMs, page, gateCapture, lastPending) => {
 export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture = null, session = null) => {
   const start = Date.now();
   let lastHeartbeat = 0;
+  let challengeApiFirstSeen = null;
+  let threedsWaitLogged = false;
   const lastPending = { value: false };
 
   while (Date.now() - start < timeoutMs) {
@@ -281,7 +287,21 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       return buildPaymentResult(page, 'error', url, gateCapture);
     }
 
-    const threeDs = await detect3dsChallenge(page, gateCapture);
+    const apiCap = get3dsChallengeApiCapture(gateCapture);
+    if (apiCap && challengeApiFirstSeen == null) {
+      challengeApiFirstSeen = apiCap.ts || Date.now();
+    }
+    if (challengeApiFirstSeen != null && !threedsWaitLogged) {
+      threedsWaitLogged = true;
+      console.log(
+        `[automation][3ds] API challenge — aguardando tela do banco (até ${Math.round((config.threedsUiWaitMs || 25000) / 1000)}s)…`,
+      );
+    }
+
+    const threeDs = await detect3dsChallenge(page, gateCapture, {
+      challengeApiFirstSeen,
+      threedsUiWaitMs: config.threedsUiWaitMs,
+    });
     if (threeDs?.detected) {
       return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
     }
