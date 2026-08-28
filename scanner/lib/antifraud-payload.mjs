@@ -1,87 +1,101 @@
 import { randomUUID } from 'node:crypto';
 
-/** Fingerprint mobile (iPhone) para o payload de pagamento da API Eldorado. */
-export function buildMobileDevice() {
+const IPHONE_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+
+/** Fingerprint mobile (iPhone BR) para payload HTTP Eldorado. */
+export function buildMobileDevice(overrides = {}) {
   return {
-    id: randomUUID(),
+    id: overrides.id || randomUUID(),
     colorDepth: 32,
     javaEnabled: false,
     language: 'pt-BR',
     screenHeight: 844,
     screenWidth: 390,
     timeZoneOffset: 180,
-    userAgent:
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    userAgent: IPHONE_UA,
     cookiesEnabled: true,
     platform: 'iPhone',
     deviceType: 'mobile',
     browser: 'Mobile Safari',
     type: 'BROWSER',
+    ...overrides,
   };
 }
 
 /** Simula digitação humana nos campos do checkout Eldorado. */
-export function buildSyntheticUserBehaviour() {
-  const t0 = Date.now() - 45_000;
+export function buildSyntheticUserBehaviour(startedAt = Date.now() - 52_000) {
+  const t0 = startedAt;
   const fieldTimes = {
-    card_number: 18_000 + Math.floor(Math.random() * 12_000),
-    name: 8_000 + Math.floor(Math.random() * 6_000),
-    expiration_date: 6_000 + Math.floor(Math.random() * 5_000),
-    cvv: 4_000 + Math.floor(Math.random() * 4_000),
+    card_number: 16_000 + Math.floor(Math.random() * 14_000),
+    name: 7_000 + Math.floor(Math.random() * 7_000),
+    expiration_date: 5_500 + Math.floor(Math.random() * 5_500),
+    cvv: 3_500 + Math.floor(Math.random() * 4_500),
   };
 
   const keystrokeEvents = [];
   const formFieldEvents = [];
+  const mouseEvents = [];
   const fields = [
     ['card_number', 'pan', 16],
-    ['name', 'holder', 12],
+    ['name', 'holder', 10],
     ['expiration_date', 'expirationDate', 5],
     ['cvv', 'cvv', 3],
   ];
 
   let cursor = t0;
+  let mx = 180 + Math.floor(Math.random() * 40);
+  let my = 420 + Math.floor(Math.random() * 60);
+
   for (const [fieldId, target, chars] of fields) {
     formFieldEvents.push({ t: cursor, field_id: fieldId, type: 'focus' });
-    cursor += 200 + Math.floor(Math.random() * 400);
+    mouseEvents.push({ type: 'mousemove', x: mx, y: my, t: cursor });
+    cursor += 180 + Math.floor(Math.random() * 420);
+    mx += 4 + Math.floor(Math.random() * 18);
+    my += 2 + Math.floor(Math.random() * 12);
+
     for (let i = 0; i < chars; i += 1) {
       keystrokeEvents.push({ type: 'keydown', target, t: cursor });
-      cursor += 40 + Math.floor(Math.random() * 120);
+      cursor += 38 + Math.floor(Math.random() * 95);
       keystrokeEvents.push({ type: 'keyup', target, t: cursor });
-      cursor += 30 + Math.floor(Math.random() * 90);
+      cursor += 28 + Math.floor(Math.random() * 75);
       if (i % 4 === 3) {
         formFieldEvents.push({ t: cursor, field_id: fieldId, type: 'change' });
       }
     }
     formFieldEvents.push({ t: cursor, field_id: fieldId, type: 'blur' });
-    cursor += 300 + Math.floor(Math.random() * 500);
+    cursor += 260 + Math.floor(Math.random() * 520);
   }
 
+  mouseEvents.push({ type: 'click', x: mx, y: my + 120, t: cursor + 400 });
+
   return {
-    mouseEvents: [],
+    mouseEvents,
     formFieldInteractionTime: fieldTimes,
     keystrokeEvents,
     formFieldEvents,
+    touchEvents: [],
   };
 }
 
-export function buildBrowserPaymentExtras({ invoiceId, isSaved = false } = {}) {
+export function buildBrowserPaymentExtras({ invoiceId, isSaved = false, deviceId = null } = {}) {
   const extras = {
     invoices: invoiceId ? [invoiceId] : undefined,
     paymentWallet: 'bemobi',
-    device: buildMobileDevice(),
+    device: buildMobileDevice(deviceId ? { id: deviceId } : {}),
     userBehaviour: buildSyntheticUserBehaviour(),
     paymentMethodsShown: {
       credit: true,
       debit: false,
       pix: true,
       pix_itp: false,
-      google_pay: true,
+      google_pay: false,
       boleto: false,
       apple_pay: true,
       nupay: true,
-      click_to_pay: true,
+      click_to_pay: false,
     },
-    otherPaymentMethodCollapsed: false,
+    otherPaymentMethodCollapsed: true,
   };
 
   if (!isSaved) {

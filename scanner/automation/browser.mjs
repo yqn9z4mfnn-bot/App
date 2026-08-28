@@ -22,9 +22,11 @@ export const launchBrowser = async (browserName) => {
   const headless = config.headless === true;
   const launchOpts = {
     headless,
+    ignoreDefaultArgs: ['--enable-automation'],
     args: [
       `--window-size=${config.browserWindowWidth},${config.browserWindowHeight}`,
       '--window-position=80,40',
+      '--disable-blink-features=AutomationControlled',
     ],
   };
   console.log(`[automation] launch browser=${name} headless=${headless}`);
@@ -44,8 +46,17 @@ export const launchBrowser = async (browserName) => {
 export const createMobileContext = async (browser) =>
   browser.newContext({
     ...devices['iPhone 12'],
+    locale: 'pt-BR',
+    timezoneId: 'America/Sao_Paulo',
+    geolocation: { latitude: -23.5505, longitude: -46.6333 },
+    permissions: ['geolocation'],
+    extraHTTPHeaders: {
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    },
     viewport: {
       width: config.mobileViewportWidth,
       height: config.mobileViewportHeight,
     },
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
   });

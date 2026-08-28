@@ -27,6 +27,17 @@ export function get3dsChallengeApiCapture(gateCapture) {
   return null;
 }
 
+/** SMS/código exige ação manual imediata; frictionless/API pode confirmar sozinho. */
+export function threedsRequiresImmediateAction(threeDs) {
+  if (!threeDs?.detected) return false;
+  if (threeDs.kind === 'sms') return true;
+  const hint = String(threeDs.hint || '');
+  if (/enviar sms|digite o c[oó]digo|c[oó]digo.*sms|token.*seguran/i.test(hint)) return true;
+  if (threeDs.kind === 'challenge_api' && !threeDs.uiVisible) return false;
+  if (/fa[cç]a uma sele[cç][aã]o|chave ref/i.test(hint)) return true;
+  return false;
+}
+
 /** Procura iframe/tela 3DS visível (prioridade sobre API). */
 async function scan3dsUiFrames(page) {
   for (const frame of page.frames()) {

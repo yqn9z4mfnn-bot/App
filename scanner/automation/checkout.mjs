@@ -8,6 +8,11 @@ import {
   setSessionStep,
   clickInAnyFrame,
 } from './helpers.mjs';
+import {
+  waitForCheckoutAntifraud,
+  fillCardFieldsHuman,
+  simulatePrePayInteraction,
+} from './antifraud-browser.mjs';
 
 const CARD_PAN_SELECTORS = ['#pan', 'input[name="pan"]', 'input[data-cy="pan"]', 'input[autocomplete="cc-number"]'];
 const CARD_EXP_SELECTORS = ['#expiration', 'input[name="expirationDate"]', 'input[autocomplete="cc-exp"]'];
@@ -170,15 +175,28 @@ export const fillCardFormDirectly = async (page, pam, opts = {}) => {
   const expirationInput = await resolveLocator(ctx, CARD_EXP_SELECTORS);
   const cvvInput = await resolveLocator(ctx, CARD_CVV_SELECTORS);
   const holderInput = await resolveLocator(ctx, CARD_HOLDER_SELECTORS);
+  const holderName = String(randomName(config.defaultCardholderMaxLen));
 
-  await panInput.fill(String(pam.pan).replace(/\D/g, ''), { force: true });
-  await expirationInput.fill(String(pam.mmYY), { force: true });
-  await cvvInput.fill(String(pam.cvv || config.defaultCvv), { force: true });
-  await holderInput.fill(String(randomName(config.defaultCardholderMaxLen)), { force: true });
-  await holderInput.press('Tab').catch(() => {});
-  const settleMs = opts.fast
-    ? config.checkoutLinkCardSettleMs ?? 60
-    : config.cardFormSettleMs;
+  const useHuman = opts.human && config.antifraudHumanFill;
+  if (useHuman) {
+    await fillCardFieldsHuman(
+      { pan: panInput, expiration: expirationInput, cvv: cvvInput, holder: holderInput },
+      pam,
+      holderName,
+    );
+  } else {
+    await panInput.fill(String(pam.pan).replace(/\D/g, ''), { force: true });
+    await expirationInput.fill(String(pam.mmYY), { force: true });
+    await cvvInput.fill(String(pam.cvv || config.defaultCvv), { force: true });
+    await holderInput.fill(holderName, { force: true });
+    await holderInput.press('Tab').catch(() => {});
+  }
+
+  const settleMs = useHuman
+    ? config.antifraudSettleMs ?? 280
+    : opts.fast
+      ? config.checkoutLinkCardSettleMs ?? 60
+      : config.cardFormSettleMs;
   if (settleMs > 0) await sleep(settleMs);
 };
 
@@ -407,7 +425,10 @@ export const fillWebLinkCardDirect = async (session, pam) => {
       throw new Error('Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).');
     }
     setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');
-    await fillCardFormDirectly(page, pam, { fast: config.checkoutLinkFast });
+    await fillCardFormDirectly(page, pam, {
+      fast: config.checkoutLinkFast && !config.antifraudHumanFill,
+      human: true,
+    });
     session.pamTouchCommitted = true;
     return;
   }
@@ -438,6 +459,7 @@ export const runWebLinkCheckoutPay = async (session, pam) => {
   const { page } = session;
   await fillWebLinkCardDirect(session, pam);
   setSessionStep(session, 'pagar', 'Confirmando pagamento…');
+  await simulatePrePayInteraction(page);
   const payTimeout = session.checkoutLinkMode && config.checkoutLinkFast ? 6000 : 12000;
   const payReadyMs = session.checkoutLinkMode && config.checkoutLinkFast ? 1500 : 5000;
   let payOk = await clickEldoradoPayButton(page, payTimeout, payReadyMs);

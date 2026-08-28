@@ -17,6 +17,7 @@ import {
 } from './helpers.mjs';
 import { runWebLinkRecharge } from './web-flow.mjs';
 import { runWebLinkCheckoutPay } from './checkout.mjs';
+import { waitForCheckoutAntifraud } from './antifraud-browser.mjs';
 import { waitForPaymentResult, waitForPaymentResultViaHttp, waitForPaymentIdFromGate } from './gate.mjs';
 import { prepareCheckoutViaHttp } from '../lib/prepare-checkout-http.mjs';
 import {
@@ -531,6 +532,11 @@ export const startSessionFromCheckoutLink = async (payload) => {
     if (!fast) {
       await dismissCookieBanner(page);
       await sleep(config.pauseAfterNavMs);
+    }
+    if (config.antifraudHumanFill) {
+      const afHits = await waitForCheckoutAntifraud(page);
+      timings.antifraudWaitMs = config.antifraudWaitMs;
+      if (afHits) console.log(`[automation] antifraud fingerprint ok (${afHits} req)`);
     }
 
     session.status = 'running';

@@ -5,6 +5,7 @@ import {
   detect3dsChallenge,
   build3dsRequiredResult,
   get3dsChallengeApiCapture,
+  threedsRequiresImmediateAction,
 } from './threeds.mjs';
 import { absorbCheckoutCtxFromCapture, createCheckoutCtx } from './card-cleanup.mjs';
 import { waitPaymentResult as waitHttpPaymentSse } from '../lib/recharge.mjs';
@@ -311,10 +312,19 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
     if (threeDs?.detected) {
       if (session && !session.threeDsSeen) {
         session.threeDsSeen = threeDs;
+        session.threeDsSeenAt = Date.now();
+        console.log(
+          `[automation][3ds] sinal ${threeDs.kind} — aguardando CONFIRMED até ${Math.round((config.threedsExtraWaitMs || 60000) / 1000)}s…`,
+        );
       }
-      // Avisa imediato no Telegram — não espera timeout de 120s.
-      // (Sucesso só com CONFIRMED; falso OK não volta por fechar cedo no 3DS.)
-      return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+      const continueWait = config.threedsContinueGateWait !== false;
+      if (!continueWait || threedsRequiresImmediateAction(threeDs)) {
+        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+      }
+      const extraMs = config.threedsExtraWaitMs ?? 60000;
+      if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
+        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+      }
     }
 
     await sleep(pollMs);

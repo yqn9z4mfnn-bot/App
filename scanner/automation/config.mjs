@@ -22,8 +22,11 @@ export const config = {
   keepBrowserOpen3dsSeconds: toInt(process.env.KEEP_BROWSER_OPEN_3DS_SECONDS, 0),
   /** Após API /3ds/challenge, aguarda tela do banco antes de sinalizar 3DS (ms). */
   threedsUiWaitMs: toInt(process.env.THREDS_UI_WAIT_MS, 12000),
-  /** Tempo extra de gate-wait após detectar 3DS (ms). */
-  threedsExtraWaitMs: toInt(process.env.THREEDS_EXTRA_WAIT_MS, 180000),
+  /** Tempo extra de gate-wait após detectar 3DS antes de desistir (ms). */
+  threedsExtraWaitMs: toInt(process.env.THREEDS_EXTRA_WAIT_MS, 60000),
+  /** Após 3DS frictionless, continua gate-wait buscando CONFIRMED. */
+  threedsContinueGateWait:
+    String(process.env.THREEDS_CONTINUE_GATE_WAIT ?? '1').toLowerCase() !== '0',
   maxConcurrentSessions: toInt(process.env.MAX_CONCURRENT_SESSIONS, 3),
   sessionSlotWaitMs: toInt(process.env.SESSION_SLOT_WAIT_MS, 600000),
   actionTimeoutMs: toInt(process.env.ACTION_TIMEOUT_MS, 20000),
@@ -61,6 +64,12 @@ export const config = {
   /** Após clicar pagar: fecha Edge e espera SSE via HTTP. */
   checkoutLinkHttpGate: String(process.env.CHECKOUT_LINK_HTTP_GATE ?? '1').toLowerCase() !== '0',
   checkoutLinkPaymentIdWaitMs: toInt(process.env.CHECKOUT_LINK_PAYMENT_ID_WAIT_MS, 12000),
+  /** Antifraude browser: digitação humana + wait fingerprint. */
+  antifraudHumanFill: String(process.env.ANTIFRAUD_HUMAN_FILL ?? '1').toLowerCase() !== '0',
+  antifraudWaitMs: toInt(process.env.ANTIFRAUD_WAIT_MS, 3500),
+  antifraudSettleMs: toInt(process.env.ANTIFRAUD_SETTLE_MS, 280),
+  antifraudFieldGapMs: toInt(process.env.ANTIFRAUD_FIELD_GAP_MS, 220),
+  antifraudPrePayMotion: String(process.env.ANTIFRAUD_PRE_PAY_MOTION ?? '1').toLowerCase() !== '0',
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';
