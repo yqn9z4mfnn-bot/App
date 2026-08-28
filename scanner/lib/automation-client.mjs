@@ -101,3 +101,65 @@ export async function automationHealth() {
 export function isBrowserRechargeEnabled() {
   return String(process.env.RECHARGE_MODE ?? 'browser').toLowerCase() !== 'api';
 }
+
+/** HTTP prepara checkout Eldorado → Edge só preenche cartão e paga. */
+export async function runHybridRecharge({
+  loginUrl,
+  msisdn,
+  targetMsisdn = null,
+  productValue,
+  card,
+  browser = process.env.BROWSER_NAME || 'edge',
+}) {
+  if (targetMsisdn && normalizeTarget(targetMsisdn) !== normalizeTarget(msisdn)) {
+    throw new Error('Recarga cruzada ainda não suportada no modo híbrido.');
+  }
+  const started = Date.now();
+  const pamInfo = cardToPam(card);
+  const rechargeValue = centsToRechargeValue(productValue);
+  const accessNumber = String(msisdn ?? '').replace(/\D/g, '');
+
+  const data = await automationFetch('/api/session/start-checkout-link', {
+    loginUrl,
+    accessNumber,
+    rechargeValue,
+    pamInfo,
+    browser,
+  });
+
+  const pr = data.paymentResult ?? {};
+  const rawStatus = String(pr.status || data.status || 'UNKNOWN').toLowerCase();
+  const mapped =
+    rawStatus === 'success'
+      ? 'CONFIRMED'
+      : rawStatus === '3ds_required'
+        ? '3DS_REQUIRED'
+        : rawStatus === 'timeout'
+          ? 'TIMEOUT'
+          : rawStatus === 'error'
+            ? 'DENIED'
+            : 'PENDING';
+
+  return {
+    paymentId: pr.gateCode ?? data.sessionId ?? null,
+    pending: null,
+    result: {
+      status: mapped,
+      message: pr.gateMessage || pr.message || data.lastError || null,
+      negativeReason: pr.gateMessage || null,
+    },
+    valueCents: productValue,
+    latencyMs: Date.now() - started,
+    cardMask: `****${pamInfo.split('|')[0].slice(-4)}`,
+    automation: {
+      sessionId: data.sessionId,
+      mode: data.mode ?? 'checkout-link',
+      httpPrepMs: data.httpPrep?.httpLatencyMs ?? null,
+      raw: pr,
+    },
+  };
+}
+
+function normalizeTarget(n) {
+  return String(n ?? '').replace(/\D/g, '');
+}

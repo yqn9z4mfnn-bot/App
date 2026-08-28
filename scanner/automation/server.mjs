@@ -6,6 +6,7 @@ import {
   getConcurrencyPublic,
   getSessionPublic,
   startSessionFromWebLink,
+  startSessionFromCheckoutLink,
 } from './sessions.mjs';
 import { isBrowserLockedByEnv, normalizeBrowserName } from './browser.mjs';
 
@@ -33,6 +34,17 @@ app.post('/api/session/start-web-link', async (req, res) => {
   try {
     const body = req.body ?? {};
     const result = await startSessionFromWebLink(body);
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/** HTTP prepara checkout → Edge abre só Eldorado e paga. */
+app.post('/api/session/start-checkout-link', async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const result = await startSessionFromCheckoutLink(body);
     return res.json(result);
   } catch (error) {
     return res.status(500).json({ error: error.message });

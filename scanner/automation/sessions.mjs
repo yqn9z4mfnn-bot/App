@@ -16,6 +16,9 @@ import {
   sleep,
 } from './helpers.mjs';
 import { runWebLinkRecharge } from './web-flow.mjs';
+import { runWebLinkCheckoutPay, ensureSmartCheckoutReady } from './checkout.mjs';
+import { waitForPaymentResult } from './gate.mjs';
+import { prepareCheckoutViaHttp } from '../lib/prepare-checkout-http.mjs';
 import { stopVncIfIdle } from './vnc.mjs';
 import { removeUsedCardAfterRecharge } from './card-cleanup.mjs';
 
@@ -348,6 +351,152 @@ export const startSessionFromWebLink = async (payload) => {
       rechargeValue: payload.rechargeValue,
       browser: browserName,
       url: page.url(),
+    };
+  } catch (err) {
+    session.status = 'error_manual';
+    session.lastError = String(err?.message || err);
+    setSessionStep(session, 'erro', session.lastError);
+    await cleanupUsedCard(session, { status: 'error' });
+    if (sessionPageAlive(session)) await finalizeSessionClose(sessionId, { status: 'error' });
+    throw err;
+  }
+};
+
+/**
+ * HTTP prepara checkout (SmartCheckout) → Edge abre só a URL Eldorado e paga.
+ */
+export const startSessionFromCheckoutLink = async (payload) => {
+  const browserName = resolveBrowserName(payload);
+  const accessNumber = normalizeBrMobile(payload?.accessNumber || payload?.claroNumber);
+  const rechargeTargetNumber = normalizeBrMobile(
+    payload?.rechargeTargetNumber || payload?.accessNumber || payload?.claroNumber,
+  );
+  if (!accessNumber || accessNumber.length !== 11) {
+    throw new Error('accessNumber (DDD + 9 dígitos) é obrigatório.');
+  }
+  if (rechargeTargetNumber && rechargeTargetNumber !== accessNumber) {
+    throw new Error('Recarga cruzada ainda não suportada no modo checkout-link.');
+  }
+
+  let loginUrl = String(payload?.loginUrl || payload?.link || '').trim();
+  if (!loginUrl) throw new Error('loginUrl é obrigatório.');
+  loginUrl = normalizeMinhaClaroWebLink(loginUrl) || loginUrl;
+
+  const rechargeValue = String(payload?.rechargeValue ?? '').replace(/\D/g, '');
+  if (!rechargeValue) throw new Error('rechargeValue é obrigatório.');
+
+  const valueCents = Number(rechargeValue) * 100;
+  const httpStarted = Date.now();
+  const prep = await prepareCheckoutViaHttp({
+    loginUrl,
+    msisdn: accessNumber,
+    valueCents,
+  });
+  prep.httpLatencyMs = Date.now() - httpStarted;
+  console.log(
+    `[automation] HTTP checkout pronto em ${prep.httpLatencyMs}ms → ${prep.checkoutUrl.slice(0, 80)}…`,
+  );
+
+  if (config.closeAllSessionsOnStart) {
+    const prev = await closeAllSessions().catch(() => ({ closed: 0 }));
+    if (prev?.closed) {
+      console.log(`[automation] ${prev.closed} sessão(ões) Edge fechada(s) antes da nova recarga`);
+    }
+  } else {
+    await closeSessionsByAccessNumber(accessNumber).catch(() => {});
+  }
+
+  const releaseSlot = await acquireBrowserSlot(`checkout-link:${accessNumber}`);
+  let browser = null;
+  let sessionId;
+  let session;
+  try {
+    browser = await launchBrowser(browserName);
+    const context = await createMobileContext(browser);
+    const page = await context.newPage();
+    const gateCapture = attachGateCapture(context);
+
+    sessionId = randomUUID();
+    session = {
+      id: sessionId,
+      browser,
+      context,
+      page,
+      gateCapture,
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      status: 'created',
+      browserName,
+      accessNumber,
+      rechargeTargetNumber,
+      webPortal: false,
+      checkoutLinkMode: true,
+      checkoutUrl: prep.checkoutUrl,
+      httpPrep: prep,
+      pamTouchCommitted: false,
+      smsAuthenticated: true,
+    };
+    sessions.set(sessionId, session);
+    armSessionWatchdog(sessionId);
+    releaseSlot();
+  } catch (err) {
+    releaseSlot();
+    try {
+      await browser?.close();
+    } catch {
+      // ignore
+    }
+    throw err;
+  }
+
+  const { page } = session;
+  try {
+    setSessionStep(session, 'open_checkout_link', 'Abrindo checkout Eldorado (HTTP→browser)…');
+    console.log(`[automation] goto checkout ${prep.checkoutUrl.slice(0, 90)}…`);
+    await page.goto(prep.checkoutUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await dismissCookieBanner(page);
+    await sleep(config.pauseAfterNavMs);
+
+    if (!(await ensureSmartCheckoutReady(page, session))) {
+      throw new Error('Checkout Eldorado não carregou após abrir URL direta.');
+    }
+
+    session.status = 'running';
+    const payPayload = buildPamPayload(payload);
+    await runWebLinkCheckoutPay(session, payPayload._pamParsed);
+    setSessionStep(session, 'aguardando_gate', 'Aguardando retorno da gate…');
+    console.log(
+      `[automation] gate-wait (checkout-link) msisdn=${accessNumber} valor=R$${rechargeValue}`,
+    );
+    const paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture, session);
+
+    session.paymentResult = paymentResult;
+    if (paymentResult?.status === 'success') {
+      session.status = 'done';
+    } else if (paymentResult?.status === '3ds_required') {
+      session.status = '3ds_required';
+    } else {
+      session.status = 'error_manual';
+    }
+
+    await cleanupUsedCard(session, paymentResult);
+    await finalizeSessionClose(sessionId, paymentResult);
+
+    return {
+      sessionId,
+      status: session.status,
+      paymentResult,
+      accessNumber,
+      rechargeValue: payload.rechargeValue,
+      browser: browserName,
+      url: page.url(),
+      mode: 'checkout-link',
+      httpPrep: {
+        checkoutUrl: prep.checkoutUrl,
+        checkoutCode: prep.checkoutCode,
+        productName: prep.product?.name,
+        httpLatencyMs: prep.httpLatencyMs,
+      },
     };
   } catch (err) {
     session.status = 'error_manual';
