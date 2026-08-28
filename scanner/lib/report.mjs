@@ -35,7 +35,7 @@ export function buildSummary({ session, claro, wallet, skipWallet = false }) {
   const claroOnly = claroCreditCards.filter((c) => !walletTokens.has(c.token));
 
   const availableValues = products
-    .filter((p) => p.isAvailable !== false)
+    .filter((p) => p.isAvailable === true)
     .map((p) => ({
       id: p.id,
       name: p.name,
@@ -79,7 +79,7 @@ export function buildSummary({ session, claro, wallet, skipWallet = false }) {
     todosValores: products.map((p) => ({
       name: p.name,
       value: p.value,
-      available: p.isAvailable !== false,
+      available: p.isAvailable === true,
       category: p.category,
     })),
     cartoes: {

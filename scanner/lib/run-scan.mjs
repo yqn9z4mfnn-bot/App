@@ -17,7 +17,7 @@ export async function runScan(link, { skipWallet = false } = {}) {
 
   const products = claro.products?.body?.rechargeValues ?? [];
   const firstProduct =
-    products.find((p) => p.isAvailable !== false) ?? products[0];
+    products.find((p) => p.isAvailable === true) ?? null;
 
   let wallet = null;
   if (!skipWallet && firstProduct?.id) {

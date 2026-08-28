@@ -5,7 +5,7 @@ import {
   deleteCardEverywhere,
   unifySavedCards,
 } from './lib/eldorado.mjs';
-import { scanClaroEssential, createSession, fetchRechargeProducts } from './lib/claro.mjs';
+import { scanClaroEssential, createSession } from './lib/claro.mjs';
 import { runRecharge } from './lib/recharge.mjs';
 import { runBrowserRecharge, isBrowserRechargeEnabled } from './lib/automation-client.mjs';
 import {
@@ -38,7 +38,7 @@ import {
 import {
   parseNumbersFromTxt,
   ingestNumbers,
-  extractAvailableValues,
+  refreshMsisdnProducts,
 } from './lib/bulk-scan.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -73,6 +73,13 @@ function formatValoresShort(valores) {
   return valores
     .map((v) => v.name ?? `R$ ${(v.value / 100).toFixed(2).replace('.', ',')}`)
     .join(', ');
+}
+
+function formatDbRowValores(row) {
+  if (row.status === 'sem_valor' || !row.valores?.length) {
+    return 'sem valores (indisponível)';
+  }
+  return formatValoresShort(row.valores);
 }
 
 function toLoginUrl(linkOrJwt) {
@@ -361,7 +368,7 @@ async function doScan(chatId, target, { skipWallet = false, editMsg = null } = {
       text: report,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
-      reply_markup: buildCardKeyboard(rawCards),
+      reply_markup: buildCardKeyboard(rawCards, summary.valoresDisponiveis.length > 0),
     });
   } catch (err) {
     await tg('editMessageText', {
@@ -618,8 +625,7 @@ async function handleCallback(query) {
   }
 
   if (data.startsWith('dbscan:')) {
-    const msisdn = data.slice(7);
-    await doScan(chatId, { kind: 'msisdn', msisdn }, { skipWallet: true });
+    await loadSavedNumber(chatId, data.slice(7), { editMsg: { message_id: messageId } });
     return;
   }
 
@@ -675,7 +681,6 @@ async function loadSavedNumber(chatId, msisdn, { editMsg = null } = {}) {
 
   try {
     let link = toLoginUrl(row.link);
-    let valores = row.valores ?? [];
     let session;
     try {
       session = await createSession(parseLink(link).jwt);
@@ -685,14 +690,13 @@ async function loadSavedNumber(chatId, msisdn, { editMsg = null } = {}) {
       session = await createSession(parseLink(link).jwt);
     }
 
-    try {
-      const products = await fetchRechargeProducts(session.id, session.identifier);
-      if (products.ok) {
-        valores = extractAvailableValues(products.body);
-      }
-    } catch {
-      // mantém valores salvos se /products falhar
-    }
+    const refreshed = await refreshMsisdnProducts(number, {
+      link,
+      sessionId: session.id,
+      identifier: session.identifier,
+    });
+    const valores = refreshed.valores ?? [];
+    const listed = refreshed.listedProducts ?? 0;
 
     setCache(chatId, {
       link,
@@ -708,6 +712,9 @@ async function loadSavedNumber(chatId, msisdn, { editMsg = null } = {}) {
       '',
       `<b>Valores (${valores.length}):</b> ${formatValoresShort(valores)}`,
     ];
+    if (!valores.length && listed > 0) {
+      lines.push('', `⚠️ A Claro lista ${listed} valor(es), mas <b>nenhum está disponível</b> para recarga.`);
+    }
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
@@ -765,7 +772,7 @@ async function sendDbList(chatId, page = 0, messageId = null) {
   ];
   const keyboard = [];
   for (const r of rows) {
-    lines.push(`<code>${r.msisdn}</code> — ${formatValoresShort(r.valores)}`);
+    lines.push(`<code>${r.msisdn}</code> — ${formatDbRowValores(r)}`);
     keyboard.push([
       {
         text: `⚡️ ${r.msisdn}`,

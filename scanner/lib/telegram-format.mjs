@@ -35,7 +35,14 @@ export function formatTelegramReport(summary) {
   for (const v of summary.valoresDisponiveis) {
     lines.push(`• ${esc(v.name)} (${v.validityDays ?? '?'}d)`);
   }
-  if (summary.valoresDisponiveis.length === 0) lines.push('Nenhum');
+  if (summary.valoresDisponiveis.length === 0) {
+    const listed = summary.todosValores?.length ?? 0;
+    if (listed > 0) {
+      lines.push(`⚠️ Nenhum disponível (${listed} listado(s) pela Claro, todos indisponíveis)`);
+    } else {
+      lines.push('Nenhum');
+    }
+  }
 
   lines.push('', `<b>💳 Cartões (${summary.cartoes.total})</b>`);
   if (summary.cartoes.total === 0) {
@@ -75,8 +82,11 @@ export function formatTelegramReport(summary) {
 }
 
 /** Botões inline para remover cartões da wallet. */
-export function buildCardKeyboard(walletCards) {
-  const rows = [[{ text: '💳 Recarregar', callback_data: 'recarga:start' }]];
+export function buildCardKeyboard(walletCards, canRecharge = true) {
+  const rows = [];
+  if (canRecharge) {
+    rows.push([{ text: '💳 Recarregar', callback_data: 'recarga:start' }]);
+  }
 
   if (!walletCards?.length) return { inline_keyboard: rows };
 

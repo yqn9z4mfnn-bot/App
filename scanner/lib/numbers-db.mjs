@@ -117,7 +117,12 @@ export function upsertNumber({ msisdn, link, valores = [], status = 'ok', error 
 export function listOkMsisdns() {
   return new Set(
     getDb()
-      .prepare("SELECT msisdn FROM numbers WHERE status = 'ok' AND link IS NOT NULL")
+      .prepare(
+        `SELECT DISTINCT n.msisdn
+         FROM numbers n
+         INNER JOIN number_values nv ON nv.msisdn = n.msisdn
+         WHERE n.status = 'ok' AND n.link IS NOT NULL`,
+      )
       .all()
       .map((r) => r.msisdn),
   );
@@ -132,17 +137,24 @@ export function listNumbers({ limit = 20, offset = 0, onlyOk = true } = {}) {
   const lim = Math.max(1, Number(limit) || 20);
   const off = Math.max(0, Number(offset) || 0);
   const sql = onlyOk
-    ? 'SELECT * FROM numbers WHERE status = ? ORDER BY scanned_at DESC LIMIT ? OFFSET ?'
+    ? `SELECT * FROM numbers
+       WHERE status IN ('ok', 'sem_valor') AND link IS NOT NULL
+       ORDER BY scanned_at DESC LIMIT ? OFFSET ?`
     : 'SELECT * FROM numbers ORDER BY scanned_at DESC LIMIT ? OFFSET ?';
   const rows = onlyOk
-    ? getDb().prepare(sql).all('ok', lim, off)
+    ? getDb().prepare(sql).all(lim, off)
     : getDb().prepare(sql).all(lim, off);
   return rows.map(mapRow);
 }
 
 export function countNumbers({ onlyOk = true } = {}) {
   if (onlyOk) {
-    return getDb().prepare("SELECT COUNT(*) AS n FROM numbers WHERE status = 'ok'").get().n;
+    return getDb()
+      .prepare(
+        `SELECT COUNT(*) AS n FROM numbers
+         WHERE status IN ('ok', 'sem_valor') AND link IS NOT NULL`,
+      )
+      .get().n;
   }
   return getDb().prepare('SELECT COUNT(*) AS n FROM numbers').get().n;
 }
