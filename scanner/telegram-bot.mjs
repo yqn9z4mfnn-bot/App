@@ -3,6 +3,8 @@ import { runScan } from './lib/run-scan.mjs';
 import {
   fetchWalletCards,
   deleteCardEverywhere,
+  deleteAllWalletCards,
+  scanWallet,
   unifySavedCards,
 } from './lib/eldorado.mjs';
 import { scanClaroEssential, createSession } from './lib/claro.mjs';
@@ -441,7 +443,89 @@ async function doScan(chatId, target, { skipWallet = false, editMsg = null } = {
   }
 }
 
+async function refreshWalletAuth(entry) {
+  const productId = entry.walletAuth?.productId;
+  if (!entry.sessionId || !entry.msisdn || !productId) return false;
+  try {
+    const wallet = await scanWallet(entry.sessionId, entry.msisdn, productId);
+    if (wallet.error || !wallet.bemobiToken || !wallet.checkoutCode) {
+      console.error(
+        `[bot][card] refresh wallet: ${wallet.error ?? 'sem token'}${wallet.message ? ` — ${wallet.message}` : ''}`,
+      );
+      return false;
+    }
+    entry.walletAuth = {
+      ...(entry.walletAuth ?? {}),
+      bemobiToken: wallet.bemobiToken,
+      checkoutCode: wallet.checkoutCode,
+      productId,
+      sessionId: entry.sessionId,
+      msisdn: entry.msisdn,
+    };
+    return true;
+  } catch (err) {
+    console.error('[bot][card] refresh wallet:', err.message);
+    return false;
+  }
+}
+
+async function loadFreshCards(entry) {
+  let walletBody = [];
+  if (entry.walletAuth?.bemobiToken && entry.walletAuth?.checkoutCode) {
+    const cardsRes = await fetchWalletCards(
+      entry.walletAuth.bemobiToken,
+      entry.walletAuth.checkoutCode,
+    );
+    walletBody = Array.isArray(cardsRes.body) ? cardsRes.body : [];
+  }
+  const claro = await scanClaroEssential(entry.sessionId, entry.msisdn, {
+    includeProducts: false,
+  });
+  return unifySavedCards(walletBody, claro.paymentMethods?.body);
+}
+
+async function removeAllCachedCards(entry) {
+  const cards = await loadFreshCards(entry);
+  if (!cards.length) return { removed: 0, total: 0 };
+
+  let removed = 0;
+  const walletCards = cards.filter((c) => c.source !== 'claro');
+  const claroOnly = cards.filter((c) => c.source === 'claro');
+
+  if (
+    walletCards.length &&
+    entry.walletAuth?.bemobiToken &&
+    entry.walletAuth?.checkoutCode
+  ) {
+    const batch = await deleteAllWalletCards(
+      entry.walletAuth.bemobiToken,
+      entry.walletAuth.checkoutCode,
+      walletCards,
+    );
+    removed += batch.ok;
+    console.log(
+      `[bot][card] wallet batch ${batch.ok}/${batch.total} removidos (msisdn=${entry.msisdn})`,
+    );
+  }
+
+  for (const card of claroOnly) {
+    const { ok, results } = await deleteCardEverywhere({
+      sessionId: entry.sessionId,
+      msisdn: entry.msisdn,
+      cardToken: card.token,
+    });
+    const st = (results ?? []).map((r) => r.status).join('/') || '?';
+    console.log(
+      `[bot][card] claro-only *${String(card.last ?? card.token?.slice(-4))} ok=${ok} HTTP=${st}`,
+    );
+    if (ok) removed += 1;
+  }
+
+  return { removed, total: cards.length };
+}
+
 async function refreshCardsView(chatId, messageId, entry) {
+  await refreshWalletAuth(entry);
   let walletBody = [];
   if (entry.walletAuth?.bemobiToken) {
     const cardsRes = await fetchWalletCards(
@@ -534,37 +618,46 @@ async function executeRemoveAll(chatId, messageId) {
     return;
   }
 
+  const totalStart = entry.cards.length;
   await tg('editMessageText', {
     chat_id: chatId,
     message_id: messageId,
-    text: `🗑 Removendo ${entry.cards.length} cartão(ões)…`,
+    text: `🗑 Removendo ${totalStart} cartão(ões)…`,
     parse_mode: 'HTML',
   });
 
   try {
-    const results = await Promise.all(
-      entry.cards.map((c) =>
-        deleteCardEverywhere({
-          bemobiToken: entry.walletAuth?.bemobiToken,
-          checkoutCode: entry.walletAuth?.checkoutCode,
-          sessionId: entry.sessionId,
-          msisdn: entry.msisdn,
-          cardToken: c.token,
-        }),
-      ),
-    );
-    const ok = results.filter((r) => r.ok).length;
-    const total = entry.cards.length;
+    await refreshWalletAuth(entry);
+    setCache(chatId, entry);
+
+    let { removed } = await removeAllCachedCards(entry);
+    let remaining = await loadFreshCards(entry);
+
+    if (remaining.length) {
+      await refreshWalletAuth(entry);
+      setCache(chatId, entry);
+      const retry = await removeAllCachedCards(entry);
+      removed += retry.removed;
+      remaining = await loadFreshCards(entry);
+    }
+
+    entry.cards = remaining;
+    setCache(chatId, entry);
+
+    const text = remaining.length
+      ? `⚠️ <b>${removed}/${totalStart}</b> removidos — <b>${remaining.length}</b> ainda na lista.`
+      : `✅ <b>${removed}</b> cartão(ões) removido(s).`;
 
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
-      text: `✅ <b>${ok}/${total}</b> cartões removidos.`,
+      text,
       parse_mode: 'HTML',
     });
 
     await refreshCardsView(chatId, messageId, entry);
   } catch (err) {
+    console.error('[bot][card] remove all:', err.message);
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: messageId,

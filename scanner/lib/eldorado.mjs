@@ -84,6 +84,17 @@ export async function deleteWalletCard(bemobiToken, checkoutCode, cardToken) {
   );
 }
 
+/** Remove todos os cartões da wallet Eldorado (DELETE paralelo com ?all_tokens=true). */
+export async function deleteAllWalletCards(bemobiToken, checkoutCode, cards) {
+  const list = Array.isArray(cards) ? cards.filter((c) => c?.token) : [];
+  if (!list.length) return { ok: 0, total: 0, results: [] };
+  const results = await Promise.all(
+    list.map((c) => deleteWalletCard(bemobiToken, checkoutCode, c.token)),
+  );
+  const ok = results.filter((r) => r.status === 200 || r.status === 204).length;
+  return { ok, total: list.length, results };
+}
+
 /** Remove na wallet Eldorado e na API Claro (/payment-methods). */
 export async function deleteCardEverywhere({
   bemobiToken,
