@@ -129,12 +129,7 @@ const scheduleSessionClose = (sessionId, delayMs) => {
   }, ms);
 };
 
-const sessionCloseDelayMs = (paymentResult) => {
-  if (paymentResult?.status === '3ds_required') {
-    return Math.max(400, (config.keepBrowserOpen3dsSeconds || 30) * 1000);
-  }
-  return Math.max(400, (config.keepBrowserOpenSeconds || 0) * 1000);
-};
+const sessionCloseDelayMs = () => Math.max(400, (config.keepBrowserOpenSeconds || 0) * 1000);
 
 const buildPamPayload = (payload) => {
   const pamRaw = String(payload?.pamInfo ?? '').trim();
@@ -237,7 +232,7 @@ export const startSessionFromWebLink = async (payload) => {
     } catch (err) {
       session.status = 'error_manual';
       session.lastError = String(err?.message || err);
-      scheduleSessionClose(sessionId, sessionCloseDelayMs(null));
+      scheduleSessionClose(sessionId, sessionCloseDelayMs());
       throw err;
     }
 
@@ -246,12 +241,11 @@ export const startSessionFromWebLink = async (payload) => {
       session.status = 'done';
     } else if (paymentResult?.status === '3ds_required') {
       session.status = '3ds_required';
-      session.vncStarted = true;
     } else {
       session.status = 'error_manual';
     }
 
-    const closeMs = sessionCloseDelayMs(paymentResult);
+    const closeMs = sessionCloseDelayMs();
     scheduleSessionClose(sessionId, closeMs);
 
     return {
@@ -267,7 +261,7 @@ export const startSessionFromWebLink = async (payload) => {
     session.status = 'error_manual';
     session.lastError = String(err?.message || err);
     setSessionStep(session, 'erro', session.lastError);
-    if (sessionPageAlive(session)) scheduleSessionClose(sessionId, sessionCloseDelayMs(null));
+    if (sessionPageAlive(session)) scheduleSessionClose(sessionId, sessionCloseDelayMs());
     throw err;
   }
 };
