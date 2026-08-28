@@ -407,6 +407,19 @@ const valueGridBrowserLogic = ({ valor, mode }) => {
     const r = pick.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: hits[0].text };
   }
+  if (mode === 'click') {
+    const pick = hits[0]?.card;
+    if (!pick) return null;
+    const clickable =
+      pick.closest('button, [role="button"], [role="radio"], label') || pick;
+    clickable.scrollIntoView({ block: 'center', behavior: 'instant' });
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      clickable.dispatchEvent(
+        new MouseEvent(type, { bubbles: true, cancelable: true, view: window }),
+      );
+    }
+    return hits[0].text;
+  }
   return null;
 };
 
@@ -416,11 +429,7 @@ export const isRechargeValueSelected = async (page, rechargeValue) =>
     .evaluate(valueGridBrowserLogic, { valor: rechargeValue, mode: 'selected' })
     .catch(() => false);
 
-/** Clica no card da grade de valores (ex. R$35 +10GB) — um clique, mouse no centro. */
-export const clickValueGridCard = async (page, session, rechargeValue) => {
-  if (session) setSessionStep(session, 'valor', `Selecionando valor R$ ${rechargeValue}…`);
-  await dismissBlockingModals(page);
-
+const scrollValueGridIntoView = async (page) => {
   await page
     .evaluate(() => {
       const h = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,div,label')].find((el) =>
@@ -430,22 +439,29 @@ export const clickValueGridCard = async (page, session, rechargeValue) => {
     })
     .catch(() => {});
   await sleep(150);
+};
 
+const clickValueGridCardOnce = async (page, rechargeValue, method) => {
   const valRe = rechargeValueRegex(rechargeValue);
-  const coords = await page
-    .evaluate(valueGridBrowserLogic, { valor: rechargeValue, mode: 'coords' })
-    .catch(() => null);
 
-  if (coords) {
-    try {
-      await page.touchscreen.tap(coords.x, coords.y);
-    } catch {
-      await page.mouse.click(coords.x, coords.y);
+  if (method === 'dom') {
+    const text = await page
+      .evaluate(valueGridBrowserLogic, { valor: rechargeValue, mode: 'click' })
+      .catch(() => null);
+    return text ? { ok: true, label: `dom card="${text}"` } : null;
+  }
+
+  if (method === 'mouse' || method === 'double') {
+    const coords = await page
+      .evaluate(valueGridBrowserLogic, { valor: rechargeValue, mode: 'coords' })
+      .catch(() => null);
+    if (!coords) return null;
+    if (method === 'double') {
+      await page.mouse.click(coords.x, coords.y, { clickCount: 2, delay: 120 }).catch(() => {});
+    } else {
+      await page.mouse.click(coords.x, coords.y).catch(() => {});
     }
-    await sleep(config.pauseAfterClickMs);
-    await dismissBonusModalIfVisible(page).catch(() => {});
-    console.log(`[automation] clicou grade R$ ${rechargeValue} (tap centro) card="${coords.text}"`);
-    return true;
+    return { ok: true, label: `${method} centro card="${coords.text}"` };
   }
 
   const valueCard = page
@@ -464,44 +480,123 @@ export const clickValueGridCard = async (page, session, rechargeValue) => {
       if ((await loc.count()) === 0) continue;
       await loc.waitFor({ state: 'visible', timeout: 5000 });
       await loc.scrollIntoViewIfNeeded().catch(() => {});
-      const box = await loc.boundingBox().catch(() => null);
-      if (box) {
-        const x = box.x + box.width / 2;
-        const y = box.y + box.height / 2;
-        try {
-          await page.touchscreen.tap(x, y);
-        } catch {
-          await page.mouse.click(x, y);
-        }
-      } else {
-        await loc.tap({ timeout: config.actionTimeoutMs, force: true }).catch(() =>
-          loc.click({ timeout: config.actionTimeoutMs, force: true }),
-        );
-      }
-      await sleep(config.pauseAfterClickMs);
-      await dismissBonusModalIfVisible(page).catch(() => {});
-      console.log(`[automation] clicou grade R$ ${rechargeValue} (locator)`);
-      return true;
+      await loc.click({ timeout: config.actionTimeoutMs, force: true });
+      return { ok: true, label: 'locator force' };
     } catch {
       // próximo
     }
+  }
+  return null;
+};
+
+/** Clica no card da grade de valores — retenta até a UI marcar seleção (VPS/Xvfb). */
+export const clickValueGridCard = async (page, session, rechargeValue) => {
+  if (session) setSessionStep(session, 'valor', `Selecionando valor R$ ${rechargeValue}…`);
+  await dismissBlockingModals(page);
+  await scrollValueGridIntoView(page);
+
+  const methods = ['dom', 'mouse', 'locator', 'double'];
+  let anyClick = false;
+  for (let attempt = 0; attempt < methods.length; attempt += 1) {
+    const method = methods[attempt];
+    const hit = await clickValueGridCardOnce(page, rechargeValue, method);
+    if (!hit?.ok) continue;
+    anyClick = true;
+
+    await sleep(config.pauseAfterClickMs + (method === 'double' ? 180 : 0));
+    await dismissBonusModalIfVisible(page).catch(() => {});
+
+    if (await isRechargeValueSelected(page, rechargeValue)) {
+      console.log(`[automation] valor R$ ${rechargeValue} selecionado (${hit.label})`);
+      return true;
+    }
+
+    await sleep(450);
+    if (await isRechargeValueSelected(page, rechargeValue)) {
+      console.log(`[automation] valor R$ ${rechargeValue} selecionado após settle (${hit.label})`);
+      return true;
+    }
+
+    console.log(
+      `[automation] clique ${method} em R$ ${rechargeValue} (${hit.label}) — seleção ainda não visível`,
+    );
+  }
+
+  if (anyClick) {
+    console.log(
+      `[automation] valor R$ ${rechargeValue} clicado — aguardando smartcheckout mesmo sem borda na UI`,
+    );
+    return true;
   }
   return false;
 };
 
 export const hasPrezaoBanner = async (page) => visibleTextMatch(page, /renove seu prez/i);
 
+/** Garante que o número da linha (JWT) está selecionado na tela /numero. */
+export const ensureAccessNumberSelected = async (page, accessNumber) => {
+  const display = formatBrMobileDisplay(accessNumber);
+  if (!display) return false;
+  const hasNumberChoice = await visibleTextMatch(page, /Escolha um n[uú]mero Claro/i);
+  if (!hasNumberChoice) return false;
+
+  return page
+    .evaluate((numText) => {
+      const numRe = new RegExp(numText.replace(/[()\-]/g, '[()\\-]?'), 'i');
+      const isRedBorder = (style) => {
+        const bc = style.borderColor || '';
+        return (
+          /rgb\(\s*2(?:2[0-9]|3[0-9]|4[0-9])|rgb\(\s*227|rgb\(\s*237|#e[0-9a-f]{2}/i.test(bc) &&
+          parseFloat(style.borderWidth || '0') >= 1.5
+        );
+      };
+      const looksSelected = (el) => {
+        if (!el) return false;
+        if (el.getAttribute('aria-checked') === 'true' || el.checked) return true;
+        const style = window.getComputedStyle(el);
+        return isRedBorder(style);
+      };
+
+      let target = null;
+      for (const el of document.querySelectorAll(
+        'button, [role="button"], [role="radio"], label, div, li, input[type="radio"]',
+      )) {
+        const t = (el.innerText || el.textContent || el.value || '').replace(/\s+/g, ' ').trim();
+        if (!numRe.test(t) || /outro n[uú]mero/i.test(t)) continue;
+        const card = el.closest('label, button, [role="button"], [role="radio"], div, li') || el;
+        if (looksSelected(card) || looksSelected(el)) return true;
+        if (!target) target = card;
+      }
+      if (!target) return false;
+      target.scrollIntoView({ block: 'center', behavior: 'instant' });
+      (target.closest('button, [role="button"], label') || target).click();
+      return true;
+    }, display)
+    .catch(() => false);
+};
+
 /** Escolhe valor: banner Prezão (se existir) ou card da grade. */
 export const selectRechargeValue = async (page, session, rechargeValue) => {
   await dismissBlockingModals(page);
+  if (session?.accessNumber) {
+    await ensureAccessNumberSelected(page, session.accessNumber);
+    await sleep(config.pauseAfterClickMs);
+  }
 
   if (await hasPrezaoBanner(page)) {
     const prezao = await clickPrezaoRenewBanner(page, session, rechargeValue);
     if (prezao) return { source: 'prezao', clicked: true };
   }
 
-  const grid = await clickValueGridCard(page, session, rechargeValue);
-  if (grid) return { source: 'grid', clicked: true };
+  for (let round = 1; round <= 3; round += 1) {
+    const grid = await clickValueGridCard(page, session, rechargeValue);
+    if (grid) return { source: 'grid', clicked: true };
+    if (round < 3) {
+      console.log(`[automation] valor R$ ${rechargeValue} — nova rodada ${round + 1}/3…`);
+      await scrollValueGridIntoView(page);
+      await sleep(500);
+    }
+  }
 
   return { source: 'none', clicked: false };
 };

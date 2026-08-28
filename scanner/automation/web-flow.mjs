@@ -226,11 +226,16 @@ async function waitForCheckoutAfterValue(page, session, rechargeValue, sinceTs) 
     }
     const elapsed = Date.now() - started;
     if (
-      elapsed - lastNudge > 12000 &&
-      !(await detectPaymentMethodModal(page)) &&
-      !hasSmartCheckoutApiCall(session.gateCapture, sinceTs)
+      elapsed - lastNudge > 6000 &&
+      !hasSmartCheckoutApiCall(session.gateCapture, sinceTs) &&
+      !(await checkoutIsReady(page, session.gateCapture, sinceTs))
     ) {
-      await openPaymentMethodModal(page, session, rechargeValue, sinceTs);
+      if (!(await detectPaymentMethodModal(page))) {
+        console.log('[automation] smartcheckout pendente — re-clicando valor na grade…');
+        await clickValueGridCard(page, session, rechargeValue);
+      } else {
+        await openPaymentMethodModal(page, session, rechargeValue, sinceTs);
+      }
       lastNudge = elapsed;
     }
     if (elapsed - lastLog > 8000) {
