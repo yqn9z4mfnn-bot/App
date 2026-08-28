@@ -9,17 +9,24 @@ const THREEDS_URL_RE =
 const THREEDS_TEXT_RE =
   /verifica[cç][aã]o necess[aá]ria|valida[cç][aã]o de seguran[cç]a|enviar sms|autentica[cç][aã]o.*cart[aã]o|secure code|c[oó]digo.*sms|confirme.*compra|clique em continuar|digite o c[oó]digo|senha.*cart[aã]o|token.*seguran/i;
 
-export const describe3dsKind = (kind, hint = '') => {
+export const describe3dsKind = (kind, hint = '', opts = {}) => {
+  const browserOpen = opts.browserOpen === true;
   if (kind === 'sms' || /enviar sms/i.test(hint)) {
-    return '3DS por SMS — confirme manualmente no Edge (Enviar SMS → CONTINUAR)';
+    return browserOpen
+      ? '3DS por SMS — confirme no Edge (Enviar SMS → CONTINUAR)'
+      : '3DS por SMS — aprove no app/SMS do banco (Edge fechado)';
   }
   if (kind === 'cardinal' || /verifica[cç][aã]o necess[aá]ria|valida[cç][aã]o de seguran[cç]a/i.test(hint)) {
-    return 'VBV/3DS visual — confirme manualmente no Edge';
+    return browserOpen
+      ? 'VBV/3DS visual — confirme manualmente no Edge'
+      : 'VBV visual — aprove no app/SMS do banco (Edge fechado)';
   }
   if (kind === 'challenge_api') {
     return '3DS acionado pelo banco — aguardando confirmação frictionless';
   }
-  return 'Validação 3DS do cartão — confirme manualmente no Edge';
+  return browserOpen
+    ? 'Validação 3DS do cartão — confirme manualmente no Edge'
+    : 'Validação 3DS — aprove no banco (Edge fechado)';
 };
 
 /** Primeira captura de POST/GET Eldorado /3ds/challenge na gate. */
@@ -122,8 +129,10 @@ export async function detect3dsChallenge(page, gateCapture = null, opts = {}) {
 }
 
 /** Encerra gate-wait cedo quando 3DS aparece (não espera 120s). */
-export async function build3dsRequiredResult(page, session, gateCapture, threeDs, waitedMs) {
-  const msg = describe3dsKind(threeDs.kind, threeDs.hint || '');
+export async function build3dsRequiredResult(page, session, gateCapture, threeDs, waitedMs, opts = {}) {
+  const browserOpen = opts.browserOpen === true;
+  const visualVbv = isVisualVbv(threeDs);
+  const msg = describe3dsKind(threeDs.kind, threeDs.hint || '', { browserOpen });
   console.log(
     `[automation][3ds] detectado em ${Math.round(waitedMs / 1000)}s ` +
       `kind=${threeDs.kind} source=${threeDs.source} ui=${threeDs.uiVisible !== false ? 'sim' : 'nao'} ` +
@@ -147,6 +156,8 @@ export async function build3dsRequiredResult(page, session, gateCapture, threeDs
     gateMessage: msg,
     message: msg,
     threeDs,
+    visualVbv,
+    requiresImmediateAction: threedsRequiresImmediateAction(threeDs),
     pagamentoErro: false,
     debug: null,
   };

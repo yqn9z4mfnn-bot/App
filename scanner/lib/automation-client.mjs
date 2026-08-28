@@ -1,4 +1,5 @@
 import { cardToPam, centsToRechargeValue } from './card-to-pam.mjs';
+import { isVisualVbv } from '../automation/threeds.mjs';
 
 const DEFAULT_URL = process.env.AUTOMATION_API_URL || 'http://127.0.0.1:3000';
 
@@ -57,8 +58,11 @@ export async function runBrowserRecharge({
             ? 'DENIED'
             : 'PENDING';
 
+  const threeDs = pr.threeDs ?? null;
+  const visualVbv = Boolean(pr.visualVbv ?? (threeDs && isVisualVbv(threeDs)));
+
   const debugReport = pr.debug ?? null;
-  const threeDsHint = pr.threeDs?.hint ? String(pr.threeDs.hint).slice(0, 120) : null;
+  const threeDsHint = threeDs?.hint ? String(threeDs.hint).slice(0, 120) : null;
   const debugHint = debugReport?.pageUrl
     ? `URL final: ${debugReport.pageUrl}`
     : pr.url
@@ -75,6 +79,9 @@ export async function runBrowserRecharge({
       status: mapped,
       message: messageParts.join(' · ') || null,
       negativeReason: pr.gateMessage || null,
+      visualVbv,
+      threeDsKind: threeDs?.kind ?? null,
+      threeDsHint,
     },
     valueCents: productValue,
     latencyMs: Date.now() - started,
@@ -100,6 +107,14 @@ export async function automationHealth() {
 
 export function isBrowserRechargeEnabled() {
   return String(process.env.RECHARGE_MODE ?? 'browser').toLowerCase() !== 'api';
+}
+
+/** HTTP prepara checkout → Edge só paga (padrão quando RECHARGE_BROWSER_FLOW=checkout-link). */
+export function isHybridRechargeEnabled() {
+  return (
+    isBrowserRechargeEnabled() &&
+    String(process.env.RECHARGE_BROWSER_FLOW ?? 'checkout-link').toLowerCase() !== 'weblink'
+  );
 }
 
 /** HTTP prepara checkout Eldorado → Edge só preenche cartão e paga. */
@@ -140,6 +155,9 @@ export async function runHybridRecharge({
             ? 'DENIED'
             : 'PENDING';
 
+  const threeDs = pr.threeDs ?? null;
+  const visualVbv = Boolean(pr.visualVbv ?? (threeDs && isVisualVbv(threeDs)));
+
   return {
     paymentId: pr.gateCode ?? data.sessionId ?? null,
     pending: null,
@@ -147,6 +165,9 @@ export async function runHybridRecharge({
       status: mapped,
       message: pr.gateMessage || pr.message || data.lastError || null,
       negativeReason: pr.gateMessage || null,
+      visualVbv,
+      threeDsKind: threeDs?.kind ?? null,
+      threeDsHint: threeDs?.hint ? String(threeDs.hint).slice(0, 120) : null,
     },
     valueCents: productValue,
     latencyMs: Date.now() - started,

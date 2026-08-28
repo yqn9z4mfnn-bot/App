@@ -21,6 +21,8 @@ export function formatRechargeResult(outcome) {
   const { result, valueCents, cardMask, paymentId, latencyMs } = outcome ?? {};
 
   const status = normalizeStatus(result?.status);
+  const visualVbv = Boolean(result?.visualVbv);
+  const threeDsKind = result?.threeDsKind ?? null;
   const reason =
     result?.negativeReason ??
     result?.extra?.postMessage?.transaction?.reason ??
@@ -33,8 +35,16 @@ export function formatRechargeResult(outcome) {
     icon = '✅';
     title = 'Recarga aprovada';
   } else if (status === '3DS_REQUIRED') {
-    icon = '🔐';
-    title = '3DS — confirme no Edge';
+    if (visualVbv || threeDsKind === 'cardinal') {
+      icon = '🔐';
+      title = 'VBV visual — aprove no banco';
+    } else if (threeDsKind === 'sms') {
+      icon = '📱';
+      title = '3DS por SMS — aprove no banco';
+    } else {
+      icon = '🔐';
+      title = '3DS — aguardando banco';
+    }
   } else if (status === 'DENIED') {
     icon = '❌';
     title = 'Recarga negada';
@@ -51,8 +61,18 @@ export function formatRechargeResult(outcome) {
     `<b>Status:</b> ${esc(status)}`,
   ];
 
+  if (status === '3DS_REQUIRED' && (visualVbv || threeDsKind === 'cardinal' || threeDsKind === 'sms')) {
+    lines.push(
+      '',
+      '<i>O Edge foi fechado. Confirme a compra no app do banco, SMS ou token — a recarga conclui sozinha após aprovar.</i>',
+    );
+  }
+
   if (reason) lines.push(`<b>Motivo:</b> ${esc(reason)}`);
-  if (paymentId) lines.push(`<b>ID:</b> <code>${esc(paymentId)}</code>`);
+  if (result?.threeDsHint) {
+    lines.push(`<b>Tela:</b> ${esc(String(result.threeDsHint).slice(0, 160))}`);
+  }
+  if (paymentId) lines.push(`<b>Ref:</b> <code>${esc(paymentId)}</code>`);
   if (latencyMs) lines.push('', `<i>⏱ ${latencyMs}ms</i>`);
 
   return lines.join('\n');

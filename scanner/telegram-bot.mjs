@@ -9,7 +9,7 @@ import {
 } from './lib/eldorado.mjs';
 import { scanClaroEssential, createSession } from './lib/claro.mjs';
 import { runRecharge } from './lib/recharge.mjs';
-import { runBrowserRecharge, isBrowserRechargeEnabled } from './lib/automation-client.mjs';
+import { runBrowserRecharge, runHybridRecharge, isBrowserRechargeEnabled, isHybridRechargeEnabled } from './lib/automation-client.mjs';
 import {
   formatTelegramReport,
   buildCardKeyboard,
@@ -284,24 +284,34 @@ async function executeRecharge(chatId, card) {
   const useBrowser = isBrowserRechargeEnabled() && !card.token;
   const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
   const crossNumber = targetMsisdn && entry.msisdn && targetMsisdn !== entry.msisdn;
+  const useHybrid = useBrowser && isHybridRechargeEnabled() && !crossNumber;
   const statusMsg = await send(
     chatId,
     useBrowser
       ? crossNumber
         ? `💳 ${flow.productName} → <code>${targetMsisdn}</code> (login <code>${entry.msisdn}</code>)…`
-        : `💳 Processando <b>${flow.productName}</b>…\n<i>Edge → JWT → checkout → confirmação</i>`
+        : useHybrid
+          ? `💳 Processando <b>${flow.productName}</b>…\n<i>HTTP → Edge → checkout → confirmação</i>`
+          : `💳 Processando <b>${flow.productName}</b>…\n<i>Edge → JWT → checkout → confirmação</i>`
       : `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
   );
 
   try {
     const outcome = useBrowser
-      ? await runBrowserRecharge({
-          loginUrl: toLoginUrl(entry.link),
-          msisdn: entry.msisdn,
-          targetMsisdn,
-          productValue: flow.productValue,
-          card,
-        })
+      ? useHybrid
+        ? await runHybridRecharge({
+            loginUrl: toLoginUrl(entry.link),
+            msisdn: entry.msisdn,
+            productValue: flow.productValue,
+            card,
+          })
+        : await runBrowserRecharge({
+            loginUrl: toLoginUrl(entry.link),
+            msisdn: entry.msisdn,
+            targetMsisdn,
+            productValue: flow.productValue,
+            card,
+          })
       : await runRecharge({
           sessionId: entry.sessionId,
           msisdn: entry.msisdn,

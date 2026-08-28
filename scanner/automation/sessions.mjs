@@ -608,7 +608,10 @@ export const startSessionFromCheckoutLink = async (payload) => {
         await finalizeSessionClose(sessionId, paymentResult);
       }
     };
-    if (fast || gateMode === 'http-sse') {
+    const mustAwaitClose =
+      paymentResult?.status === '3ds_required' &&
+      (paymentResult?.visualVbv || paymentResult?.requiresImmediateAction);
+    if ((fast || gateMode === 'http-sse') && !mustAwaitClose) {
       void finish().catch((err) => {
         console.log(`[automation] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
       });

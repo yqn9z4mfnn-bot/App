@@ -266,6 +266,9 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
   let threedsWaitLogged = false;
   const lastPending = { value: false };
   const pollMs = opts.pollMs ?? config.pollIntervalMs;
+  const threedsResultOpts = () => ({
+    browserOpen: config.keepBrowserOpen3dsSeconds > 0,
+  });
 
   while (Date.now() - start < timeoutMs) {
     const elapsed = Date.now() - start;
@@ -324,11 +327,11 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       }
       const continueWait = config.threedsContinueGateWait !== false;
       if (!continueWait || stopNow) {
-        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, threedsResultOpts());
       }
       const extraMs = config.threedsExtraWaitMs ?? 60000;
       if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
-        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, threedsResultOpts());
       }
     }
 
@@ -337,7 +340,7 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
 
   const elapsed = Date.now() - start;
   if (session?.threeDsSeen) {
-    return build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed);
+    return build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed, threedsResultOpts());
   }
 
   const debugInfo = session
