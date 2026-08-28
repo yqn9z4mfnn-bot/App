@@ -53,7 +53,9 @@ export async function runBrowserRecharge({
         ? '3DS_REQUIRED'
         : rawStatus === 'timeout'
           ? 'TIMEOUT'
-          : 'DENIED';
+          : rawStatus === 'error'
+            ? 'DENIED'
+            : 'PENDING';
 
   const debugReport = pr.debug ?? null;
   const threeDsHint = pr.threeDs?.hint ? String(pr.threeDs.hint).slice(0, 120) : null;

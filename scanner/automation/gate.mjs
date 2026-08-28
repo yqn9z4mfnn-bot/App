@@ -12,8 +12,6 @@ const GATE_URL_RE =
 
 const PAYMENT_ERROR_TEXT_RE =
   /n[aã]o conseguimos processar|n[aã]o foi poss[ií]vel processar|pagamento recusad|transa[cç][aã]o negad|cart[aã]o recusad|algo deu errado/i;
-const PAYMENT_SUCCESS_TEXT_RE =
-  /recarga realizada|pagamento aprovad|recarga efetuada|sucesso na recarga|obrigado pela recarga|pronto!\s*sua recarga/i;
 
 const parseSseJson = (text) => {
   const line = String(text || '')
@@ -42,7 +40,7 @@ const pickGateFields = (body) => {
     return { code: 'CONFIRMED', message: body.message || 'Pagamento confirmado' };
   }
   if (Array.isArray(body) && body[0]?.status === 'ok' && body[0]?.paymentMethod?.nsu) {
-    return { code: 'OK', message: 'Recarga confirmada' };
+    return { code: 'OK', message: 'Recarga confirmada (aguardando CONFIRMED)' };
   }
   const loopSt = body.tags?.transaction?.status ?? body.tags?.status;
   if (loopSt) {
@@ -158,7 +156,6 @@ export const attachGateCapture = (context) => {
         if (/\/payments/i.test(u) && (b?.status === 'CONFIRMED' || b?.payments?.[0]?.status === 'CONFIRMED')) r += 40;
         if (/\/payments/i.test(u) && (b?.status === 'DENIED' || b?.payments?.[0]?.status === 'DENIED')) r += 32;
         if (/\/loop\/events/i.test(u) && b?.tags?.transaction?.status === 'DENIED') r += 28;
-        if (Array.isArray(b) && b[0]?.status === 'ok') r += 22;
         if (/\/payments/i.test(u) && /^PENDING$/i.test(String(b?.status || b?.payments?.[0]?.status || ''))) r += 5;
         return r * 1e6 + c.ts;
       };
@@ -171,10 +168,21 @@ export const attachGateCapture = (context) => {
 export const gateIndicatesSuccess = (gateResponse) => {
   const b = gateResponse?.body;
   if (!b) return false;
+  const u = gateResponse?.url || '';
+  if (!/\/payments/i.test(u)) return false;
   if (/^CONFIRMED$/i.test(String(b.status || ''))) return true;
   if (b.payments?.[0]?.status === 'CONFIRMED') return true;
-  if (Array.isArray(b) && b[0]?.status === 'ok' && b[0]?.paymentMethod?.nsu) return true;
   return false;
+};
+
+/** Última captura Eldorado /payments com status CONFIRMED. */
+export const findConfirmedPaymentCapture = (gateCapture) => {
+  const list = gateCapture?.captures ?? [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const c = list[i];
+    if (gateIndicatesSuccess(c)) return c;
+  }
+  return null;
 };
 
 export const gateIndicatesError = (gateResponse) => {
@@ -195,9 +203,6 @@ const scanPageForPaymentOutcome = async (page) => {
       if (PAYMENT_ERROR_TEXT_RE.test(text)) {
         return { status: 'error', hint: text.slice(0, 500), frameUrl: frame.url() };
       }
-      if (PAYMENT_SUCCESS_TEXT_RE.test(text)) {
-        return { status: 'success', hint: text.slice(0, 500), frameUrl: frame.url() };
-      }
     } catch {
       // cross-origin
     }
@@ -205,7 +210,6 @@ const scanPageForPaymentOutcome = async (page) => {
   try {
     const text = (await page.locator('body').innerText({ timeout: 1500 })).replace(/\s+/g, ' ').trim();
     if (PAYMENT_ERROR_TEXT_RE.test(text)) return { status: 'error', hint: text.slice(0, 500), frameUrl: page.url() };
-    if (PAYMENT_SUCCESS_TEXT_RE.test(text)) return { status: 'success', hint: text.slice(0, 500), frameUrl: page.url() };
   } catch {
     // ignore
   }
@@ -264,25 +268,21 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
     }
 
     const url = page.url();
-    const best = gateCapture?.best?.() || null;
-    if (best && gateIndicatesSuccess(best)) {
-      return buildPaymentResult(page, 'success', url, gateCapture);
+    const confirmed = findConfirmedPaymentCapture(gateCapture);
+    if (confirmed) {
+      return buildPaymentResult(page, 'success', url, { ...gateCapture, best: () => confirmed });
     }
+
+    const best = gateCapture?.best?.() || null;
     if (best && gateIndicatesError(best)) {
       return buildPaymentResult(page, 'error', url, gateCapture);
     }
 
     const visible = await scanPageForPaymentOutcome(page);
-    if (visible?.status === 'success' && !/pagamento-erro/i.test(url)) {
-      return buildPaymentResult(page, 'success', url, gateCapture, visible.hint);
-    }
     if (visible?.status === 'error' && !/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
       return buildPaymentResult(page, 'error', url, gateCapture, visible.hint);
     }
 
-    if (/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
-      return buildPaymentResult(page, 'success', url, gateCapture);
-    }
     if (/pagamento-erro/i.test(url)) {
       return buildPaymentResult(page, 'error', url, gateCapture);
     }

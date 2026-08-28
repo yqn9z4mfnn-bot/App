@@ -11,8 +11,8 @@ function formatBRL(cents) {
 
 function normalizeStatus(raw) {
   const st = String(raw ?? 'UNKNOWN').toUpperCase();
-  if (st === 'CONFIRMED' || st === 'APPROVED' || st === 'OK') return 'SUCCESS';
-  if (st === 'REJECTED' || st === 'FAILURE' || st === 'NOK') return 'DENIED';
+  if (st === 'CONFIRMED') return 'SUCCESS';
+  if (st === 'REJECTED' || st === 'FAILURE' || st === 'NOK' || st === 'DENIED') return 'DENIED';
   if (st === '3DS_REQUIRED' || st === '3DS') return '3DS_REQUIRED';
   return st;
 }
