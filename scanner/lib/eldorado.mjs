@@ -29,8 +29,11 @@ export async function fetchWalletCards(bemobiToken, checkoutCode) {
   );
 }
 
-export async function openWalletSession(sessionId, msisdn, productId) {
-  const checkoutRes = await createSmartCheckout(sessionId, msisdn, productId);
+export async function openWalletSession(sessionId, msisdn, productId, opts = {}) {
+  const checkoutRes = await createSmartCheckout(sessionId, msisdn, productId, {
+    recipient: opts.recipient ?? msisdn,
+    payerMsisdn: opts.payerMsisdn ?? msisdn,
+  });
 
   if (checkoutRes.status === 429) {
     return {

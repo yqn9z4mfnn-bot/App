@@ -127,16 +127,18 @@ export async function runHybridRecharge({
   browser = process.env.BROWSER_NAME || 'edge',
 }) {
   if (targetMsisdn && normalizeTarget(targetMsisdn) !== normalizeTarget(msisdn)) {
-    throw new Error('Recarga cruzada ainda não suportada no modo híbrido.');
+    // recarga cruzada suportada no checkout-link
   }
   const started = Date.now();
   const pamInfo = cardToPam(card);
   const rechargeValue = centsToRechargeValue(productValue);
   const accessNumber = String(msisdn ?? '').replace(/\D/g, '');
+  const rechargeTargetNumber = String(targetMsisdn ?? msisdn ?? '').replace(/\D/g, '');
 
   const data = await automationFetch('/api/session/start-checkout-link', {
     loginUrl,
     accessNumber,
+    rechargeTargetNumber,
     rechargeValue,
     pamInfo,
     browser,

@@ -284,14 +284,16 @@ async function executeRecharge(chatId, card) {
   const useBrowser = isBrowserRechargeEnabled() && !card.token;
   const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
   const crossNumber = targetMsisdn && entry.msisdn && targetMsisdn !== entry.msisdn;
-  const useHybrid = useBrowser && isHybridRechargeEnabled() && !crossNumber;
+  const useHybrid = useBrowser && isHybridRechargeEnabled();
   const statusMsg = await send(
     chatId,
     useBrowser
       ? crossNumber
         ? `💳 ${flow.productName} → <code>${targetMsisdn}</code> (login <code>${entry.msisdn}</code>)…`
         : useHybrid
-          ? `💳 Processando <b>${flow.productName}</b>…\n<i>HTTP → Edge → checkout → confirmação</i>`
+          ? crossNumber
+            ? `💳 <b>${flow.productName}</b> → <code>${targetMsisdn}</code> (login <code>${entry.msisdn}</code>)…\n<i>HTTP → Edge → recarga cruzada</i>`
+            : `💳 Processando <b>${flow.productName}</b>…\n<i>HTTP → Edge → checkout → confirmação</i>`
           : `💳 Processando <b>${flow.productName}</b>…\n<i>Edge → JWT → checkout → confirmação</i>`
       : `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
   );
@@ -302,6 +304,7 @@ async function executeRecharge(chatId, card) {
         ? await runHybridRecharge({
             loginUrl: toLoginUrl(entry.link),
             msisdn: entry.msisdn,
+            targetMsisdn,
             productValue: flow.productValue,
             card,
           })

@@ -1,4 +1,5 @@
 import { claroGet, claroPost, claroDelete } from './http.mjs';
+import { normalizeBrMobile } from './fetch-claro-link.mjs';
 
 export async function createSession(jwt) {
   const res = await claroPost('/sessions/', null, {
@@ -38,11 +39,13 @@ export async function fetchRechargeProducts(sessionId, msisdn) {
   return claroGet(`/customers/${msisdn}/products`, sessionId);
 }
 
-export async function createSmartCheckout(sessionId, msisdn, productId) {
+export async function createSmartCheckout(sessionId, msisdn, productId, opts = {}) {
+  const recipient = normalizeBrMobile(opts.recipient ?? msisdn) ?? msisdn;
+  const payer = normalizeBrMobile(opts.payerMsisdn ?? msisdn) ?? msisdn;
   return claroPost(`/customers/${msisdn}/smartcheckout/v2/url`, sessionId, {
-    msisdn,
+    msisdn: payer,
     channel: 'MINHA_CLARO_WEB',
-    recipient: msisdn,
+    recipient,
     productId,
   });
 }

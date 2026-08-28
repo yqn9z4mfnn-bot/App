@@ -385,8 +385,11 @@ export const startSessionFromCheckoutLink = async (payload) => {
   if (!accessNumber || accessNumber.length !== 11) {
     throw new Error('accessNumber (DDD + 9 dígitos) é obrigatório.');
   }
-  if (rechargeTargetNumber && rechargeTargetNumber !== accessNumber) {
-    throw new Error('Recarga cruzada ainda não suportada no modo checkout-link.');
+  const crossNumber = rechargeTargetNumber && rechargeTargetNumber !== accessNumber;
+  if (crossNumber) {
+    console.log(
+      `[automation] checkout-link cruzado: login=${accessNumber} → destino=${rechargeTargetNumber}`,
+    );
   }
 
   let loginUrl = String(payload?.loginUrl || payload?.link || '').trim();
@@ -425,6 +428,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
     const prep = await prepareCheckoutViaHttp({
       loginUrl,
       msisdn: accessNumber,
+      targetMsisdn: rechargeTargetNumber,
       valueCents,
     });
     prep.httpLatencyMs = Date.now() - httpStarted;
@@ -435,7 +439,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
     if (prep.bemobiToken && prep.checkoutCode) {
       try {
         const cardsRes = await fetchWalletCards(prep.bemobiToken, prep.checkoutCode);
-        const claroEssential = await scanClaroEssential(prep.claroSessionId, accessNumber, {
+        const claroEssential = await scanClaroEssential(prep.claroSessionId, rechargeTargetNumber, {
           includeProducts: false,
         }).catch(() => null);
         const saved = unifySavedCards(
@@ -452,11 +456,14 @@ export const startSessionFromCheckoutLink = async (payload) => {
               bemobiToken: prep.bemobiToken,
               checkoutCode: prep.checkoutCode,
               sessionId: prep.claroSessionId,
-              msisdn: accessNumber,
+              msisdn: rechargeTargetNumber,
               cardToken: card.token,
             }).catch(() => {});
           }
-          const wallet2 = await openWalletSession(prep.claroSessionId, accessNumber, prep.product.id);
+          const wallet2 = await openWalletSession(prep.claroSessionId, accessNumber, prep.product.id, {
+            payerMsisdn: accessNumber,
+            recipient: rechargeTargetNumber,
+          });
           if (wallet2.error) {
             console.log(
               `[automation] checkout-link: URL não regenerada após limpar wallet: ${wallet2.message ?? wallet2.error}`,
