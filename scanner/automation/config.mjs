@@ -17,9 +17,9 @@ export const config = {
     'https://clarorecarga.claro.com.br/whatsapp/pagamento-sucesso',
   defaultCvv: process.env.DEFAULT_CVV ?? '0000',
   defaultCardholderMaxLen: toInt(process.env.DEFAULT_CARDHOLDER_MAX_LEN, 7),
-  keepBrowserOpenSeconds: toInt(process.env.KEEP_BROWSER_OPEN_SECONDS, 5),
-  /** Após 3DS: mantém Edge aberto para confirmação manual (segundos). */
-  keepBrowserOpen3dsSeconds: toInt(process.env.KEEP_BROWSER_OPEN_3DS_SECONDS, 300),
+  keepBrowserOpenSeconds: toInt(process.env.KEEP_BROWSER_OPEN_SECONDS, 0),
+  /** Após 3DS sem resposta final: tempo extra antes de fechar (segundos). */
+  keepBrowserOpen3dsSeconds: toInt(process.env.KEEP_BROWSER_OPEN_3DS_SECONDS, 30),
   /** Após API /3ds/challenge, aguarda tela do banco antes de sinalizar 3DS (ms). */
   threedsUiWaitMs: toInt(process.env.THREEDS_UI_WAIT_MS, 25000),
   /** Tempo extra de gate-wait após detectar 3DS (ms). */

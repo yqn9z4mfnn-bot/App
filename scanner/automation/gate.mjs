@@ -6,6 +6,7 @@ import {
   build3dsRequiredResult,
   get3dsChallengeApiCapture,
 } from './threeds.mjs';
+import { startVncOn3ds } from './vnc.mjs';
 
 const GATE_URL_RE =
   /eldorado\.m4u|claro-recarga-api|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|wallet|card/i;
@@ -254,6 +255,7 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
   let lastHeartbeat = 0;
   let challengeApiFirstSeen = null;
   let threedsWaitLogged = false;
+  let threeDsSince = null;
   const lastPending = { value: false };
 
   while (Date.now() - start < timeoutMs) {
@@ -303,7 +305,19 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       threedsUiWaitMs: config.threedsUiWaitMs,
     });
     if (threeDs?.detected) {
-      return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+      if (threeDsSince == null) {
+        threeDsSince = Date.now();
+        startVncOn3ds();
+        if (session) session.vncStarted = true;
+        console.log(
+          `[automation][3ds] confirmando — aguardando sucesso/erro (até ${Math.round((config.threedsExtraWaitMs || 180000) / 1000)}s)…`,
+        );
+      }
+      if (Date.now() - threeDsSince > (config.threedsExtraWaitMs || 180000)) {
+        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+      }
+      await sleep(config.pollIntervalMs);
+      continue;
     }
 
     await sleep(config.pollIntervalMs);

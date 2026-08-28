@@ -120,11 +120,20 @@ export const getSessionPublic = (sessionId) => {
 };
 
 const scheduleSessionClose = (sessionId, delayMs) => {
+  const ms = Math.max(400, delayMs);
+  console.log(`[automation] fechando Edge em ${ms}ms…`);
   setTimeout(() => {
     closeSession(sessionId).catch((err) => {
       console.error(`[automation] falha ao fechar ${sessionId}:`, err?.message || err);
     });
-  }, delayMs);
+  }, ms);
+};
+
+const sessionCloseDelayMs = (paymentResult) => {
+  if (paymentResult?.status === '3ds_required') {
+    return Math.max(400, (config.keepBrowserOpen3dsSeconds || 30) * 1000);
+  }
+  return Math.max(400, (config.keepBrowserOpenSeconds || 0) * 1000);
 };
 
 const buildPamPayload = (payload) => {
@@ -228,7 +237,7 @@ export const startSessionFromWebLink = async (payload) => {
     } catch (err) {
       session.status = 'error_manual';
       session.lastError = String(err?.message || err);
-      scheduleSessionClose(sessionId, 1500);
+      scheduleSessionClose(sessionId, sessionCloseDelayMs(null));
       throw err;
     }
 
@@ -242,10 +251,7 @@ export const startSessionFromWebLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    const closeMs =
-      paymentResult?.status === '3ds_required'
-        ? Math.max(60000, (config.keepBrowserOpen3dsSeconds || 300) * 1000)
-        : Math.max(1500, (config.keepBrowserOpenSeconds || 5) * 1000);
+    const closeMs = sessionCloseDelayMs(paymentResult);
     scheduleSessionClose(sessionId, closeMs);
 
     return {
@@ -261,7 +267,7 @@ export const startSessionFromWebLink = async (payload) => {
     session.status = 'error_manual';
     session.lastError = String(err?.message || err);
     setSessionStep(session, 'erro', session.lastError);
-    if (sessionPageAlive(session)) scheduleSessionClose(sessionId, 1500);
+    if (sessionPageAlive(session)) scheduleSessionClose(sessionId, sessionCloseDelayMs(null));
     throw err;
   }
 };
