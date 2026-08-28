@@ -1,5 +1,6 @@
 import { config } from './config.mjs';
 import { saveStallDebug } from './debug.mjs';
+import { startVncOn3ds } from './vnc.mjs';
 
 /** URLs típicas de fluxo 3DS (Cardinal, Visa, Eldorado challenge). */
 const THREEDS_URL_RE =
@@ -106,6 +107,8 @@ export async function build3dsRequiredResult(page, session, gateCapture, threeDs
   if (threeDs.hint) {
     console.log(`[automation][3ds] tela: ${threeDs.hint.slice(0, 160)}`);
   }
+
+  startVncOn3ds();
 
   const debugInfo = session
     ? await saveStallDebug(page, session, gateCapture, 'gate_3ds', {

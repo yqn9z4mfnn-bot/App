@@ -16,6 +16,7 @@ import {
   sleep,
 } from './helpers.mjs';
 import { runWebLinkRecharge } from './web-flow.mjs';
+import { stopVncIfIdle } from './vnc.mjs';
 
 const sessions = new Map();
 let pendingBrowserSlots = 0;
@@ -88,6 +89,7 @@ export const closeSession = async (sessionId) => {
   } catch {
     // ignore
   }
+  if (session.vncStarted) stopVncIfIdle();
   return { sessionId, closed: true };
 };
 
@@ -235,6 +237,7 @@ export const startSessionFromWebLink = async (payload) => {
       session.status = 'done';
     } else if (paymentResult?.status === '3ds_required') {
       session.status = '3ds_required';
+      session.vncStarted = true;
     } else {
       session.status = 'error_manual';
     }
