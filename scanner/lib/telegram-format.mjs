@@ -117,13 +117,27 @@ export function buildConfirmKeyboard(token, action = 'rm') {
   };
 }
 
+/** Modo de recarga no /start. */
+export function buildRechargeModeKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📱 Mesmo número', callback_data: 'rcgmode:same' },
+        { text: '🔀 Outro número', callback_data: 'rcgmode:other' },
+      ],
+    ],
+  };
+}
+
 export const WELCOME = `<b>Claro Recarga Scanner</b>
 
-• <b>.txt</b> (um número por linha) → gera JWT, lê valores e <b>salva no banco</b> (1 por vez)
-• <b>número avulso</b> → varredura normal, <b>não salva</b>
-• /valores ou <code>20</code> → envia o <b>link</b> de um número do banco
+<b>Recarga rápida</b> — escolha o modo:
+• <b>Mesmo número</b> — envie o número; login e recarga nele
+• <b>Outro número</b> — geramos login aleatório; você informa quem recebe
 
-• /recarga_para <code>LOGIN DESTINO</code> — JWT de um, recarga no outro
-• /backup — snapshot do banco antes de mudanças
+Também:
+• <b>.txt</b> → salva números no banco
+• /valores ou <code>20</code> → link de um número do banco
+• /recarga_para <code>LOGIN DESTINO</code> — recarga cruzada manual
 
-/valores · /valor 20 · /lista · /erros · /recarga · /recarga_para · /backup`;
+/valores · /lista · /recarga · /backup`;

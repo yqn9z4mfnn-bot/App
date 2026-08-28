@@ -218,6 +218,34 @@ export function countForValue(valueCents) {
     .get(cents).n;
 }
 
+/** DDDs distintos presentes no banco (2 dígitos). */
+export function listDistinctDdds() {
+  return getDb()
+    .prepare(
+      `SELECT DISTINCT substr(msisdn, 1, 2) AS ddd
+       FROM numbers
+       WHERE status = 'ok' AND link IS NOT NULL AND length(msisdn) = 11
+       ORDER BY ddd`,
+    )
+    .all()
+    .map((r) => r.ddd)
+    .filter(Boolean);
+}
+
+/** Número aleatório do banco com o DDD informado (para extrair prefixo). */
+export function pickRandomMsisdnByDdd(ddd) {
+  const d = String(ddd ?? '').replace(/\D/g, '').slice(0, 2);
+  if (!d) return null;
+  const row = getDb()
+    .prepare(
+      `SELECT msisdn FROM numbers
+       WHERE msisdn LIKE ? AND status = 'ok' AND link IS NOT NULL AND length(msisdn) = 11
+       ORDER BY RANDOM() LIMIT 1`,
+    )
+    .get(`${d}%`);
+  return row?.msisdn ?? null;
+}
+
 export function pickLinkForValue(valueCents, { excludeMsisdn } = {}) {
   const cents = Number(valueCents);
   if (!Number.isFinite(cents) || cents <= 0) return null;

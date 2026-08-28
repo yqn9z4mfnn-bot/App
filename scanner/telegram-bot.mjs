@@ -14,6 +14,7 @@ import {
   formatTelegramReport,
   buildCardKeyboard,
   buildConfirmKeyboard,
+  buildRechargeModeKeyboard,
   WELCOME,
 } from './lib/telegram-format.mjs';
 import {
@@ -45,6 +46,7 @@ import {
   ingestNumbers,
   refreshMsisdnProducts,
 } from './lib/bulk-scan.mjs';
+import { generateLoginMsisdn } from './lib/generate-msisdn.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DATA_DIR = join(process.env.XDG_DATA_HOME || join(homedir(), '.local/share'), 'linkclaro-bot');
@@ -67,6 +69,8 @@ let offset = 0;
 const busy = new Set();
 const cache = new Map();
 const rechargeFlow = new Map();
+/** @type {Map<number, 'same'|'other'>} */
+const chatRechargeMode = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
 const BULK_CONCURRENCY = Math.max(1, Number(process.env.BULK_CONCURRENCY || 1));
 
@@ -155,57 +159,157 @@ function clearRecharge(chatId) {
   rechargeFlow.delete(chatId);
 }
 
+async function promptRechargeMode(chatId) {
+  clearRecharge(chatId);
+  chatRechargeMode.delete(chatId);
+  await send(chatId, WELCOME, { reply_markup: buildRechargeModeKeyboard() });
+}
+
+/** Prepara sessão Claro + teclado de valores para recarga. */
+async function prepareRechargeSession(chatId, accessMsisdn, {
+  targetMsisdn = null,
+  statusMsg = null,
+  title = null,
+} = {}) {
+  const access = normalizeBrMobile(accessMsisdn);
+  const target = normalizeBrMobile(targetMsisdn ?? accessMsisdn);
+  if (!access || !target) {
+    await send(chatId, '❌ Número inválido.');
+    return false;
+  }
+
+  if (busy.has(chatId)) {
+    await send(chatId, '⏳ Aguarde…');
+    return false;
+  }
+
+  busy.add(chatId);
+  let msg = statusMsg;
+  if (!msg) {
+    msg = await send(chatId, `🔗 Gerando login para <code>${access}</code>…`);
+  } else {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: msg.message_id,
+      text: `🔗 Gerando login para <code>${access}</code>…`,
+      parse_mode: 'HTML',
+    });
+  }
+
+  try {
+    let link;
+    const row = getNumber(access);
+    if (row?.link) {
+      link = toLoginUrl(row.link);
+    } else {
+      const generated = await fetchClaroLoginLink(access);
+      link = generated.link;
+    }
+
+    const session = await createSession(parseLink(link).jwt);
+    const refreshed = await refreshMsisdnProducts(access, {
+      link,
+      sessionId: session.id,
+      identifier: session.identifier,
+    });
+    const valores = refreshed.valores ?? [];
+
+    setCache(chatId, {
+      link,
+      walletAuth: null,
+      cards: [],
+      sessionId: session.id,
+      msisdn: session.identifier || access,
+      rechargeTargetNumber: target !== access ? target : undefined,
+      valores,
+      rechargeMode: target !== access ? 'other' : 'same',
+    });
+
+    if (!valores.length) {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: msg.message_id,
+        text: `❌ <code>${access}</code> sem valores disponíveis para recarga.`,
+        parse_mode: 'HTML',
+      });
+      return false;
+    }
+
+    clearRecharge(chatId);
+    const cross = target !== access;
+    const header =
+      title ??
+      (cross
+        ? `<b>Recarga cruzada</b>\nLogin: <code>${access}</code>\nDestino: <code>${target}</code>`
+        : `<b>Recarga</b> — <code>${access}</code>`);
+
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: msg.message_id,
+      text: `${header}\n\nEscolha o valor:`,
+      parse_mode: 'HTML',
+      reply_markup: buildValueKeyboard(valores),
+    });
+    return true;
+  } catch (err) {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: msg.message_id,
+      text: `❌ <b>Erro:</b> ${err.message.replace(/</g, '&lt;')}`,
+      parse_mode: 'HTML',
+    });
+    return false;
+  } finally {
+    busy.delete(chatId);
+  }
+}
+
+async function startSameNumberRecharge(chatId, msisdn) {
+  chatRechargeMode.set(chatId, 'same');
+  await prepareRechargeSession(chatId, msisdn, { targetMsisdn: msisdn });
+}
+
+async function startOtherNumberRecharge(chatId) {
+  chatRechargeMode.set(chatId, 'other');
+  if (busy.has(chatId)) {
+    await send(chatId, '⏳ Aguarde…');
+    return;
+  }
+
+  busy.add(chatId);
+  const statusMsg = await send(chatId, '🎲 Gerando número de login (DDD do banco)…');
+  try {
+    const { msisdn, attempt } = await generateLoginMsisdn();
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: `🎲 Login gerado: <code>${msisdn}</code> (${attempt}ª tentativa)\nBuscando valores…`,
+      parse_mode: 'HTML',
+    });
+    busy.delete(chatId);
+    await prepareRechargeSession(chatId, msisdn, {
+      statusMsg,
+      title: `<b>Outro número</b>\nLogin gerado: <code>${msisdn}</code>\n<i>Depois do valor, envie quem recebe.</i>`,
+    });
+  } catch (err) {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: `❌ <b>Falha ao gerar número:</b> ${err.message.replace(/</g, '&lt;')}`,
+      parse_mode: 'HTML',
+    });
+  } finally {
+    busy.delete(chatId);
+  }
+}
+
 async function promptCardLine(chatId) {
   await send(chatId, CARD_INPUT_HINT);
 }
 
 async function startRechargePickerForTarget(chatId, accessMsisdn, targetMsisdn) {
-  const access = normalizeBrMobile(accessMsisdn);
-  const target = normalizeBrMobile(targetMsisdn);
-  if (!access || !target) {
-    await send(chatId, '❌ Números inválidos.');
-    return;
-  }
-
-  let row = getNumber(access);
-  let link = row?.link;
-  if (!link) {
-    const generated = await fetchClaroLoginLink(access);
-    link = generated.link;
-  }
-
-  const session = await createSession(parseLink(toLoginUrl(link)).jwt);
-  const refreshed = await refreshMsisdnProducts(access, {
-    link,
-    sessionId: session.id,
-    identifier: session.identifier,
-  });
-
-  setCache(chatId, {
-    link,
-    walletAuth: null,
-    cards: [],
-    sessionId: session.id,
-    msisdn: session.identifier,
-    rechargeTargetNumber: target,
-    valores: refreshed.valores ?? [],
-  });
-
-  if (!refreshed.valores?.length) {
-    await send(
-      chatId,
-      `❌ O número <code>${access}</code> não tem valores disponíveis para recarga.\n` +
-        `Destino seria <code>${target}</code>.`,
-    );
-    return;
-  }
-
-  clearRecharge(chatId);
-  await send(
-    chatId,
-    `<b>Recarga cruzada</b>\nLogin: <code>${access}</code>\nDestino: <code>${target}</code>\n\nEscolha o valor:`,
-    { reply_markup: buildValueKeyboard(refreshed.valores) },
-  );
+  chatRechargeMode.set(chatId, 'other');
+  await prepareRechargeSession(chatId, accessMsisdn, { targetMsisdn });
 }
 
 async function startRechargePicker(chatId) {
@@ -238,13 +342,28 @@ async function onValueSelected(chatId, messageId, productId) {
   }
 
   rechargeFlow.set(chatId, {
-    step: 'pick_card',
+    step: entry.rechargeMode === 'other' && !entry.rechargeTargetNumber ? 'target_msisdn' : 'pick_card',
+    mode: entry.rechargeMode || chatRechargeMode.get(chatId) || 'same',
     productId: product.id,
     productValue: product.value,
     productName: product.name,
     rechargeTargetNumber: entry.rechargeTargetNumber || entry.msisdn,
     card: {},
   });
+
+  const flow = rechargeFlow.get(chatId);
+  if (flow.step === 'target_msisdn') {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text:
+        `<b>${product.name}</b> selecionado.\n\n` +
+        `Login: <code>${entry.msisdn}</code>\n\n` +
+        'Envie o <b>número que vai receber</b> a recarga (11 dígitos):',
+      parse_mode: 'HTML',
+    });
+    return;
+  }
 
   const hasCards = entry.cards?.length > 0;
   await tg('editMessageText', {
@@ -346,6 +465,39 @@ async function executeRecharge(chatId, card) {
 async function handleRechargeInput(chatId, text) {
   const flow = rechargeFlow.get(chatId);
   if (!flow) return false;
+
+  if (flow.step === 'target_msisdn') {
+    const target = normalizeBrMobile(text);
+    if (!target) {
+      await send(chatId, '❌ Número destino inválido. Use DDD + 9 dígitos.');
+      return true;
+    }
+    const entry = getCache(chatId);
+    if (!entry) {
+      await send(chatId, '❌ Sessão expirada. Use /start de novo.');
+      clearRecharge(chatId);
+      return true;
+    }
+    entry.rechargeTargetNumber = target;
+    setCache(chatId, entry);
+    flow.rechargeTargetNumber = target;
+    flow.step = 'pick_card';
+    rechargeFlow.set(chatId, flow);
+
+    const hasCards = entry.cards?.length > 0;
+    await send(
+      chatId,
+      `<b>${flow.productName}</b> → <code>${target}</code>\n\n` +
+        (hasCards ? 'Como deseja pagar?' : 'Envie os dados do cartão:'),
+      hasCards ? { reply_markup: buildPayMethodKeyboard(entry.cards) } : undefined,
+    );
+    if (!hasCards) {
+      flow.step = 'card_line';
+      rechargeFlow.set(chatId, flow);
+      await promptCardLine(chatId);
+    }
+    return true;
+  }
 
   if (flow.step === 'cvv_saved') {
     if (!/^\d{3,4}$/.test(text.trim())) {
@@ -699,6 +851,24 @@ async function handleCallback(query) {
 
   if (data === 'recarga:start') {
     await startRechargePicker(chatId);
+    return;
+  }
+
+  if (data === 'rcgmode:same') {
+    chatRechargeMode.set(chatId, 'same');
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text: '<b>📱 Mesmo número</b>\n\nEnvie o número (login e recarga nele):',
+      parse_mode: 'HTML',
+    }).catch(() =>
+      send(chatId, '<b>📱 Mesmo número</b>\n\nEnvie o número (login e recarga nele):'),
+    );
+    return;
+  }
+
+  if (data === 'rcgmode:other') {
+    await startOtherNumberRecharge(chatId);
     return;
   }
 
@@ -1213,7 +1383,7 @@ async function handleMessage(msg) {
     }
 
     if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@')) {
-      await send(chatId, WELCOME);
+      await promptRechargeMode(chatId);
       return;
     }
 
@@ -1335,6 +1505,18 @@ async function handleMessage(msg) {
 
     const skipWallet = text.startsWith('/scan');
     const link = extractLink(skipWallet ? text.replace(/^\/scan(@\S+)?\s*/, '') : text);
+
+    if (link?.kind === 'msisdn') {
+      const mode = chatRechargeMode.get(chatId);
+      if (mode === 'same') {
+        await startSameNumberRecharge(chatId, link.msisdn);
+        return;
+      }
+      if (!mode) {
+        await send(chatId, 'Escolha o modo de recarga:', { reply_markup: buildRechargeModeKeyboard() });
+        return;
+      }
+    }
 
     if (!link) {
       const cents = parseReaisToCents(text);
