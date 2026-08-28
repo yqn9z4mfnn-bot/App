@@ -305,14 +305,10 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
     if (threeDs?.detected) {
       if (session && !session.threeDsSeen) {
         session.threeDsSeen = threeDs;
-        console.log(
-          `[automation][3ds] detectado (${threeDs.kind}) — continuando gate-wait até CONFIRMED/DENIED…`,
-        );
-        if (threeDs.hint) {
-          console.log(`[automation][3ds] tela: ${threeDs.hint.slice(0, 160)}`);
-        }
       }
-      // Não encerra aqui — aguarda resposta final da gate (ex. PENDING → CONFIRMED).
+      // Avisa imediato no Telegram — não espera timeout de 120s.
+      // (Sucesso só com CONFIRMED; falso OK não volta por fechar cedo no 3DS.)
+      return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
     }
 
     await sleep(config.pollIntervalMs);

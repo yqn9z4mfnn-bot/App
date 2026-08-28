@@ -107,12 +107,12 @@ export async function build3dsRequiredResult(page, session, gateCapture, threeDs
     console.log(`[automation][3ds] tela: ${threeDs.hint.slice(0, 160)}`);
   }
 
-  const debugInfo = session
-    ? await saveStallDebug(page, session, gateCapture, 'gate_3ds', {
-        waitedMs,
-        threeDs,
-      })
-    : null;
+  if (session) {
+    void saveStallDebug(page, session, gateCapture, 'gate_3ds', {
+      waitedMs,
+      threeDs,
+    }).catch(() => {});
+  }
 
   return {
     status: '3ds_required',
@@ -122,8 +122,6 @@ export async function build3dsRequiredResult(page, session, gateCapture, threeDs
     message: msg,
     threeDs,
     pagamentoErro: false,
-    debug: debugInfo
-      ? { ...debugInfo.report, jsonPath: debugInfo.jsonPath, pngPath: debugInfo.pngPath }
-      : null,
+    debug: null,
   };
 }

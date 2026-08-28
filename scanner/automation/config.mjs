@@ -21,7 +21,7 @@ export const config = {
   /** Após 3DS: 0 = fecha Edge imediatamente (segundos). */
   keepBrowserOpen3dsSeconds: toInt(process.env.KEEP_BROWSER_OPEN_3DS_SECONDS, 0),
   /** Após API /3ds/challenge, aguarda tela do banco antes de sinalizar 3DS (ms). */
-  threedsUiWaitMs: toInt(process.env.THREEDS_UI_WAIT_MS, 25000),
+  threedsUiWaitMs: toInt(process.env.THREDS_UI_WAIT_MS, 12000),
   /** Tempo extra de gate-wait após detectar 3DS (ms). */
   threedsExtraWaitMs: toInt(process.env.THREEDS_EXTRA_WAIT_MS, 180000),
   maxConcurrentSessions: toInt(process.env.MAX_CONCURRENT_SESSIONS, 3),
