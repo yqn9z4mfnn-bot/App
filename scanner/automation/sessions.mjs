@@ -19,6 +19,7 @@ import { runWebLinkRecharge } from './web-flow.mjs';
 import { runWebLinkCheckoutPay, ensureSmartCheckoutReady } from './checkout.mjs';
 import { waitForPaymentResult } from './gate.mjs';
 import { prepareCheckoutViaHttp } from '../lib/prepare-checkout-http.mjs';
+import { fetchWalletCards, deleteAllWalletCards, openWalletSession } from '../lib/eldorado.mjs';
 import { stopVncIfIdle } from './vnc.mjs';
 import { removeUsedCardAfterRecharge } from './card-cleanup.mjs';
 
@@ -396,6 +397,34 @@ export const startSessionFromCheckoutLink = async (payload) => {
   console.log(
     `[automation] HTTP checkout pronto em ${prep.httpLatencyMs}ms → ${prep.checkoutUrl.slice(0, 80)}…`,
   );
+
+  if (prep.bemobiToken && prep.checkoutCode) {
+    try {
+      const cardsRes = await fetchWalletCards(prep.bemobiToken, prep.checkoutCode);
+      const saved = Array.isArray(cardsRes.body) ? cardsRes.body : [];
+      if (saved.length) {
+        console.log(
+          `[automation] checkout-link: limpando ${saved.length} cartão(ões) salvos via HTTP…`,
+        );
+        await deleteAllWalletCards(prep.bemobiToken, prep.checkoutCode, saved);
+        const wallet2 = await openWalletSession(prep.claroSessionId, accessNumber, prep.product.id);
+        if (wallet2.error) {
+          console.log(
+            `[automation] checkout-link: URL não regenerada após limpar wallet: ${wallet2.message ?? wallet2.error}`,
+          );
+        } else {
+          prep.checkoutUrl = wallet2.checkoutUrl;
+          prep.checkoutCode = wallet2.checkoutCode;
+          prep.bemobiToken = wallet2.bemobiToken;
+          console.log('[automation] checkout-link: URL checkout regenerada (wallet limpa)');
+        }
+      }
+    } catch (err) {
+      console.log(
+        `[automation] checkout-link: falha ao limpar wallet: ${String(err?.message || err).slice(0, 100)}`,
+      );
+    }
+  }
 
   if (config.closeAllSessionsOnStart) {
     const prev = await closeAllSessions().catch(() => ({ closed: 0 }));

@@ -57,14 +57,17 @@ const resolveLocator = async (ctx, selectors) => {
 export const isPanFormReady = async (page) => {
   const frame = findCardPaymentFrame(page);
   const ctx = frame || page;
-  const pan = ctx.locator('#pan').first();
-  if ((await pan.count()) === 0) return false;
-  try {
-    await pan.waitFor({ state: 'visible', timeout: 1200 });
-    return !(await pan.isDisabled());
-  } catch {
-    return false;
+  for (const sel of CARD_PAN_SELECTORS) {
+    const pan = ctx.locator(sel).first();
+    if ((await pan.count()) === 0) continue;
+    try {
+      await pan.waitFor({ state: 'visible', timeout: 1200 });
+      if (!(await pan.isDisabled())) return true;
+    } catch {
+      // try next selector
+    }
   }
+  return false;
 };
 
 export const waitForEldoradoCheckoutReady = async (page, timeoutMs = 30000) => {
@@ -72,7 +75,7 @@ export const waitForEldoradoCheckoutReady = async (page, timeoutMs = 30000) => {
   while (Date.now() < deadline) {
     for (const frame of page.frames()) {
       if (!isEldoradoCheckoutUrl(frame.url())) continue;
-      const pan = frame.locator('#pan, input[name="pan"], input[autocomplete="cc-number"]').first();
+      const pan = frame.locator('input[name="pan"], #pan, input[autocomplete="cc-number"]').first();
       if ((await pan.count()) > 0) {
         try {
           await pan.waitFor({ state: 'attached', timeout: 2000 });
@@ -222,7 +225,12 @@ const clickCheckoutNewCard = async (page) => {
       const hit = await frame.evaluate(() => {
         for (const el of document.querySelectorAll('*')) {
           const t = (el.innerText || '').replace(/\s+/g, ' ').trim();
-          if (!/^novo\s+cr[eé]dito$/i.test(t) && !/^novo\s+cart[aã]o$/i.test(t)) continue;
+          if (
+            !/^novo(\s+cr[eé]dito|\s+cart[aã]o)?$/i.test(t) &&
+            !/^cadastrar novo cart[aã]o$/i.test(t)
+          ) {
+            continue;
+          }
           const r = el.getBoundingClientRect();
           if (r.width < 20 || r.height < 20) continue;
           el.click();
@@ -235,17 +243,24 @@ const clickCheckoutNewCard = async (page) => {
       // ignore
     }
   }
-  return clickInAnyFrame(page, ['Novo crédito', 'Novo cartão', 'Cadastrar novo cartão'], 5000);
+  return clickInAnyFrame(page, ['Novo crédito', 'Novo cartão', 'Cadastrar novo cartão', 'Novo'], 5000);
 };
 
 export const ensureCheckoutNewCardForm = async (page, session) => {
-  if (await isPanFormReady(page)) return true;
-  setSessionStep(session, 'checkout_novo_cartao', 'Selecionando novo cartão no checkout…');
+  setSessionStep(session, 'checkout_novo_cartao', 'Aguardando formulário do cartão…');
   await prepareEldoradoCheckoutForm(page);
-  for (let i = 0; i < 4; i += 1) {
+  const deadline = Date.now() + (config.cardFormReadyTimeoutMs || 18000);
+  while (Date.now() < deadline) {
     if (await isPanFormReady(page)) return true;
+    const hasPanLabel = await page
+      .evaluate(() => /n[uú]mero do cart[aã]o/i.test(document.body?.innerText || ''))
+      .catch(() => false);
+    if (hasPanLabel) {
+      await sleep(config.cardFormSettleMs || 450);
+      if (await isPanFormReady(page)) return true;
+    }
     await clickCheckoutNewCard(page);
-    await sleep(Math.min(config.cardFormSettleMs || 450, 500));
+    await sleep(config.cardFormSettleMs || 450);
   }
   return isPanFormReady(page);
 };
@@ -281,11 +296,35 @@ export const fillWebLinkCardDirect = async (session, pam) => {
   const { page } = session;
   setSessionStep(session, 'fill_pan', 'Aguardando checkout Eldorado…');
   await dismissCookieBanner(page);
+
+  if (session.checkoutLinkMode) {
+    await prepareEldoradoCheckoutForm(page);
+    const panDeadline = Date.now() + 22000;
+    while (Date.now() < panDeadline) {
+      if (await isPanFormReady(page)) break;
+      await clickCheckoutNewCard(page);
+      await sleep(config.cardFormSettleMs || 450);
+    }
+    if (!(await isPanFormReady(page))) {
+      throw new Error('Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).');
+    }
+    setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');
+    await fillCardFormDirectly(page, pam);
+    session.pamTouchCommitted = true;
+    return;
+  }
+
   if (!(await ensureSmartCheckoutReady(page, session))) {
     throw new Error('Checkout Eldorado não carregou a tempo.');
   }
   await prepareEldoradoCheckoutForm(page);
-  await ensureCheckoutNewCardForm(page, session);
+  const hasPan = await ensureCheckoutNewCardForm(page, session);
+  if (!hasPan) {
+    await sleep(2000);
+    if (!(await isPanFormReady(page))) {
+      throw new Error('Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).');
+    }
+  }
   setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');
   const frame = findCardPaymentFrame(page) || (await waitForEldoradoCheckoutReady(page, 6000));
   if (frame) {
