@@ -78,14 +78,44 @@ export const isPanFormReady = async (page) => {
       const pan = ctx.locator(sel).first();
       if ((await pan.count()) === 0) continue;
       try {
-        await pan.waitFor({ state: 'visible', timeout: 1200 });
-        if (!(await pan.isDisabled())) return true;
+        await pan.waitFor({ state: 'attached', timeout: 800 });
+        if (await pan.isDisabled()) continue;
+        if (await pan.isVisible().catch(() => false)) return true;
+        // Eldorado BSC: inputs existem no DOM mas podem falhar isVisible() até expandir o bloco.
+        const box = await pan.boundingBox().catch(() => null);
+        if (box && box.width > 0 && box.height > 0) return true;
+        return true;
       } catch {
         // try next selector
       }
     }
   }
   return false;
+};
+
+const ensureCreditCardSectionOpen = async (page) => {
+  if (await isPanFormReady(page)) return true;
+  const labels = ['Cartão', 'Crédito', 'Cartão Crédito', 'Cartão de crédito'];
+  for (const label of labels) {
+    const hit = await page
+      .evaluate((text) => {
+        for (const el of document.querySelectorAll('button, [role="button"], div, label, span')) {
+          const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (t !== text && !new RegExp(`^${text}$`, 'i').test(t)) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 24 || r.height < 16) continue;
+          el.click();
+          return t;
+        }
+        return null;
+      }, label)
+      .catch(() => null);
+    if (hit) {
+      await sleep(config.cardFormSettleMs || 450);
+      if (await isPanFormReady(page)) return true;
+    }
+  }
+  return isPanFormReady(page);
 };
 
 const isCvvOnlyFormReady = async (page) => {
@@ -354,14 +384,14 @@ export const fillWebLinkCardDirect = async (session, pam) => {
   if (session.checkoutLinkMode) {
     await prepareEldoradoCheckoutForm(page);
     await waitForEldoradoCheckoutReady(page, 12000);
-    const panDeadline = Date.now() + 28000;
+    await ensureCreditCardSectionOpen(page);
+    const panDeadline = Date.now() + 18000;
     while (Date.now() < panDeadline) {
       if (await isPanFormReady(page)) break;
       if (await isCvvOnlyFormReady(page)) {
         await clickCheckoutNewCard(page);
       } else {
-        await dismissCheckoutOverlays(page);
-        await clickCheckoutNewCard(page);
+        await ensureCreditCardSectionOpen(page);
       }
       await sleep(config.cardFormSettleMs || 450);
     }
