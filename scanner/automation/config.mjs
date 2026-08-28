@@ -52,6 +52,12 @@ export const config = {
   /** Remove cartão da wallet Eldorado após cada recarga browser. */
   removeCardAfterRecharge:
     String(process.env.REMOVE_CARD_AFTER_RECHARGE ?? '1').toLowerCase() !== '0',
+  /** Modo rápido checkout-link: menos sleeps, browser fecha em background. */
+  checkoutLinkFast: String(process.env.CHECKOUT_LINK_FAST ?? '1').toLowerCase() !== '0',
+  checkoutLinkPollMs: toInt(process.env.CHECKOUT_LINK_POLL_MS, 50),
+  checkoutLinkCardSettleMs: toInt(process.env.CHECKOUT_LINK_CARD_SETTLE_MS, 60),
+  checkoutLinkPanTimeoutMs: toInt(process.env.CHECKOUT_LINK_PAN_TIMEOUT_MS, 8000),
+  checkoutLinkGatePollMs: toInt(process.env.CHECKOUT_LINK_GATE_POLL_MS, 80),
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';

@@ -257,12 +257,13 @@ const logGateWaitHeartbeat = (elapsedMs, page, gateCapture, lastPending) => {
   }
 };
 
-export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture = null, session = null) => {
+export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture = null, session = null, opts = {}) => {
   const start = Date.now();
   let lastHeartbeat = 0;
   let challengeApiFirstSeen = null;
   let threedsWaitLogged = false;
   const lastPending = { value: false };
+  const pollMs = opts.pollMs ?? config.pollIntervalMs;
 
   while (Date.now() - start < timeoutMs) {
     const elapsed = Date.now() - start;
@@ -315,7 +316,7 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
     }
 
-    await sleep(config.pollIntervalMs);
+    await sleep(pollMs);
   }
 
   const elapsed = Date.now() - start;

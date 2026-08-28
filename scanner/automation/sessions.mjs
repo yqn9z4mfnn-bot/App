@@ -16,7 +16,7 @@ import {
   sleep,
 } from './helpers.mjs';
 import { runWebLinkRecharge } from './web-flow.mjs';
-import { runWebLinkCheckoutPay, ensureSmartCheckoutReady } from './checkout.mjs';
+import { runWebLinkCheckoutPay } from './checkout.mjs';
 import { waitForPaymentResult } from './gate.mjs';
 import { prepareCheckoutViaHttp } from '../lib/prepare-checkout-http.mjs';
 import {
@@ -374,6 +374,8 @@ export const startSessionFromWebLink = async (payload) => {
  * HTTP prepara checkout (SmartCheckout) → Edge abre só a URL Eldorado e paga.
  */
 export const startSessionFromCheckoutLink = async (payload) => {
+  const runStarted = Date.now();
+  const timings = {};
   const browserName = resolveBrowserName(payload);
   const accessNumber = normalizeBrMobile(payload?.accessNumber || payload?.claroNumber);
   const rechargeTargetNumber = normalizeBrMobile(
@@ -394,59 +396,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
   if (!rechargeValue) throw new Error('rechargeValue é obrigatório.');
 
   const valueCents = Number(rechargeValue) * 100;
-  const httpStarted = Date.now();
-  const prep = await prepareCheckoutViaHttp({
-    loginUrl,
-    msisdn: accessNumber,
-    valueCents,
-  });
-  prep.httpLatencyMs = Date.now() - httpStarted;
-  console.log(
-    `[automation] HTTP checkout pronto em ${prep.httpLatencyMs}ms → ${prep.checkoutUrl.slice(0, 80)}…`,
-  );
-
-  if (prep.bemobiToken && prep.checkoutCode) {
-    try {
-      const cardsRes = await fetchWalletCards(prep.bemobiToken, prep.checkoutCode);
-      const claroEssential = await scanClaroEssential(prep.claroSessionId, accessNumber, {
-        includeProducts: false,
-      }).catch(() => null);
-      const saved = unifySavedCards(
-        Array.isArray(cardsRes.body) ? cardsRes.body : [],
-        claroEssential?.paymentMethods?.body,
-      );
-      if (saved.length) {
-        console.log(
-          `[automation] checkout-link: limpando ${saved.length} cartão(ões) salvos via HTTP…`,
-        );
-        await deleteAllWalletCards(prep.bemobiToken, prep.checkoutCode, saved);
-        for (const card of saved) {
-          await deleteCardEverywhere({
-            bemobiToken: prep.bemobiToken,
-            checkoutCode: prep.checkoutCode,
-            sessionId: prep.claroSessionId,
-            msisdn: accessNumber,
-            cardToken: card.token,
-          }).catch(() => {});
-        }
-        const wallet2 = await openWalletSession(prep.claroSessionId, accessNumber, prep.product.id);
-        if (wallet2.error) {
-          console.log(
-            `[automation] checkout-link: URL não regenerada após limpar wallet: ${wallet2.message ?? wallet2.error}`,
-          );
-        } else {
-          prep.checkoutUrl = wallet2.checkoutUrl;
-          prep.checkoutCode = wallet2.checkoutCode;
-          prep.bemobiToken = wallet2.bemobiToken;
-          console.log('[automation] checkout-link: URL checkout regenerada (wallet limpa)');
-        }
-      }
-    } catch (err) {
-      console.log(
-        `[automation] checkout-link: falha ao limpar wallet: ${String(err?.message || err).slice(0, 100)}`,
-      );
-    }
-  }
+  const fast = config.checkoutLinkFast;
 
   if (config.closeAllSessionsOnStart) {
     const prev = await closeAllSessions().catch(() => ({ closed: 0 }));
@@ -461,18 +411,86 @@ export const startSessionFromCheckoutLink = async (payload) => {
   let browser = null;
   let sessionId;
   let session;
-  try {
-    browser = await launchBrowser(browserName);
-    const context = await createMobileContext(browser);
+
+  const browserStarted = Date.now();
+  const browserPromise = launchBrowser(browserName).then(async (b) => {
+    const context = await createMobileContext(b);
     const page = await context.newPage();
-    const gateCapture = attachGateCapture(context);
+    return { browser: b, context, page, browserMs: Date.now() - browserStarted };
+  });
+
+  const httpStarted = Date.now();
+  const prepPromise = (async () => {
+    const prep = await prepareCheckoutViaHttp({
+      loginUrl,
+      msisdn: accessNumber,
+      valueCents,
+    });
+    prep.httpLatencyMs = Date.now() - httpStarted;
+    console.log(
+      `[automation] HTTP checkout pronto em ${prep.httpLatencyMs}ms → ${prep.checkoutUrl.slice(0, 80)}…`,
+    );
+
+    if (prep.bemobiToken && prep.checkoutCode) {
+      try {
+        const cardsRes = await fetchWalletCards(prep.bemobiToken, prep.checkoutCode);
+        const claroEssential = await scanClaroEssential(prep.claroSessionId, accessNumber, {
+          includeProducts: false,
+        }).catch(() => null);
+        const saved = unifySavedCards(
+          Array.isArray(cardsRes.body) ? cardsRes.body : [],
+          claroEssential?.paymentMethods?.body,
+        );
+        if (saved.length) {
+          console.log(
+            `[automation] checkout-link: limpando ${saved.length} cartão(ões) salvos via HTTP…`,
+          );
+          await deleteAllWalletCards(prep.bemobiToken, prep.checkoutCode, saved);
+          for (const card of saved) {
+            await deleteCardEverywhere({
+              bemobiToken: prep.bemobiToken,
+              checkoutCode: prep.checkoutCode,
+              sessionId: prep.claroSessionId,
+              msisdn: accessNumber,
+              cardToken: card.token,
+            }).catch(() => {});
+          }
+          const wallet2 = await openWalletSession(prep.claroSessionId, accessNumber, prep.product.id);
+          if (wallet2.error) {
+            console.log(
+              `[automation] checkout-link: URL não regenerada após limpar wallet: ${wallet2.message ?? wallet2.error}`,
+            );
+          } else {
+            prep.checkoutUrl = wallet2.checkoutUrl;
+            prep.checkoutCode = wallet2.checkoutCode;
+            prep.bemobiToken = wallet2.bemobiToken;
+            console.log('[automation] checkout-link: URL checkout regenerada (wallet limpa)');
+          }
+        }
+      } catch (err) {
+        console.log(
+          `[automation] checkout-link: falha ao limpar wallet: ${String(err?.message || err).slice(0, 100)}`,
+        );
+      }
+    }
+    return prep;
+  })();
+
+  let prep = null;
+  try {
+    const [prepResult, browserPack] = await Promise.all([prepPromise, browserPromise]);
+    prep = prepResult;
+    timings.httpPrepMs = prep.httpLatencyMs;
+    timings.browserMs = browserPack.browserMs;
+    browser = browserPack.browser;
+    const gateCapture = attachGateCapture(browserPack.context);
 
     sessionId = randomUUID();
     session = {
       id: sessionId,
       browser,
-      context,
-      page,
+      context: browserPack.context,
+      page: browserPack.page,
       gateCapture,
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
@@ -504,22 +522,36 @@ export const startSessionFromCheckoutLink = async (payload) => {
   try {
     setSessionStep(session, 'open_checkout_link', 'Abrindo checkout Eldorado (HTTP→browser)…');
     console.log(`[automation] goto checkout ${prep.checkoutUrl.slice(0, 90)}…`);
-    await page.goto(prep.checkoutUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await dismissCookieBanner(page);
-    await sleep(config.pauseAfterNavMs);
-
-    if (!(await ensureSmartCheckoutReady(page, session))) {
-      throw new Error('Checkout Eldorado não carregou após abrir URL direta.');
+    const navStarted = Date.now();
+    await page.goto(prep.checkoutUrl, {
+      waitUntil: fast ? 'commit' : 'domcontentloaded',
+      timeout: 45000,
+    });
+    timings.navMs = Date.now() - navStarted;
+    if (!fast) {
+      await dismissCookieBanner(page);
+      await sleep(config.pauseAfterNavMs);
     }
 
     session.status = 'running';
     const payPayload = buildPamPayload(payload);
+    const payStarted = Date.now();
     await runWebLinkCheckoutPay(session, payPayload._pamParsed);
+    timings.checkoutPayMs = Date.now() - payStarted;
+
     setSessionStep(session, 'aguardando_gate', 'Aguardando retorno da gate…');
     console.log(
       `[automation] gate-wait (checkout-link) msisdn=${accessNumber} valor=R$${rechargeValue}`,
     );
-    const paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture, session);
+    const gateStarted = Date.now();
+    const paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture, session, {
+      pollMs: fast ? config.checkoutLinkGatePollMs : undefined,
+    });
+    timings.gateMs = Date.now() - gateStarted;
+    timings.totalMs = Date.now() - runStarted;
+    console.log(
+      `[automation] timings checkout-link ms=${JSON.stringify(timings)}`,
+    );
 
     session.paymentResult = paymentResult;
     if (paymentResult?.status === 'success') {
@@ -530,8 +562,17 @@ export const startSessionFromCheckoutLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    await cleanupUsedCard(session, paymentResult);
-    await finalizeSessionClose(sessionId, paymentResult);
+    const finish = async () => {
+      await cleanupUsedCard(session, paymentResult);
+      await finalizeSessionClose(sessionId, paymentResult);
+    };
+    if (fast) {
+      void finish().catch((err) => {
+        console.log(`[automation] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
+      });
+    } else {
+      await finish();
+    }
 
     return {
       sessionId,
@@ -542,11 +583,12 @@ export const startSessionFromCheckoutLink = async (payload) => {
       browser: browserName,
       url: page.url(),
       mode: 'checkout-link',
+      timings,
       httpPrep: {
-        checkoutUrl: prep.checkoutUrl,
-        checkoutCode: prep.checkoutCode,
-        productName: prep.product?.name,
-        httpLatencyMs: prep.httpLatencyMs,
+        checkoutUrl: session.httpPrep.checkoutUrl,
+        checkoutCode: session.httpPrep.checkoutCode,
+        productName: session.httpPrep.product?.name,
+        httpLatencyMs: session.httpPrep.httpLatencyMs,
       },
     };
   } catch (err) {

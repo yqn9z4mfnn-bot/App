@@ -164,7 +164,7 @@ export const prepareEldoradoCheckoutForm = async (page) => {
   await sleep(config.pollIntervalMs);
 };
 
-export const fillCardFormDirectly = async (page, pam) => {
+export const fillCardFormDirectly = async (page, pam, opts = {}) => {
   const ctx = await findPanContext(page);
   const panInput = await resolveLocator(ctx, CARD_PAN_SELECTORS);
   const expirationInput = await resolveLocator(ctx, CARD_EXP_SELECTORS);
@@ -176,7 +176,10 @@ export const fillCardFormDirectly = async (page, pam) => {
   await cvvInput.fill(String(pam.cvv || config.defaultCvv), { force: true });
   await holderInput.fill(String(randomName(config.defaultCardholderMaxLen)), { force: true });
   await holderInput.press('Tab').catch(() => {});
-  await sleep(config.cardFormSettleMs);
+  const settleMs = opts.fast
+    ? config.checkoutLinkCardSettleMs ?? 60
+    : config.cardFormSettleMs;
+  if (settleMs > 0) await sleep(settleMs);
 };
 
 export const fillEldoradoBscCheckout = async (page, pam, frame = null) => {
@@ -263,9 +266,9 @@ const waitForPayButtonReady = async (page, timeoutMs = 5000) => {
   return null;
 };
 
-export const clickEldoradoPayButton = async (page, timeoutMs = 12000) => {
+export const clickEldoradoPayButton = async (page, timeoutMs = 12000, payReadyMs = 5000) => {
   const deadline = Date.now() + timeoutMs;
-  await waitForPayButtonReady(page, Math.min(5000, timeoutMs));
+  await waitForPayButtonReady(page, Math.min(payReadyMs, timeoutMs));
 
   while (Date.now() < deadline) {
     for (const frame of page.frames()) {
@@ -376,26 +379,27 @@ export const detectPixOnlyCheckout = async (page) => {
   return /pix/i.test(text) && !/cart[aã]o de cr[eé]dito/i.test(text);
 };
 
+export const ensureCheckoutLinkPanReady = async (page) => {
+  const poll = config.checkoutLinkPollMs ?? 50;
+  const deadline = Date.now() + (config.checkoutLinkPanTimeoutMs ?? 8000);
+  while (Date.now() < deadline) {
+    if (await isPanFormReady(page)) return true;
+    if (await isCvvOnlyFormReady(page)) {
+      await clickCheckoutNewCard(page);
+    } else {
+      await ensureCreditCardSectionOpen(page);
+    }
+    await sleep(poll);
+  }
+  return isPanFormReady(page);
+};
+
 export const fillWebLinkCardDirect = async (session, pam) => {
   const { page } = session;
   setSessionStep(session, 'fill_pan', 'Aguardando checkout Eldorado…');
-  await dismissCookieBanner(page);
 
   if (session.checkoutLinkMode) {
-    await prepareEldoradoCheckoutForm(page);
-    await waitForEldoradoCheckoutReady(page, 12000);
-    await ensureCreditCardSectionOpen(page);
-    const panDeadline = Date.now() + 18000;
-    while (Date.now() < panDeadline) {
-      if (await isPanFormReady(page)) break;
-      if (await isCvvOnlyFormReady(page)) {
-        await clickCheckoutNewCard(page);
-      } else {
-        await ensureCreditCardSectionOpen(page);
-      }
-      await sleep(config.cardFormSettleMs || 450);
-    }
-    if (!(await isPanFormReady(page))) {
+    if (!(await ensureCheckoutLinkPanReady(page))) {
       const { saveStallDebug } = await import('./debug.mjs');
       await saveStallDebug(page, session, session.gateCapture, 'pan_missing_checkout_link', {
         cvvOnly: await isCvvOnlyFormReady(page),
@@ -403,11 +407,12 @@ export const fillWebLinkCardDirect = async (session, pam) => {
       throw new Error('Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).');
     }
     setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');
-    await fillCardFormDirectly(page, pam);
+    await fillCardFormDirectly(page, pam, { fast: config.checkoutLinkFast });
     session.pamTouchCommitted = true;
     return;
   }
 
+  await dismissCookieBanner(page);
   if (!(await ensureSmartCheckoutReady(page, session))) {
     throw new Error('Checkout Eldorado não carregou a tempo.');
   }
@@ -433,7 +438,9 @@ export const runWebLinkCheckoutPay = async (session, pam) => {
   const { page } = session;
   await fillWebLinkCardDirect(session, pam);
   setSessionStep(session, 'pagar', 'Confirmando pagamento…');
-  let payOk = await clickEldoradoPayButton(page, 12000);
+  const payTimeout = session.checkoutLinkMode && config.checkoutLinkFast ? 6000 : 12000;
+  const payReadyMs = session.checkoutLinkMode && config.checkoutLinkFast ? 1500 : 5000;
+  let payOk = await clickEldoradoPayButton(page, payTimeout, payReadyMs);
   if (!payOk) {
     payOk = await clickInAnyFrame(page, PAY_BUTTON_LABELS, 4000);
   }
