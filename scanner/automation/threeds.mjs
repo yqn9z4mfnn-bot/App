@@ -13,8 +13,11 @@ export const describe3dsKind = (kind, hint = '') => {
   if (kind === 'sms' || /enviar sms/i.test(hint)) {
     return '3DS por SMS — confirme manualmente no Edge (Enviar SMS → CONTINUAR)';
   }
+  if (kind === 'cardinal' || /verifica[cç][aã]o necess[aá]ria|valida[cç][aã]o de seguran[cç]a/i.test(hint)) {
+    return 'VBV/3DS visual — confirme manualmente no Edge';
+  }
   if (kind === 'challenge_api') {
-    return '3DS acionado pelo banco — confirme manualmente no Edge';
+    return '3DS acionado pelo banco — aguardando confirmação frictionless';
   }
   return 'Validação 3DS do cartão — confirme manualmente no Edge';
 };
@@ -27,14 +30,26 @@ export function get3dsChallengeApiCapture(gateCapture) {
   return null;
 }
 
-/** SMS/código exige ação manual imediata; frictionless/API pode confirmar sozinho. */
+/** VBV/3DS com tela visível (iframe Cardinal, CReq, etc.). */
+export function isVisualVbv(threeDs) {
+  if (!threeDs?.detected) return false;
+  if (threeDs.uiVisible === true) return true;
+  if (threeDs.kind === 'cardinal') return true;
+  const url = String(threeDs.url || '');
+  if (/ThreeDSecure|\/CReq|authentication\.cardinal/i.test(url)) return true;
+  const hint = String(threeDs.hint || '');
+  if (THREEDS_TEXT_RE.test(hint)) return true;
+  return false;
+}
+
+/** VBV visual / SMS → para na hora; só API frictionless continua gate-wait. */
 export function threedsRequiresImmediateAction(threeDs) {
   if (!threeDs?.detected) return false;
+  if (isVisualVbv(threeDs)) return true;
   if (threeDs.kind === 'sms') return true;
   const hint = String(threeDs.hint || '');
   if (/enviar sms|digite o c[oó]digo|c[oó]digo.*sms|token.*seguran/i.test(hint)) return true;
   if (threeDs.kind === 'challenge_api' && !threeDs.uiVisible) return false;
-  if (/fa[cç]a uma sele[cç][aã]o|chave ref/i.test(hint)) return true;
   return false;
 }
 

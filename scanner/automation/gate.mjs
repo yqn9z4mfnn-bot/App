@@ -310,15 +310,20 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       threedsUiWaitMs: config.threedsUiWaitMs,
     });
     if (threeDs?.detected) {
+      const stopNow = threedsRequiresImmediateAction(threeDs);
       if (session && !session.threeDsSeen) {
         session.threeDsSeen = threeDs;
         session.threeDsSeenAt = Date.now();
-        console.log(
-          `[automation][3ds] sinal ${threeDs.kind} — aguardando CONFIRMED até ${Math.round((config.threedsExtraWaitMs || 60000) / 1000)}s…`,
-        );
+        if (stopNow) {
+          console.log('[automation][3ds] VBV visual — parando na hora');
+        } else {
+          console.log(
+            `[automation][3ds] API frictionless — aguardando CONFIRMED até ${Math.round((config.threedsExtraWaitMs || 60000) / 1000)}s…`,
+          );
+        }
       }
       const continueWait = config.threedsContinueGateWait !== false;
-      if (!continueWait || threedsRequiresImmediateAction(threeDs)) {
+      if (!continueWait || stopNow) {
         return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
       }
       const extraMs = config.threedsExtraWaitMs ?? 60000;
