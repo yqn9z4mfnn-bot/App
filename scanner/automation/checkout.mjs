@@ -7,6 +7,8 @@ import {
   randomName,
   setSessionStep,
   clickInAnyFrame,
+  isDetachedFrameError,
+  safeLocatorCount,
 } from './helpers.mjs';
 import {
   waitForCheckoutAntifraud,
@@ -31,13 +33,13 @@ export const findPanContext = async (page) => {
   if (preferred) {
     for (const sel of CARD_PAN_SELECTORS) {
       const pan = preferred.locator(sel).first();
-      if ((await pan.count()) > 0) return preferred;
+      if ((await safeLocatorCount(pan)) > 0) return preferred;
     }
   }
   for (const frame of page.frames()) {
     for (const sel of CARD_PAN_SELECTORS) {
       const pan = frame.locator(sel).first();
-      if ((await pan.count()) > 0) return frame;
+      if ((await safeLocatorCount(pan)) > 0) return frame;
     }
   }
   return page;
@@ -52,9 +54,9 @@ export const hasSmartCheckout = async (page) => {
   if (/\/smartcheckout/i.test(pageUrl)) return true;
   const iframeSel =
     'iframe#checkout, iframe[title="smartCheckout"], iframe[src*="eldorado"], iframe[src*="bemobi"], iframe[src*="smart-checkout"]';
-  if ((await page.locator(iframeSel).count()) > 0) return true;
+  if ((await safeLocatorCount(page.locator(iframeSel))) > 0) return true;
   if (page.frames().some((f) => isCheckoutFrameUrl(f.url()))) return true;
-  if ((await page.locator('#pan, input[name="pan"], input[autocomplete="cc-number"]').count()) > 0) {
+  if ((await safeLocatorCount(page.locator('#pan, input[name="pan"], input[autocomplete="cc-number"]'))) > 0) {
     return true;
   }
   return false;
@@ -72,7 +74,7 @@ export const waitForSmartCheckout = async (page, timeoutMs = 15000) => {
 const resolveLocator = async (ctx, selectors) => {
   for (const sel of selectors) {
     const loc = ctx.locator(sel).first();
-    if ((await loc.count()) > 0) return loc;
+    if ((await safeLocatorCount(loc)) > 0) return loc;
   }
   throw new Error(`Campo não encontrado: ${selectors.join(', ')}`);
 };
@@ -81,7 +83,7 @@ export const isPanFormReady = async (page) => {
   for (const ctx of [page, ...page.frames()]) {
     for (const sel of CARD_PAN_SELECTORS) {
       const pan = ctx.locator(sel).first();
-      if ((await pan.count()) === 0) continue;
+      if ((await safeLocatorCount(pan)) === 0) continue;
       try {
         await pan.waitFor({ state: 'attached', timeout: 800 });
         if (await pan.isDisabled()) continue;
@@ -128,7 +130,7 @@ const isCvvOnlyFormReady = async (page) => {
   for (const ctx of [page, ...page.frames()]) {
     for (const sel of CARD_CVV_SELECTORS) {
       const cvv = ctx.locator(sel).first();
-      if ((await cvv.count()) === 0) continue;
+      if ((await safeLocatorCount(cvv)) === 0) continue;
       try {
         await cvv.waitFor({ state: 'visible', timeout: 800 });
         if (!(await cvv.isDisabled())) return true;
@@ -146,7 +148,7 @@ export const waitForEldoradoCheckoutReady = async (page, timeoutMs = 30000) => {
     for (const frame of page.frames()) {
       if (!isEldoradoCheckoutUrl(frame.url())) continue;
       const pan = frame.locator('input[name="pan"], #pan, input[autocomplete="cc-number"]').first();
-      if ((await pan.count()) > 0) {
+      if ((await safeLocatorCount(pan)) > 0) {
         try {
           await pan.waitFor({ state: 'attached', timeout: 2000 });
           return frame;
@@ -162,7 +164,7 @@ export const waitForEldoradoCheckoutReady = async (page, timeoutMs = 30000) => {
 
 export const prepareEldoradoCheckoutForm = async (page) => {
   const iframe = page.locator('iframe#checkout, iframe[title="smartCheckout"]').first();
-  if ((await iframe.count()) > 0) {
+  if ((await safeLocatorCount(iframe)) > 0) {
     await iframe.scrollIntoViewIfNeeded().catch(() => {});
   }
   await dismissBonusModalIfVisible(page).catch(() => {});
@@ -170,41 +172,58 @@ export const prepareEldoradoCheckoutForm = async (page) => {
 };
 
 export const fillCardFormDirectly = async (page, pam, opts = {}) => {
-  const ctx = await findPanContext(page);
-  const panInput = await resolveLocator(ctx, CARD_PAN_SELECTORS);
-  const expirationInput = await resolveLocator(ctx, CARD_EXP_SELECTORS);
-  const cvvInput = await resolveLocator(ctx, CARD_CVV_SELECTORS);
-  const holderInput = await resolveLocator(ctx, CARD_HOLDER_SELECTORS);
-  const holderName = String(randomName(config.defaultCardholderMaxLen));
+  const maxAttempts = opts.frameRetries ?? 3;
+  let lastErr = null;
 
-  const useHuman = opts.human && config.antifraudHumanFill;
-  if (useHuman) {
-    await page.evaluate(() => {
-      const pan = document.querySelector('input[name="pan"]');
-      pan?.scrollIntoView({ block: 'center', behavior: 'instant' });
-      const card = pan?.closest('section, [class*="payment" i], [class*="accordion" i], div');
-      card?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
-    }).catch(() => {});
-    await sleep(150);
-    await fillCardFieldsHuman(
-      { pan: panInput, expiration: expirationInput, cvv: cvvInput, holder: holderInput },
-      pam,
-      holderName,
-    );
-  } else {
-    await panInput.fill(String(pam.pan).replace(/\D/g, ''), { force: true });
-    await expirationInput.fill(String(pam.mmYY), { force: true });
-    await cvvInput.fill(String(pam.cvv || config.defaultCvv), { force: true });
-    await holderInput.fill(holderName, { force: true });
-    await holderInput.press('Tab').catch(() => {});
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const ctx = await findPanContext(page);
+      const panInput = await resolveLocator(ctx, CARD_PAN_SELECTORS);
+      const expirationInput = await resolveLocator(ctx, CARD_EXP_SELECTORS);
+      const cvvInput = await resolveLocator(ctx, CARD_CVV_SELECTORS);
+      const holderInput = await resolveLocator(ctx, CARD_HOLDER_SELECTORS);
+      const holderName = String(randomName(config.defaultCardholderMaxLen));
+
+      const useHuman = opts.human && config.antifraudHumanFill;
+      if (useHuman) {
+        await page.evaluate(() => {
+          const pan = document.querySelector('input[name="pan"]');
+          pan?.scrollIntoView({ block: 'center', behavior: 'instant' });
+          const card = pan?.closest('section, [class*="payment" i], [class*="accordion" i], div');
+          card?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
+        }).catch(() => {});
+        await sleep(150);
+        await fillCardFieldsHuman(
+          { pan: panInput, expiration: expirationInput, cvv: cvvInput, holder: holderInput },
+          pam,
+          holderName,
+        );
+      } else {
+        await panInput.fill(String(pam.pan).replace(/\D/g, ''), { force: true });
+        await expirationInput.fill(String(pam.mmYY), { force: true });
+        await cvvInput.fill(String(pam.cvv || config.defaultCvv), { force: true });
+        await holderInput.fill(holderName, { force: true });
+        await holderInput.press('Tab').catch(() => {});
+      }
+
+      const settleMs = useHuman
+        ? config.antifraudSettleMs ?? 280
+        : opts.fast
+          ? config.checkoutLinkCardSettleMs ?? 60
+          : config.cardFormSettleMs;
+      if (settleMs > 0) await sleep(settleMs);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxAttempts - 1 && isDetachedFrameError(err)) {
+        await sleep(config.pollIntervalMs || 100);
+        continue;
+      }
+      throw err;
+    }
   }
 
-  const settleMs = useHuman
-    ? config.antifraudSettleMs ?? 280
-    : opts.fast
-      ? config.checkoutLinkCardSettleMs ?? 60
-      : config.cardFormSettleMs;
-  if (settleMs > 0) await sleep(settleMs);
+  throw lastErr || new Error('Falha ao preencher formulário do cartão.');
 };
 
 export const fillEldoradoBscCheckout = async (page, pam, frame = null) => {
@@ -408,15 +427,24 @@ export const ensureCheckoutLinkPanReady = async (page) => {
   const poll = config.checkoutLinkPollMs ?? 50;
   const deadline = Date.now() + (config.checkoutLinkPanTimeoutMs ?? 8000);
   while (Date.now() < deadline) {
-    if (await isPanFormReady(page)) return true;
-    if (await isCvvOnlyFormReady(page)) {
-      await clickCheckoutNewCard(page);
-    } else {
-      await ensureCreditCardSectionOpen(page);
+    try {
+      if (await isPanFormReady(page)) return true;
+      if (await isCvvOnlyFormReady(page)) {
+        await clickCheckoutNewCard(page);
+      } else {
+        await ensureCreditCardSectionOpen(page);
+      }
+    } catch (err) {
+      if (!isDetachedFrameError(err)) throw err;
     }
     await sleep(poll);
   }
-  return isPanFormReady(page);
+  try {
+    return isPanFormReady(page);
+  } catch (err) {
+    if (isDetachedFrameError(err)) return false;
+    throw err;
+  }
 };
 
 export const fillWebLinkCardDirect = async (session, pam) => {

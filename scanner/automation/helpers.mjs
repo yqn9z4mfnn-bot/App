@@ -2,6 +2,22 @@ import { config, WEB_PORTAL } from './config.mjs';
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Erros transitórios quando iframe/checkout recarrega durante automação Playwright. */
+export const isDetachedFrameError = (err) => {
+  const msg = String(err?.message ?? err ?? '');
+  return /frame was detached|target closed|execution context was destroyed|has been closed/i.test(msg);
+};
+
+/** count() que retorna 0 se o frame foi desanexado (evita falha fatal no checkout Eldorado). */
+export const safeLocatorCount = async (locator) => {
+  try {
+    return await locator.count();
+  } catch (err) {
+    if (isDetachedFrameError(err)) return 0;
+    throw err;
+  }
+};
+
 export const normalizeBrMobile = (raw) => {
   let digits = String(raw ?? '').replace(/\D/g, '');
   if (digits.length === 10) digits = `${digits.slice(0, 2)}9${digits.slice(2)}`;
@@ -46,7 +62,7 @@ export const selectOutroNumeroClaro = async (page, session, targetMsisdn) => {
   let filled = false;
   for (const loc of inputCandidates) {
     try {
-      if ((await loc.count()) === 0) continue;
+      if ((await safeLocatorCount(loc)) === 0) continue;
       if (!(await loc.isVisible().catch(() => false))) continue;
       await loc.click({ timeout: 2000, force: true });
       await loc.fill('', { force: true });
@@ -186,7 +202,7 @@ export const clickByText = async (page, texts, timeoutMs = config.actionTimeoutM
       ];
       for (const loc of candidates) {
         try {
-          if ((await loc.count()) === 0) continue;
+          if ((await safeLocatorCount(loc)) === 0) continue;
           if (!(await loc.isVisible().catch(() => false))) continue;
           await loc.click({ timeout: clickMs });
           return true;
@@ -207,7 +223,7 @@ export const dismissCookieBanner = async (page) => {
     page.getByRole('button', { name: /permitir\s+todos/i }).first(),
   ];
   for (const btn of oneTrustCandidates) {
-    if ((await btn.count()) > 0) {
+    if ((await safeLocatorCount(btn)) > 0) {
       try {
         if (await btn.isVisible().catch(() => false)) {
           await btn.click({ timeout: 1200, force: true });
@@ -228,7 +244,7 @@ export const dismissBonusModalIfVisible = async (page) => {
     page.getByText(/agora n[aã]o/i).first(),
   ];
   for (const opt of opts) {
-    if ((await opt.count()) > 0) {
+    if ((await safeLocatorCount(opt)) > 0) {
       try {
         await opt.click({ timeout: 2000 });
         await sleep(250);
@@ -259,7 +275,7 @@ export const dismissBlockingModals = async (page) => {
   ];
   for (const re of dismissPatterns) {
     const btn = page.getByRole('button', { name: re }).first();
-    if ((await btn.count()) === 0) continue;
+    if ((await safeLocatorCount(btn)) === 0) continue;
     try {
       if (await btn.isVisible().catch(() => false)) {
         await btn.click({ timeout: 1500, force: true });
@@ -277,7 +293,7 @@ export const dismissBlockingModals = async (page) => {
     page.locator('button[class*="close" i]').first(),
   ];
   for (const close of closeSelectors) {
-    if ((await close.count()) === 0) continue;
+    if ((await safeLocatorCount(close)) === 0) continue;
     try {
       if (await close.isVisible().catch(() => false)) {
         await close.click({ timeout: 1200, force: true });
@@ -296,14 +312,14 @@ export const dismissBlockingModals = async (page) => {
 export const detectPaymentMethodModal = async (page) => {
   try {
     const title = page.getByText(/como deseja pagar/i).first();
-    if ((await title.count()) > 0 && (await title.isVisible().catch(() => false))) return true;
+    if ((await safeLocatorCount(title)) > 0 && (await title.isVisible().catch(() => false))) return true;
 
     const credit = page.getByText(/cart[aã]o de cr[eé]dito/i).first();
     const pix = page.getByText(/^\s*pix\s*$/i).first();
     if (
-      (await credit.count()) > 0 &&
+      (await safeLocatorCount(credit)) > 0 &&
       (await credit.isVisible().catch(() => false)) &&
-      (await pix.count()) > 0 &&
+      (await safeLocatorCount(pix)) > 0 &&
       (await pix.isVisible().catch(() => false))
     ) {
       return true;
@@ -477,7 +493,7 @@ const clickValueGridCardOnce = async (page, rechargeValue, method) => {
 
   for (const loc of candidates) {
     try {
-      if ((await loc.count()) === 0) continue;
+      if ((await safeLocatorCount(loc)) === 0) continue;
       await loc.waitFor({ state: 'visible', timeout: 5000 });
       await loc.scrollIntoViewIfNeeded().catch(() => {});
       await loc.click({ timeout: config.actionTimeoutMs, force: true });
@@ -610,7 +626,7 @@ export const selectCreditCardPaymentMethod = async (page, session = null) => {
   console.log('[automation] modal método de pagamento — clicando Cartão de Crédito');
 
   const tryClick = async (loc) => {
-    if ((await loc.count()) === 0) return false;
+    if ((await safeLocatorCount(loc)) === 0) return false;
     try {
       await loc.scrollIntoViewIfNeeded().catch(() => {});
       const box = await loc.boundingBox().catch(() => null);
@@ -691,7 +707,7 @@ export const clickPrezaoRenewBanner = async (page, session, rechargeValue) => {
     .filter({ hasText: valRe })
     .first();
 
-  if ((await banner.count()) > 0) {
+  if ((await safeLocatorCount(banner)) > 0) {
     try {
       await banner.scrollIntoViewIfNeeded().catch(() => {});
       await banner.click({ timeout: config.actionTimeoutMs, force: true });
@@ -794,7 +810,7 @@ export const clickInAnyFrame = async (page, labels, timeoutMs = 8000) => {
       for (const label of labels) {
         try {
           const btn = frame.getByRole('button', { name: new RegExp(label, 'i') }).first();
-          if ((await btn.count()) > 0 && (await btn.isVisible().catch(() => false))) {
+          if ((await safeLocatorCount(btn)) > 0 && (await btn.isVisible().catch(() => false))) {
             await btn.click({ timeout: 2000 });
             return true;
           }

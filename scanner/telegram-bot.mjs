@@ -1258,7 +1258,7 @@ async function handleCallback(query) {
     return;
   }
 
-  if (data.startsWith('rcg:') && data !== 'rcg:cancel') {
+  if (data.startsWith('rcg:') && !['rcg:cancel', 'rcg:retry', 'rcg:home'].includes(data)) {
     const productId = data.slice(4);
     await onValueSelected(chatId, messageId, productId);
     return;

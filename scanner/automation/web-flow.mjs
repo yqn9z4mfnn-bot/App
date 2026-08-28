@@ -18,6 +18,7 @@ import {
   setSessionStep,
   webPortalPath,
   visibleTextMatch,
+  safeLocatorCount,
 } from './helpers.mjs';
 import {
   hasSmartCheckout,
@@ -86,7 +87,7 @@ export const clickRechargeValueButton = async (page, session, rechargeValue, opt
   ];
   for (const loc of candidates) {
     try {
-      if ((await loc.count()) === 0) continue;
+      if ((await safeLocatorCount(loc)) === 0) continue;
       await loc.waitFor({ state: 'visible', timeout: 5000 });
       await loc.scrollIntoViewIfNeeded().catch(() => {});
       if (doubleTap) {
