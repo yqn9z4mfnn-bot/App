@@ -44,9 +44,11 @@ export const config = {
   pauseAfterValueMs: toInt(process.env.PAUSE_AFTER_VALUE_MS, 650),
   pollIntervalMs: toInt(process.env.POLL_INTERVAL_MS, 180),
   checkoutOpenTimeoutMs: toInt(process.env.CHECKOUT_OPEN_TIMEOUT_MS, 45000),
-  /** Fecha todas as telas Edge antes de abrir nova recarga (sequencial). */
+  /** Se 1, mata todas as sessões ao iniciar nova recarga (modo sequencial). Padrão 0 = até 3 em paralelo. */
   closeAllSessionsOnStart:
-    String(process.env.CLOSE_ALL_SESSIONS_ON_START ?? '1').toLowerCase() !== '0',
+    String(process.env.CLOSE_ALL_SESSIONS_ON_START ?? '0').toLowerCase() === '1',
+  /** Fecha sessão órfã/travada após este tempo (ms). 0 = desligado. */
+  sessionMaxLifetimeMs: toInt(process.env.SESSION_MAX_LIFETIME_MS, 180000),
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';

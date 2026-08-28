@@ -70,6 +70,7 @@ const acquireBrowserSlot = async (reason = 'start') => {
 };
 
 export const closeSession = async (sessionId) => {
+  clearSessionWatchdog(sessionId);
   const session = sessions.get(sessionId);
   if (!session) return { sessionId, closed: false };
   session.closing = true;
@@ -163,7 +164,36 @@ const shouldKeepBrowserOpen = (paymentResult) => {
   return 0;
 };
 
+const sessionWatchdogs = new Map();
+
+const clearSessionWatchdog = (sessionId) => {
+  const t = sessionWatchdogs.get(sessionId);
+  if (t) {
+    clearTimeout(t);
+    sessionWatchdogs.delete(sessionId);
+  }
+};
+
+const armSessionWatchdog = (sessionId) => {
+  const ms = config.sessionMaxLifetimeMs;
+  if (!ms || ms <= 0) return;
+  clearSessionWatchdog(sessionId);
+  const timer = setTimeout(() => {
+    sessionWatchdogs.delete(sessionId);
+    if (!sessions.has(sessionId)) return;
+    console.log(
+      `[automation] watchdog: sessão ${sessionId.slice(0, 8)}… excedeu ${Math.round(ms / 1000)}s — fechando Edge`,
+    );
+    closeSession(sessionId).catch((err) => {
+      console.error(`[automation] watchdog falhou ${sessionId}:`, err?.message || err);
+    });
+  }, ms);
+  timer.unref?.();
+  sessionWatchdogs.set(sessionId, timer);
+};
+
 const finalizeSessionClose = async (sessionId, paymentResult) => {
+  clearSessionWatchdog(sessionId);
   const keepMs = shouldKeepBrowserOpen(paymentResult);
   if (keepMs <= 0) {
     console.log(`[automation] fechando Edge agora (${paymentResult?.status || 'done'})…`);
@@ -205,6 +235,7 @@ export const startSessionFromWebLink = async (payload) => {
       console.log(`[automation] ${prev.closed} sessão(ões) Edge fechada(s) antes da nova recarga`);
     }
   } else {
+    // Paralelo: só encerra sessão anterior do mesmo número (evita duplicata no mesmo JWT).
     await closeSessionsByAccessNumber(accessNumber).catch(() => {});
   }
 
@@ -237,6 +268,7 @@ export const startSessionFromWebLink = async (payload) => {
       smsAuthenticated: false,
     };
     sessions.set(sessionId, session);
+    armSessionWatchdog(sessionId);
     releaseSlot();
   } catch (err) {
     releaseSlot();
