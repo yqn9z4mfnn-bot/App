@@ -757,7 +757,7 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
       const meta =
         action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
       const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
-      listNote = `\n\n🗂 ${cardListActionLabel(action)} · fila: <b>${applied.pendingLeft}</b>`;
+      listNote = `\n\n🗂 ${cardListActionLabel(action, { outcome })} · fila: <b>${applied.pendingLeft}</b>`;
       if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
     }
 
@@ -796,7 +796,7 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
     if (listLine) {
       const action = classifyCardListAction({ outcome: null, error: err });
       const applied = await cardList.applyOutcome(listLine, action, '', chatId);
-      listNote = `\n\n🗂 ${cardListActionLabel(action)} · fila: <b>${applied.pendingLeft}</b>`;
+      listNote = `\n\n🗂 ${cardListActionLabel(action, { outcome })} · fila: <b>${applied.pendingLeft}</b>`;
       if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
     }
 

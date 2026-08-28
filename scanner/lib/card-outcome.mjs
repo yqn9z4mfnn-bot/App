@@ -63,9 +63,16 @@ function gateIndicatesDenial(raw) {
   return st === 'DENIED' || st === 'REJECTED' || st === 'FAILURE';
 }
 
-export function cardListActionLabel(action) {
+export function cardListActionLabel(action, { outcome } = {}) {
   if (action === 'approved') return '✅ aprovado → salvo em cards-approved.txt';
-  if (action === 'consumed') return '🚫 negado na gate → removido da fila';
+  if (action === 'consumed') {
+    const st = String(outcome?.result?.status ?? '').toUpperCase();
+    const rawSt = String(outcome?.automation?.raw?.status ?? '').toLowerCase();
+    if (st === '3DS_REQUIRED' || rawSt === '3ds_required') {
+      return '🔐 3DS acionado → removido da fila (não reutilizar)';
+    }
+    return '🚫 negado na gate → removido da fila';
+  }
   if (action === 'return') return '↩️ falha de automação → cartão mantido na fila';
   return '';
 }
