@@ -129,10 +129,11 @@ export function buildValueKeyboard(valores) {
 }
 
 /** Escolher cartão salvo, automático (lista TXT) ou novo. */
-export function buildPayMethodKeyboard(cards, { pendingCards = 0 } = {}) {
+export function buildPayMethodKeyboard(cards, { pendingCards = 0, queueLabel = null } = {}) {
   const rows = [];
+  const label = queueLabel ?? String(pendingCards);
   if (pendingCards > 0) {
-    rows.push([{ text: `🤖 Automático (${pendingCards} na fila)`, callback_data: 'rcgpay:auto' }]);
+    rows.push([{ text: `🤖 Automático (${label})`, callback_data: 'rcgpay:auto' }]);
   } else {
     rows.push([{ text: '🤖 Automático (lista vazia)', callback_data: 'rcgpay:auto_empty' }]);
   }

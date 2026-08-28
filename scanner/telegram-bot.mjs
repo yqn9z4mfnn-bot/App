@@ -346,7 +346,10 @@ async function promptCardLine(chatId) {
 }
 
 function payMethodKeyboard(cards) {
-  return buildPayMethodKeyboard(cards, { pendingCards: cardList.countPending() });
+  const pending = cardList.countPending();
+  const inUse = cardList.countInUse();
+  const label = inUse > 0 ? `${pending} fila · ${inUse} em uso` : `${pending}`;
+  return buildPayMethodKeyboard(cards, { pendingCards: pending, queueLabel: label });
 }
 
 function buildCardListMeta(outcome, entry, targetMsisdn, flow) {
@@ -355,27 +358,21 @@ function buildCardListMeta(outcome, entry, targetMsisdn, flow) {
   return `${ts} ${val} ${entry?.msisdn ?? '?'}->${targetMsisdn ?? '?'} SUCCESS`;
 }
 
-async function pickAutoCardLine() {
-  return cardList.withLock(async () => {
-    while (true) {
-      const line = cardList.peekPendingLine();
-      if (!line) return null;
-      const card = parseCardInput(line);
-      if (!card) {
-        await cardList.shiftPendingLine();
-        continue;
-      }
-      return { line, card };
-    }
-  });
+async function pickAutoCardLine(chatId) {
+  const reserved = await cardList.reserveNextCard(chatId);
+  if (!reserved?.card) return null;
+  return { line: reserved.line, card: reserved.card, pan: reserved.pan };
 }
 
 async function executeAutoRecharge(chatId) {
-  const picked = await pickAutoCardLine();
+  const picked = await pickAutoCardLine(chatId);
   if (!picked) {
+    const inUse = cardList.countInUse();
     await send(
       chatId,
-      '❌ Lista <code>cards-pending.txt</code> vazia.\n\nEnvie um <b>.txt</b> com um cartão por linha:\n<code>NUMERO|MM|AAAA|CVV</code>',
+      inUse > 0
+        ? `❌ Nenhum cartão livre na fila (<b>${inUse}</b> em uso por outras sessões).\n\nAguarde ou use cartão manual.`
+        : '❌ Lista <code>cards-pending.txt</code> vazia.\n\nEnvie um <b>.txt</b> com um cartão por linha:\n<code>NUMERO|MM|AAAA|CVV</code>',
     );
     return;
   }
@@ -489,6 +486,25 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
     return;
   }
 
+  let listLine = cardListLine ?? flow.cardListLine ?? null;
+  if (!card.token && card.number) {
+    const check = cardList.assertCardAvailable(card, chatId);
+    if (!check.ok) {
+      await send(chatId, `🔒 ${check.reason}`);
+      return;
+    }
+    if (!listLine) {
+      const adHoc = await cardList.reserveAdHocCard(chatId, card);
+      if (!adHoc) {
+        await send(chatId, '🔒 Cartão já em uso por outra sessão. Aguarde ou use outro.');
+        return;
+      }
+      listLine = adHoc.line;
+      flow.cardListLine = listLine;
+      rechargeFlow.set(chatId, flow);
+    }
+  }
+
   busy.add(chatId);
   const useBrowser = isBrowserRechargeEnabled() && !card.token;
   const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
@@ -537,13 +553,13 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
         });
 
     let listNote = '';
-    const listLine = cardListLine ?? flow.cardListLine ?? null;
     if (listLine) {
       const action = classifyCardListAction({ outcome, error: null });
       const meta =
         action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
-      const applied = await cardList.applyOutcome(listLine, action, meta);
+      const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
       listNote = `\n\n🗂 ${cardListActionLabel(action)} · fila: <b>${applied.pendingLeft}</b>`;
+      if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
     }
 
     const report = formatRechargeResult({
@@ -559,11 +575,11 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
     });
   } catch (err) {
     let listNote = '';
-    const listLine = cardListLine ?? flow.cardListLine ?? null;
     if (listLine) {
       const action = classifyCardListAction({ outcome: null, error: err });
-      const applied = await cardList.applyOutcome(listLine, action);
+      const applied = await cardList.applyOutcome(listLine, action, '', chatId);
       listNote = `\n\n🗂 ${cardListActionLabel(action)} · fila: <b>${applied.pendingLeft}</b>`;
+      if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
     }
     await tg('editMessageText', {
       chat_id: chatId,
@@ -1398,6 +1414,7 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
 async function sendCartoesFila(chatId) {
   const pending = cardList.countPending();
   const approved = cardList.countApproved();
+  const inUse = cardList.countInUse();
   const next = cardList.peekPendingLine();
   let nextMask = '—';
   if (next) {
@@ -1410,8 +1427,11 @@ async function sendCartoesFila(chatId) {
       '<b>🤖 Fila automática de cartões</b>',
       '',
       `Pendentes: <b>${pending}</b> (<code>cards-pending.txt</code>)`,
+      `Em uso agora: <b>${inUse}</b> (<code>cards-reserved.json</code>)`,
       `Aprovados: <b>${approved}</b> (<code>cards-approved.txt</code>)`,
       `Próximo: <code>${nextMask}</code>`,
+      '',
+      '🔒 Cada cartão reservado fica bloqueado para outros usuários até a recarga terminar.',
       '',
       'Envie um <b>.txt</b> com um cartão por linha:',
       '<code>NUMERO|MM|AAAA|CVV</code>',
