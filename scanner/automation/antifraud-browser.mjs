@@ -45,13 +45,19 @@ export const simulatePrePayInteraction = async (page) => {
 };
 
 const typeFieldHuman = async (locator, text, delayMs) => {
-  await locator.scrollIntoViewIfNeeded().catch(() => {});
-  await locator.click({ force: true, timeout: 5000 });
+  await locator.evaluate((el) => {
+    el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+    el.focus();
+  });
   await sleep(jitter(90, 0.6));
-  await locator.fill('');
-  await locator.pressSequentially(String(text), { delay: delayMs });
+  await locator.fill('', { force: true });
+  try {
+    await locator.pressSequentially(String(text), { delay: delayMs });
+  } catch {
+    await locator.fill(String(text), { force: true });
+  }
   await sleep(jitter(140, 0.5));
-  await locator.dispatchEvent('blur').catch(() => {});
+  await locator.evaluate((el) => el.blur()).catch(() => {});
 };
 
 /** Preenche PAN/validade/CVV/nome com timing humano (melhor score antifraude). */

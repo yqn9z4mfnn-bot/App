@@ -179,6 +179,13 @@ export const fillCardFormDirectly = async (page, pam, opts = {}) => {
 
   const useHuman = opts.human && config.antifraudHumanFill;
   if (useHuman) {
+    await page.evaluate(() => {
+      const pan = document.querySelector('input[name="pan"]');
+      pan?.scrollIntoView({ block: 'center', behavior: 'instant' });
+      const card = pan?.closest('section, [class*="payment" i], [class*="accordion" i], div');
+      card?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
+    }).catch(() => {});
+    await sleep(150);
     await fillCardFieldsHuman(
       { pan: panInput, expiration: expirationInput, cvv: cvvInput, holder: holderInput },
       pam,
@@ -424,6 +431,7 @@ export const fillWebLinkCardDirect = async (session, pam) => {
       }).catch(() => {});
       throw new Error('Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).');
     }
+    await ensureCreditCardSectionOpen(page);
     setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');
     await fillCardFormDirectly(page, pam, {
       fast: config.checkoutLinkFast && !config.antifraudHumanFill,
