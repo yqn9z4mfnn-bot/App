@@ -49,9 +49,15 @@ export function isVisualVbv(threeDs) {
   return false;
 }
 
-/** Qualquer 3DS detectado → encerra gate-wait na hora (sem esperar CONFIRMED). */
+/** VBV visual / SMS → para na hora; frictionless API só se THREEDS_CONTINUE_GATE_WAIT=0. */
 export function threedsRequiresImmediateAction(threeDs) {
-  return Boolean(threeDs?.detected);
+  if (!threeDs?.detected) return false;
+  if (isVisualVbv(threeDs)) return true;
+  if (threeDs.kind === 'sms') return true;
+  const hint = String(threeDs.hint || '');
+  if (/enviar sms|digite o c[oó]digo|c[oó]digo.*sms|token.*seguran/i.test(hint)) return true;
+  if (threeDs.kind === 'challenge_api' && !threeDs.uiVisible) return false;
+  return true;
 }
 
 /** Procura iframe/tela 3DS visível (prioridade sobre API). */
