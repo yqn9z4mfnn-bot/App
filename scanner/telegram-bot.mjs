@@ -48,6 +48,7 @@ import {
   refreshMsisdnProducts,
 } from './lib/bulk-scan.mjs';
 import { generateLoginMsisdn } from './lib/generate-msisdn.mjs';
+import { purgeAllLoginCardsStrict } from './lib/purge-login-cards.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DATA_DIR = join(process.env.XDG_DATA_HOME || join(homedir(), '.local/share'), 'linkclaro-bot');
@@ -219,13 +220,36 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
       identifier: session.identifier,
     });
     const valores = refreshed.valores ?? [];
+    const msisdnResolved = session.identifier || access;
+
+    let walletAuth = null;
+    let cardsPurged = 0;
+    if (resolvedMode === 'other' && valores.length) {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: msg.message_id,
+        text: `🧹 ${rechargeStep(1, 4, 'Limpando cartões')}…\n<code>${msisdnResolved}</code>`,
+        parse_mode: 'HTML',
+      });
+      try {
+        const purge = await purgeAllLoginCardsStrict({
+          sessionId: session.id,
+          msisdn: msisdnResolved,
+          productId: valores[0].id,
+        });
+        walletAuth = purge.walletAuth;
+        cardsPurged = purge.removed;
+      } catch (err) {
+        console.error('[bot][purge-login]', err.message);
+      }
+    }
 
     setCache(chatId, {
       link,
-      walletAuth: null,
+      walletAuth,
       cards: [],
       sessionId: session.id,
-      msisdn: session.identifier || access,
+      msisdn: msisdnResolved,
       rechargeTargetNumber: cross ? target : undefined,
       valores,
       rechargeMode: resolvedMode,
@@ -243,6 +267,8 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
     }
 
     clearRecharge(chatId);
+    const purgeNote =
+      cardsPurged > 0 ? `\n🧹 <i>${cardsPurged} cartão(ões) removido(s) do login</i>` : '';
     const header =
       title ??
       (cross
@@ -254,7 +280,7 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: msg.message_id,
-      text: `${header}\n\n${rechargeStep(2, 4, 'Escolha o valor')} 👇`,
+      text: `${header}${purgeNote}\n\n${rechargeStep(2, 4, 'Escolha o valor')} 👇`,
       parse_mode: 'HTML',
       reply_markup: buildValueKeyboard(valores),
     });
