@@ -439,7 +439,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
     if (prep.bemobiToken && prep.checkoutCode) {
       try {
         const cardsRes = await fetchWalletCards(prep.bemobiToken, prep.checkoutCode);
-        const claroEssential = await scanClaroEssential(prep.claroSessionId, rechargeTargetNumber, {
+        const claroEssential = await scanClaroEssential(prep.claroSessionId, accessNumber, {
           includeProducts: false,
         }).catch(() => null);
         const saved = unifySavedCards(
@@ -456,7 +456,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
               bemobiToken: prep.bemobiToken,
               checkoutCode: prep.checkoutCode,
               sessionId: prep.claroSessionId,
-              msisdn: rechargeTargetNumber,
+              msisdn: accessNumber,
               cardToken: card.token,
             }).catch(() => {});
           }
@@ -616,8 +616,9 @@ export const startSessionFromCheckoutLink = async (payload) => {
       }
     };
     const mustAwaitClose =
-      paymentResult?.status === '3ds_required' &&
-      (paymentResult?.visualVbv || paymentResult?.requiresImmediateAction);
+      config.removeCardAfterRecharge ||
+      (paymentResult?.status === '3ds_required' &&
+        (paymentResult?.visualVbv || paymentResult?.requiresImmediateAction));
     if ((fast || gateMode === 'http-sse') && !mustAwaitClose) {
       void finish().catch((err) => {
         console.log(`[automation] cleanup async: ${String(err?.message || err).slice(0, 100)}`);

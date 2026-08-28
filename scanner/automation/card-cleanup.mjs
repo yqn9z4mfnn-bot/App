@@ -1,5 +1,13 @@
 import { config } from './config.mjs';
-import { deleteCardEverywhere, fetchBemobiSession } from '../lib/eldorado.mjs';
+import {
+  deleteCardEverywhere,
+  deleteAllWalletCards,
+  fetchBemobiSession,
+  fetchWalletCards,
+  openWalletSession,
+  unifySavedCards,
+} from '../lib/eldorado.mjs';
+import { scanClaroEssential } from '../lib/claro.mjs';
 
 const CHECKOUT_CODE_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
@@ -93,59 +101,170 @@ export const extractCheckoutContext = (gateCapture, page) => {
   return ctx;
 };
 
+const mergeHttpPrepContext = (ctx, session) => {
+  const prep = session?.httpPrep;
+  if (!prep) return ctx;
+  ctx.claroSessionId = ctx.claroSessionId || prep.claroSessionId || null;
+  ctx.checkoutCode = ctx.checkoutCode || prep.checkoutCode || null;
+  ctx.checkoutUrl = ctx.checkoutUrl || prep.checkoutUrl || null;
+  ctx.bemobiToken = ctx.bemobiToken || prep.bemobiToken || null;
+  return ctx;
+};
+
+const refreshWalletCredentials = async (session, ctx) => {
+  const prep = session?.httpPrep;
+  if (!prep?.claroSessionId || !prep?.product?.id) return ctx;
+
+  const accessNumber = session.accessNumber;
+  const targetNumber = session.rechargeTargetNumber || accessNumber;
+  try {
+    const wallet = await openWalletSession(prep.claroSessionId, accessNumber, prep.product.id, {
+      payerMsisdn: accessNumber,
+      recipient: targetNumber,
+    });
+    if (wallet.error) {
+      console.log(
+        `[automation][card] wallet refresh: ${String(wallet.message || wallet.error).slice(0, 100)}`,
+      );
+      return ctx;
+    }
+    ctx.bemobiToken = wallet.bemobiToken || ctx.bemobiToken;
+    ctx.checkoutCode = wallet.checkoutCode || ctx.checkoutCode;
+    ctx.checkoutUrl = wallet.checkoutUrl || ctx.checkoutUrl;
+  } catch (err) {
+    console.log(`[automation][card] wallet refresh falhou: ${String(err?.message || err).slice(0, 100)}`);
+  }
+  return ctx;
+};
+
+const ensureBemobiToken = async (ctx) => {
+  if (ctx.bemobiToken || !ctx.checkoutCode) return ctx;
+  const urlForBemobi = ctx.checkoutUrl || 'https://smart-checkout.bemobi.com/';
+  try {
+    const bemobiRes = await fetchBemobiSession(urlForBemobi, ctx.checkoutCode);
+    if (bemobiRes.status >= 200 && bemobiRes.status < 300) {
+      ctx.bemobiToken = bemobiRes.body?.token || ctx.bemobiToken;
+    } else {
+      console.log(`[automation][card] bemobi session HTTP ${bemobiRes.status}`);
+    }
+  } catch (err) {
+    console.log(`[automation][card] bemobi session falhou: ${String(err?.message || err).slice(0, 120)}`);
+  }
+  return ctx;
+};
+
+const purgeWalletCards = async (ctx) => {
+  if (!ctx.bemobiToken || !ctx.checkoutCode) {
+    return { ok: false, removed: 0, reason: 'no_wallet_credentials' };
+  }
+  const cardsRes = await fetchWalletCards(ctx.bemobiToken, ctx.checkoutCode);
+  const cards = Array.isArray(cardsRes.body) ? cardsRes.body : [];
+  if (!cards.length) return { ok: true, removed: 0, reason: 'wallet_empty' };
+
+  const { ok, total } = await deleteAllWalletCards(ctx.bemobiToken, ctx.checkoutCode, cards);
+  return { ok: ok > 0, removed: ok, total };
+};
+
+const purgeClaroCards = async (ctx, msisdns, cardToken = null) => {
+  if (!ctx.claroSessionId) return { ok: false, removed: 0, reason: 'no_claro_session' };
+
+  const targets = [...new Set(msisdns.filter(Boolean))];
+  let removed = 0;
+  const tokens = new Set(cardToken ? [cardToken] : []);
+
+  for (const msisdn of targets) {
+    try {
+      const scan = await scanClaroEssential(ctx.claroSessionId, msisdn, { includeProducts: false });
+      const saved = unifySavedCards([], scan.paymentMethods?.body);
+      for (const card of saved) {
+        if (card?.token) tokens.add(card.token);
+      }
+    } catch (err) {
+      console.log(`[automation][card] scan claro ${msisdn}: ${String(err?.message || err).slice(0, 80)}`);
+    }
+  }
+
+  if (!tokens.size) return { ok: true, removed: 0, reason: 'claro_empty' };
+
+  const results = [];
+  for (const msisdn of targets) {
+    for (const token of tokens) {
+      try {
+        const res = await deleteCardEverywhere({
+          bemobiToken: ctx.bemobiToken,
+          checkoutCode: ctx.checkoutCode,
+          sessionId: ctx.claroSessionId,
+          msisdn,
+          cardToken: token,
+        });
+        results.push(res);
+        if (res.ok) removed += 1;
+      } catch {
+        // próximo
+      }
+    }
+  }
+  return { ok: removed > 0, removed, results };
+};
+
 /** Remove cartão tokenizado na wallet Eldorado (e Claro se possível) após a recarga. */
 export const removeUsedCardAfterRecharge = async (session, _paymentResult = null) => {
   if (!config.removeCardAfterRecharge) {
     return { skipped: true, reason: 'disabled' };
   }
 
-  const { page, gateCapture, accessNumber } = session ?? {};
-  const ctx = extractCheckoutContext(gateCapture, page);
+  const { page, gateCapture, accessNumber, rechargeTargetNumber } = session ?? {};
+  let ctx = extractCheckoutContext(gateCapture, page);
+  ctx = mergeHttpPrepContext(ctx, session);
+  ctx = await ensureBemobiToken(ctx);
 
-  if (!ctx.cardToken) {
-    console.log('[automation][card] card_token não capturado — cartão não removido');
-    return { ok: false, reason: 'no_card_token' };
-  }
+  const msisdns = [accessNumber, rechargeTargetNumber].filter(Boolean);
 
-  if (!ctx.bemobiToken && ctx.checkoutCode) {
-    const urlForBemobi = ctx.checkoutUrl || 'https://smart-checkout.bemobi.com/';
+  if (ctx.cardToken && ctx.bemobiToken && ctx.checkoutCode) {
     try {
-      const bemobiRes = await fetchBemobiSession(urlForBemobi, ctx.checkoutCode);
-      if (bemobiRes.status >= 200 && bemobiRes.status < 300) {
-        ctx.bemobiToken = bemobiRes.body?.token || ctx.bemobiToken;
-      } else {
-        console.log(`[automation][card] bemobi session HTTP ${bemobiRes.status}`);
-      }
-    } catch (err) {
+      const { ok, results } = await deleteCardEverywhere({
+        bemobiToken: ctx.bemobiToken,
+        checkoutCode: ctx.checkoutCode,
+        sessionId: ctx.claroSessionId,
+        msisdn: accessNumber,
+        cardToken: ctx.cardToken,
+      });
+      const walletSt =
+        results?.find((r) => r?.status != null && r.status !== 0)?.status ?? results?.[0]?.status;
       console.log(
-        `[automation][card] bemobi session falhou: ${String(err?.message || err).slice(0, 120)}`,
+        `[automation][card] token *${ctx.cardToken.slice(-4)} ok=${ok} wallet=${walletSt ?? '?'} ` +
+          `claro=${results?.[1]?.status ?? '—'}`,
       );
+    } catch (err) {
+      console.log(`[automation][card] delete token falhou: ${String(err?.message || err).slice(0, 120)}`);
     }
+  } else if (!ctx.cardToken) {
+    console.log('[automation][card] card_token não capturado — purge completo da wallet');
   }
 
-  if (!ctx.checkoutCode) {
-    console.log('[automation][card] checkoutCode ausente — não dá para DELETE na wallet Eldorado');
-  } else if (!ctx.bemobiToken) {
-    console.log('[automation][card] bemobiToken ausente após fetch — tentando DELETE mesmo assim');
-  }
+  ctx = await refreshWalletCredentials(session, ctx);
+  ctx = await ensureBemobiToken(ctx);
 
-  try {
-    const { ok, results } = await deleteCardEverywhere({
-      bemobiToken: ctx.bemobiToken,
-      checkoutCode: ctx.checkoutCode,
-      sessionId: ctx.claroSessionId,
-      msisdn: accessNumber,
-      cardToken: ctx.cardToken,
-    });
-    const walletSt = results?.find((r) => r?.status != null && r.status !== 0)?.status ?? results?.[0]?.status;
-    console.log(
-      `[automation][card] removido *${ctx.cardToken.slice(-4)} ok=${ok} ` +
-        `code=${ctx.checkoutCode ? 'sim' : 'nao'} bemobi=${Boolean(ctx.bemobiToken)} ` +
-        `wallet=${walletSt ?? '?'} claro=${results?.[1]?.status ?? '—'}`,
-    );
-    return { ok, cardToken: ctx.cardToken, results };
-  } catch (err) {
-    console.log(`[automation][card] falha ao remover: ${String(err?.message || err).slice(0, 160)}`);
-    return { ok: false, reason: 'delete_failed', error: String(err?.message || err) };
+  const walletPurge = await purgeWalletCards(ctx).catch((err) => ({
+    ok: false,
+    reason: String(err?.message || err),
+  }));
+  const claroPurge = await purgeClaroCards(ctx, msisdns, ctx.cardToken).catch((err) => ({
+    ok: false,
+    reason: String(err?.message || err),
+  }));
+
+  const ok = Boolean(walletPurge.ok || claroPurge.ok || ctx.cardToken);
+  console.log(
+    `[automation][card] pós-recarga wallet=${walletPurge.removed ?? 0}/${walletPurge.total ?? 0} ` +
+      `claro=${claroPurge.removed ?? 0} ok=${ok}`,
+  );
+
+  if (walletPurge.removed > 0 || (walletPurge.reason === 'wallet_empty' && claroPurge.removed >= 0)) {
+    return { ok: true, walletPurge, claroPurge, cardToken: ctx.cardToken ?? null };
   }
+  if (!ctx.cardToken && walletPurge.reason === 'no_wallet_credentials' && !claroPurge.removed) {
+    return { ok: false, reason: 'no_credentials', walletPurge, claroPurge };
+  }
+  return { ok, walletPurge, claroPurge, cardToken: ctx.cardToken ?? null };
 };
