@@ -67,6 +67,9 @@ export function formatRechargeResult(outcome) {
   } else if (status === 'DENIED') {
     icon = '😔';
     title = 'Recarga negada';
+  } else if (status === 'AUTOMATION_FAIL') {
+    icon = '🔧';
+    title = 'Falha na automação';
   } else if (status === 'TIMEOUT') {
     icon = '⏰';
     title = 'Tempo esgotado';
@@ -125,9 +128,15 @@ export function buildValueKeyboard(valores) {
   return { inline_keyboard: rows };
 }
 
-/** Escolher cartão salvo ou novo. */
-export function buildPayMethodKeyboard(cards) {
-  const rows = [[{ text: '✨ Cartão novo', callback_data: 'rcgpay:new' }]];
+/** Escolher cartão salvo, automático (lista TXT) ou novo. */
+export function buildPayMethodKeyboard(cards, { pendingCards = 0 } = {}) {
+  const rows = [];
+  if (pendingCards > 0) {
+    rows.push([{ text: `🤖 Automático (${pendingCards} na fila)`, callback_data: 'rcgpay:auto' }]);
+  } else {
+    rows.push([{ text: '🤖 Automático (lista vazia)', callback_data: 'rcgpay:auto_empty' }]);
+  }
+  rows.push([{ text: '✨ Cartão manual', callback_data: 'rcgpay:new' }]);
   for (const c of (cards ?? []).slice(0, 5)) {
     rows.push([
       {

@@ -46,17 +46,7 @@ export async function runBrowserRecharge({
   });
 
   const pr = data.paymentResult ?? {};
-  const rawStatus = String(pr.status || data.status || 'UNKNOWN').toLowerCase();
-  const mapped =
-    rawStatus === 'success'
-      ? 'CONFIRMED'
-      : rawStatus === '3ds_required'
-        ? '3DS_REQUIRED'
-        : rawStatus === 'timeout'
-          ? 'TIMEOUT'
-          : rawStatus === 'error'
-            ? 'DENIED'
-            : 'PENDING';
+  const mapped = mapAutomationPaymentStatus(pr, data);
 
   const threeDs = pr.threeDs ?? null;
   const visualVbv = Boolean(pr.visualVbv ?? (threeDs && isVisualVbv(threeDs)));
@@ -79,6 +69,7 @@ export async function runBrowserRecharge({
       status: mapped,
       message: messageParts.join(' · ') || null,
       negativeReason: pr.gateMessage || null,
+      gateCode: pr.gateCode ?? null,
       visualVbv,
       threeDsKind: threeDs?.kind ?? null,
       threeDsHint,
@@ -145,17 +136,7 @@ export async function runHybridRecharge({
   });
 
   const pr = data.paymentResult ?? {};
-  const rawStatus = String(pr.status || data.status || 'UNKNOWN').toLowerCase();
-  const mapped =
-    rawStatus === 'success'
-      ? 'CONFIRMED'
-      : rawStatus === '3ds_required'
-        ? '3DS_REQUIRED'
-        : rawStatus === 'timeout'
-          ? 'TIMEOUT'
-          : rawStatus === 'error'
-            ? 'DENIED'
-            : 'PENDING';
+  const mapped = mapAutomationPaymentStatus(pr, data);
 
   const threeDs = pr.threeDs ?? null;
   const visualVbv = Boolean(pr.visualVbv ?? (threeDs && isVisualVbv(threeDs)));
@@ -167,6 +148,7 @@ export async function runHybridRecharge({
       status: mapped,
       message: pr.gateMessage || pr.message || data.lastError || null,
       negativeReason: pr.gateMessage || null,
+      gateCode: pr.gateCode ?? null,
       visualVbv,
       threeDsKind: threeDs?.kind ?? null,
       threeDsHint: threeDs?.hint ? String(threeDs.hint).slice(0, 120) : null,
@@ -185,4 +167,30 @@ export async function runHybridRecharge({
 
 function normalizeTarget(n) {
   return String(n ?? '').replace(/\D/g, '');
+}
+
+function mapAutomationPaymentStatus(pr, data) {
+  const rawStatus = String(pr.status || data.status || 'UNKNOWN').toLowerCase();
+  const msg = String(pr.gateMessage || pr.message || data.lastError || '');
+  const gateCode = String(pr.gateCode ?? '').toUpperCase();
+
+  if (rawStatus === 'success') return 'CONFIRMED';
+  if (rawStatus === '3ds_required') return '3DS_REQUIRED';
+  if (rawStatus === 'timeout') return 'TIMEOUT';
+
+  if (rawStatus === 'error') {
+    if (gateCode === 'DENIED') return 'DENIED';
+    if (pr.gateResponse?.body) {
+      const b = pr.gateResponse.body;
+      const st = String(b.status ?? b.payments?.[0]?.status ?? '').toUpperCase();
+      if (st === 'DENIED' || st === 'REJECTED') return 'DENIED';
+    }
+    if (/negad|denied|recusad|não autoriz|bloqueado|insuficiente/i.test(msg)) return 'DENIED';
+    if (/não capturado|iframe|element|click|limite de \d+ telas|error_manual|manual/i.test(msg)) {
+      return 'AUTOMATION_FAIL';
+    }
+    return pr.pagamentoErro ? 'DENIED' : 'AUTOMATION_FAIL';
+  }
+
+  return 'PENDING';
 }

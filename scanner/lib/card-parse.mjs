@@ -120,5 +120,25 @@ export function parseCardInput(text) {
   return null;
 }
 
+/** Linha TXT a partir do objeto cartão parseado. */
+export function formatCardLine(card) {
+  const pan = String(card?.number ?? '').replace(/\D/g, '');
+  const mm = String(card.expirationMonth ?? '').padStart(2, '0');
+  let yyyy = String(card.expirationYear ?? '');
+  if (yyyy.length === 2) yyyy = `20${yyyy}`;
+  const cvv = String(card.cvv ?? '').replace(/\D/g, '');
+  return `${pan}|${mm}|${yyyy}|${cvv}`;
+}
+
+export function parseCardsFromTxt(text) {
+  const lines = [];
+  for (const raw of String(text ?? '').split(/\r?\n/)) {
+    const line = raw.trim().replace(/\s+#.*$/, '');
+    if (!line || line.startsWith('#')) continue;
+    if (parseCardInput(line)) lines.push(line);
+  }
+  return lines;
+}
+
 export const CARD_INPUT_HINT =
-  '💳 <b>Envie os dados do cartão</b> em uma linha:\n\n<code>NUMERO|MM|AAAA|CVV</code>\n\nExemplo:\n<code>4271680002723941|08|2033|999</code>\n\n<i>✨ Nome do titular gerado automaticamente.</i>';
+  '💳 <b>Envie os dados do cartão</b> em uma linha:\n\n<code>NUMERO|MM|AAAA|CVV</code>\n\nExemplo:\n<code>4271680002723941|08|2033|999</code>\n\n<i>✨ Nome do titular gerado automaticamente.</i>\n\n<i>🤖 Ou use <b>Automático</b> com lista em cards-pending.txt</i>';

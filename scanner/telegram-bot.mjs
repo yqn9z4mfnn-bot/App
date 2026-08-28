@@ -24,6 +24,8 @@ import {
   buildPayMethodKeyboard,
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
+import { createCardListStore, looksLikeCardsTxt } from './lib/card-list.mjs';
+import { classifyCardListAction, cardListActionLabel } from './lib/card-outcome.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
 import { describeProxy } from './lib/proxy.mjs';
@@ -52,6 +54,7 @@ import { purgeAllLoginCardsStrict } from './lib/purge-login-cards.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DATA_DIR = join(process.env.XDG_DATA_HOME || join(homedir(), '.local/share'), 'linkclaro-bot');
+const cardList = createCardListStore(DATA_DIR);
 
 if (!TOKEN) {
   console.error('Defina TELEGRAM_BOT_TOKEN');
@@ -342,6 +345,53 @@ async function promptCardLine(chatId) {
   await send(chatId, CARD_INPUT_HINT);
 }
 
+function payMethodKeyboard(cards) {
+  return buildPayMethodKeyboard(cards, { pendingCards: cardList.countPending() });
+}
+
+function buildCardListMeta(outcome, entry, targetMsisdn, flow) {
+  const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const val = flow?.productName ?? formatBRL(flow?.productValue ?? 0);
+  return `${ts} ${val} ${entry?.msisdn ?? '?'}->${targetMsisdn ?? '?'} SUCCESS`;
+}
+
+async function pickAutoCardLine() {
+  return cardList.withLock(async () => {
+    while (true) {
+      const line = cardList.peekPendingLine();
+      if (!line) return null;
+      const card = parseCardInput(line);
+      if (!card) {
+        await cardList.shiftPendingLine();
+        continue;
+      }
+      return { line, card };
+    }
+  });
+}
+
+async function executeAutoRecharge(chatId) {
+  const picked = await pickAutoCardLine();
+  if (!picked) {
+    await send(
+      chatId,
+      '❌ Lista <code>cards-pending.txt</code> vazia.\n\nEnvie um <b>.txt</b> com um cartão por linha:\n<code>NUMERO|MM|AAAA|CVV</code>',
+    );
+    return;
+  }
+
+  const flow = rechargeFlow.get(chatId);
+  if (flow) {
+    flow.autoPay = true;
+    flow.cardListLine = picked.line;
+    rechargeFlow.set(chatId, flow);
+  }
+
+  const mask = picked.card.number.slice(-4);
+  await send(chatId, `🤖 Cartão da fila: <code>****${mask}</code>`);
+  await executeRecharge(chatId, picked.card, { cardListLine: picked.line });
+}
+
 async function startRechargePickerForTarget(chatId, accessMsisdn, targetMsisdn) {
   chatRechargeMode.set(chatId, 'other');
   await prepareRechargeSession(chatId, accessMsisdn, { targetMsisdn });
@@ -407,17 +457,16 @@ async function onValueSelected(chatId, messageId, productId) {
   }
 
   const hasCards = entry.cards?.length > 0;
+  const pendingCards = cardList.countPending();
   await tg('editMessageText', {
     chat_id: chatId,
     message_id: messageId,
     text: `${rechargeStep(3, 4, 'Forma de pagamento')}\n\n💰 <b>${product.name}</b> selecionado\n\nComo deseja pagar? 👇`,
     parse_mode: 'HTML',
-    reply_markup: hasCards
-      ? buildPayMethodKeyboard(entry.cards)
-      : undefined,
+    reply_markup: payMethodKeyboard(entry.cards),
   });
 
-  if (!hasCards) {
+  if (!hasCards && pendingCards === 0) {
     rechargeFlow.set(chatId, {
       ...rechargeFlow.get(chatId),
       step: 'card_line',
@@ -426,7 +475,7 @@ async function onValueSelected(chatId, messageId, productId) {
   }
 }
 
-async function executeRecharge(chatId, card) {
+async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
   const entry = getCache(chatId);
   const flow = rechargeFlow.get(chatId);
   if (!entry?.sessionId || !flow?.productId) {
@@ -487,6 +536,16 @@ async function executeRecharge(chatId, card) {
           card,
         });
 
+    let listNote = '';
+    const listLine = cardListLine ?? flow.cardListLine ?? null;
+    if (listLine) {
+      const action = classifyCardListAction({ outcome, error: null });
+      const meta =
+        action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
+      const applied = await cardList.applyOutcome(listLine, action, meta);
+      listNote = `\n\n🗂 ${cardListActionLabel(action)} · fila: <b>${applied.pendingLeft}</b>`;
+    }
+
     const report = formatRechargeResult({
       ...outcome,
       loginMsisdn: entry.msisdn,
@@ -495,14 +554,21 @@ async function executeRecharge(chatId, card) {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
-      text: report,
+      text: report + listNote,
       parse_mode: 'HTML',
     });
   } catch (err) {
+    let listNote = '';
+    const listLine = cardListLine ?? flow.cardListLine ?? null;
+    if (listLine) {
+      const action = classifyCardListAction({ outcome: null, error: err });
+      const applied = await cardList.applyOutcome(listLine, action);
+      listNote = `\n\n🗂 ${cardListActionLabel(action)} · fila: <b>${applied.pendingLeft}</b>`;
+    }
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
-      text: `❌ <b>Erro na recarga:</b> ${err.message.replace(/</g, '&lt;')}`,
+      text: `❌ <b>Erro na recarga:</b> ${err.message.replace(/</g, '&lt;')}${listNote}`,
       parse_mode: 'HTML',
     });
   } finally {
@@ -534,14 +600,17 @@ async function handleRechargeInput(chatId, text) {
     rechargeFlow.set(chatId, flow);
 
     const hasCards = entry.cards?.length > 0;
+    const pendingCards = cardList.countPending();
     await send(
       chatId,
       `${rechargeStep(3, 4, 'Forma de pagamento')}\n\n` +
         `💰 <b>${flow.productName}</b> → <code>${target}</code>\n\n` +
-        (hasCards ? 'Como deseja pagar? 👇' : '💳 Envie os dados do cartão:'),
-      hasCards ? { reply_markup: buildPayMethodKeyboard(entry.cards) } : undefined,
+        (hasCards || pendingCards > 0 ? 'Como deseja pagar? 👇' : '💳 Envie os dados do cartão:'),
+      hasCards || pendingCards > 0
+        ? { reply_markup: payMethodKeyboard(entry.cards) }
+        : undefined,
     );
-    if (!hasCards) {
+    if (!hasCards && pendingCards === 0) {
       flow.step = 'card_line';
       rechargeFlow.set(chatId, flow);
       await promptCardLine(chatId);
@@ -943,8 +1012,31 @@ async function handleCallback(query) {
     const flow = rechargeFlow.get(chatId);
     if (!flow) return;
     flow.step = 'card_line';
+    flow.autoPay = false;
     rechargeFlow.set(chatId, flow);
     await promptCardLine(chatId);
+    return;
+  }
+
+  if (data === 'rcgpay:auto_empty') {
+    await send(
+      chatId,
+      '❌ Nenhum cartão na fila.\n\nEnvie um <b>.txt</b> (um cartão por linha):\n<code>NUMERO|MM|AAAA|CVV</code>\n\nOu salve em <code>cards-pending.txt</code> na VPS.',
+    );
+    return;
+  }
+
+  if (data === 'rcgpay:auto') {
+    const flow = rechargeFlow.get(chatId);
+    if (!flow) {
+      await send(chatId, '❌ Sessão expirada. Use /start de novo.');
+      return;
+    }
+    if (busy.has(chatId)) {
+      await send(chatId, '⏳ Aguarde…');
+      return;
+    }
+    await executeAutoRecharge(chatId);
     return;
   }
 
@@ -1280,6 +1372,53 @@ async function sendLinkForValue(chatId, valueCents, { excludeMsisdn } = {}) {
   );
 }
 
+async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
+  const result = await cardList.ingestText(text);
+  const lines = [
+    '<b>💳 Cartões adicionados à fila</b>',
+    '',
+    `Novos: <b>${result.added}</b>`,
+    `Total na fila: <b>${result.total}</b>`,
+    `Aprovados (histórico): <b>${cardList.countApproved()}</b>`,
+    '',
+    'No pagamento, toque em <b>🤖 Automático</b>.',
+  ];
+  const payload = {
+    chat_id: chatId,
+    text: lines.join('\n'),
+    parse_mode: 'HTML',
+  };
+  if (statusMsg?.message_id) {
+    await tg('editMessageText', { ...payload, message_id: statusMsg.message_id });
+  } else {
+    await send(chatId, payload.text, { parse_mode: 'HTML' });
+  }
+}
+
+async function sendCartoesFila(chatId) {
+  const pending = cardList.countPending();
+  const approved = cardList.countApproved();
+  const next = cardList.peekPendingLine();
+  let nextMask = '—';
+  if (next) {
+    const parsed = parseCardInput(next);
+    if (parsed?.number) nextMask = `****${parsed.number.slice(-4)}`;
+  }
+  await send(
+    chatId,
+    [
+      '<b>🤖 Fila automática de cartões</b>',
+      '',
+      `Pendentes: <b>${pending}</b> (<code>cards-pending.txt</code>)`,
+      `Aprovados: <b>${approved}</b> (<code>cards-approved.txt</code>)`,
+      `Próximo: <code>${nextMask}</code>`,
+      '',
+      'Envie um <b>.txt</b> com um cartão por linha:',
+      '<code>NUMERO|MM|AAAA|CVV</code>',
+    ].join('\n'),
+  );
+}
+
 async function handleTxtDocument(chatId, document) {
   const name = String(document.file_name || '').toLowerCase();
   const mime = String(document.mime_type || '').toLowerCase();
@@ -1300,6 +1439,12 @@ async function handleTxtDocument(chatId, document) {
     const url = `https://api.telegram.org/file/bot${TOKEN}/${file.file_path}`;
     const res = await fetch(url);
     const text = await res.text();
+
+    if (/cart/i.test(name) || looksLikeCardsTxt(text)) {
+      await handleCardsTxtIngest(chatId, text, statusMsg);
+      return;
+    }
+
     const numbers = parseNumbersFromTxt(text);
     if (!numbers.length) {
       throw new Error('Nenhum número válido no arquivo');
@@ -1541,6 +1686,11 @@ async function handleMessage(msg) {
       return;
     }
 
+    if (text === '/cartoes_fila' || text.startsWith('/cartoes_fila@')) {
+      await sendCartoesFila(chatId);
+      return;
+    }
+
     if (text === '/cartoes' || text.startsWith('/cartoes@')) {
       const entry = getCache(chatId);
       if (!entry?.cards?.length) {
@@ -1632,6 +1782,7 @@ async function main() {
       { command: 'valores', description: '💰 Link por valor (R$ 20…)' },
       { command: 'lista', description: '🗄 Números no banco' },
       { command: 'recarga', description: '💳 Escolher valor e pagar' },
+      { command: 'cartoes_fila', description: '🤖 Fila TXT de cartões' },
       { command: 'cartoes', description: '💳 Cartões da varredura' },
       { command: 'status', description: '🟢 Bot online' },
     ],
