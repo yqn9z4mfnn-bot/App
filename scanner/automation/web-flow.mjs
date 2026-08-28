@@ -303,7 +303,7 @@ export const runWebLinkRecharge = async (session, payload) => {
   } else if (paymentResult?.status === 'error') {
     setSessionStep(session, 'erro_gate', paymentResult.gateMessage || 'Pagamento recusado');
     const { saveStallDebug } = await import('./debug.mjs');
-    await saveStallDebug(page, session, session.gateCapture, 'gate_error', {
+    void saveStallDebug(page, session, session.gateCapture, 'gate_error', {
       gateMessage: paymentResult.gateMessage,
       gateCode: paymentResult.gateCode,
       gateResponseBody: paymentResult.gateResponse?.body ?? null,

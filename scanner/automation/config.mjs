@@ -44,6 +44,9 @@ export const config = {
   pauseAfterValueMs: toInt(process.env.PAUSE_AFTER_VALUE_MS, 650),
   pollIntervalMs: toInt(process.env.POLL_INTERVAL_MS, 180),
   checkoutOpenTimeoutMs: toInt(process.env.CHECKOUT_OPEN_TIMEOUT_MS, 45000),
+  /** Fecha todas as telas Edge antes de abrir nova recarga (sequencial). */
+  closeAllSessionsOnStart:
+    String(process.env.CLOSE_ALL_SESSIONS_ON_START ?? '1').toLowerCase() !== '0',
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';

@@ -79,6 +79,12 @@ export const closeSession = async (sessionId) => {
   } catch {
     // ignore
   }
+  let browserProc = null;
+  try {
+    browserProc = session.browser?.process?.() ?? null;
+  } catch {
+    // ignore
+  }
   try {
     await session.context?.close();
   } catch {
@@ -89,8 +95,24 @@ export const closeSession = async (sessionId) => {
   } catch {
     // ignore
   }
+  if (browserProc?.pid && !browserProc.killed) {
+    try {
+      process.kill(browserProc.pid, 'SIGKILL');
+    } catch {
+      // ignore
+    }
+  }
   if (session.vncStarted) stopVncIfIdle();
   return { sessionId, closed: true };
+};
+
+export const closeAllSessions = async () => {
+  const ids = [...sessions.keys()];
+  const results = [];
+  for (const id of ids) {
+    results.push(await closeSession(id));
+  }
+  return { closed: results.filter((r) => r.closed).length, results };
 };
 
 export const closeSessionsByAccessNumber = async (accessNumber) => {
@@ -131,6 +153,28 @@ const scheduleSessionClose = (sessionId, delayMs) => {
 
 const sessionCloseDelayMs = () => Math.max(400, (config.keepBrowserOpenSeconds || 0) * 1000);
 
+const shouldKeepBrowserOpen = (paymentResult) => {
+  if (paymentResult?.status === '3ds_required' && config.keepBrowserOpen3dsSeconds > 0) {
+    return Math.max(400, config.keepBrowserOpen3dsSeconds * 1000);
+  }
+  if (config.keepBrowserOpenSeconds > 0) {
+    return sessionCloseDelayMs();
+  }
+  return 0;
+};
+
+const finalizeSessionClose = async (sessionId, paymentResult) => {
+  const keepMs = shouldKeepBrowserOpen(paymentResult);
+  if (keepMs <= 0) {
+    console.log(`[automation] fechando Edge agora (${paymentResult?.status || 'done'})…`);
+    await closeSession(sessionId).catch((err) => {
+      console.error(`[automation] falha ao fechar ${sessionId}:`, err?.message || err);
+    });
+    return;
+  }
+  scheduleSessionClose(sessionId, keepMs);
+};
+
 const buildPamPayload = (payload) => {
   const pamRaw = String(payload?.pamInfo ?? '').trim();
   if (!pamRaw) throw new Error('pamInfo é obrigatório (PAN|MES|ANO|CVV).');
@@ -155,7 +199,14 @@ export const startSessionFromWebLink = async (payload) => {
   if (!loginUrl) throw new Error('loginUrl é obrigatório.');
   loginUrl = normalizeMinhaClaroWebLink(loginUrl) || loginUrl;
 
-  await closeSessionsByAccessNumber(accessNumber).catch(() => {});
+  if (config.closeAllSessionsOnStart) {
+    const prev = await closeAllSessions().catch(() => ({ closed: 0 }));
+    if (prev?.closed) {
+      console.log(`[automation] ${prev.closed} sessão(ões) Edge fechada(s) antes da nova recarga`);
+    }
+  } else {
+    await closeSessionsByAccessNumber(accessNumber).catch(() => {});
+  }
 
   const releaseSlot = await acquireBrowserSlot(`weblink:${accessNumber}`);
   let browser = null;
@@ -232,7 +283,7 @@ export const startSessionFromWebLink = async (payload) => {
     } catch (err) {
       session.status = 'error_manual';
       session.lastError = String(err?.message || err);
-      scheduleSessionClose(sessionId, sessionCloseDelayMs());
+      await finalizeSessionClose(sessionId, { status: 'error' });
       throw err;
     }
 
@@ -245,8 +296,7 @@ export const startSessionFromWebLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    const closeMs = sessionCloseDelayMs();
-    scheduleSessionClose(sessionId, closeMs);
+    await finalizeSessionClose(sessionId, paymentResult);
 
     return {
       sessionId,
@@ -261,7 +311,7 @@ export const startSessionFromWebLink = async (payload) => {
     session.status = 'error_manual';
     session.lastError = String(err?.message || err);
     setSessionStep(session, 'erro', session.lastError);
-    if (sessionPageAlive(session)) scheduleSessionClose(sessionId, sessionCloseDelayMs());
+    if (sessionPageAlive(session)) await finalizeSessionClose(sessionId, { status: 'error' });
     throw err;
   }
 };
