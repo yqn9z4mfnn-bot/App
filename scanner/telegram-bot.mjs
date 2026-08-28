@@ -1393,12 +1393,24 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
   const lines = [
     '<b>💳 Cartões adicionados à fila</b>',
     '',
-    `Novos: <b>${result.added}</b>`,
+    `✅ Novos: <b>${result.added}</b>`,
+    result.duplicates
+      ? `⏭ Duplicados (mesmo número): <b>${result.duplicates}</b>${
+          result.duplicateLast4?.length
+            ? ` — ${result.duplicateLast4.map((d) => `****${d}`).join(', ')}`
+            : ''
+        }`
+      : null,
+    result.invalid ? `⚠️ Linhas inválidas: <b>${result.invalid}</b>` : null,
+    '',
     `Total na fila: <b>${result.total}</b>`,
+    `Em uso agora: <b>${result.inUse ?? cardList.countInUse()}</b>`,
     `Aprovados (histórico): <b>${cardList.countApproved()}</b>`,
     '',
+    '<i>Duplicata = mesmo número já na fila, em uso ou em aprovados.</i>',
+    '',
     'No pagamento, toque em <b>🤖 Automático</b>.',
-  ];
+  ].filter(Boolean);
   const payload = {
     chat_id: chatId,
     text: lines.join('\n'),
@@ -1432,6 +1444,10 @@ async function sendCartoesFila(chatId) {
       `Próximo: <code>${nextMask}</code>`,
       '',
       '🔒 Cada cartão reservado fica bloqueado para outros usuários até a recarga terminar.',
+      '',
+      '<b>Enviar cartões:</b> mande um <b>.txt</b> no chat (ou <code>cartoes.txt</code>)',
+      'Uma linha por cartão: <code>NUMERO|MM|AAAA|CVV</code>',
+      'Duplicatas pelo número são ignoradas automaticamente.',
       '',
       'Envie um <b>.txt</b> com um cartão por linha:',
       '<code>NUMERO|MM|AAAA|CVV</code>',

@@ -199,35 +199,79 @@ export function createCardListStore(dataDir) {
       return first;
     });
 
-  const appendPendingLines = (newLines) =>
+  const collectKnownPans = () => {
+    const pans = new Set();
+    for (const line of loadPending()) {
+      const k = normalizeCardKey(line);
+      if (k) pans.add(k);
+    }
+    for (const line of loadApproved()) {
+      const k = normalizeCardKey(line);
+      if (k) pans.add(k);
+    }
+    for (const r of purgeStaleReservations(loadReserved()).fresh) {
+      if (r.pan) pans.add(r.pan);
+    }
+    return pans;
+  };
+
+  const ingestText = (text) =>
     withLock(() => {
-      const reservations = loadReserved();
-      const inUse = pansInUse(purgeStaleReservations(reservations).fresh);
-      const existing = new Set([
-        ...loadPending().map(normalizeCardKey).filter(Boolean),
-        ...inUse,
-      ]);
+      const known = collectKnownPans();
       const merged = loadPending();
-      let added = 0;
-      for (const raw of newLines) {
-        const line = String(raw ?? '').trim();
-        if (!line || line.startsWith('#')) continue;
+      const stats = {
+        added: 0,
+        duplicates: 0,
+        invalid: 0,
+        duplicateLast4: [],
+      };
+      const seenInBatch = new Set();
+
+      const rawLines = String(text ?? '')
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#'));
+
+      for (const raw of rawLines) {
+        const line = String(raw).replace(/\s+#.*$/, '').trim();
+        if (!line) continue;
+
         const key = normalizeCardKey(line);
-        if (!key || existing.has(key)) continue;
-        existing.add(key);
-        merged.push(line);
-        added += 1;
+        if (!key || !parseCardInput(line)) {
+          stats.invalid += 1;
+          continue;
+        }
+
+        if (seenInBatch.has(key)) {
+          stats.duplicates += 1;
+          continue;
+        }
+        seenInBatch.add(key);
+
+        if (known.has(key)) {
+          stats.duplicates += 1;
+          if (stats.duplicateLast4.length < 8) {
+            stats.duplicateLast4.push(key.slice(-4));
+          }
+          continue;
+        }
+
+        known.add(key);
+        merged.push(formatCardLine(parseCardInput(line)));
+        stats.added += 1;
       }
+
       writeLines(pendingPath, merged);
-      return { added, total: merged.length, inUse: inUse.size };
+      return {
+        ...stats,
+        total: merged.length,
+        inUse: countInUse(),
+      };
     });
 
-  const ingestText = (text) => {
-    const lines = String(text ?? '')
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith('#'));
-    return appendPendingLines(lines);
+  const appendPendingLines = (newLines) => {
+    const text = (Array.isArray(newLines) ? newLines : []).join('\n');
+    return ingestText(text);
   };
 
   const reserveAdHocCard = (chatId, card) =>
