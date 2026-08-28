@@ -121,4 +121,4 @@ export function parseCardInput(text) {
 }
 
 export const CARD_INPUT_HINT =
-  'Envie o cartão em uma linha:\n<code>NUMERO|MM|AAAA|CVV</code>\n\nEx: <code>4271680002723941|08|2033|999</code>\n<i>Nome gerado automaticamente.</i>';
+  '💳 <b>Envie os dados do cartão</b> em uma linha:\n\n<code>NUMERO|MM|AAAA|CVV</code>\n\nExemplo:\n<code>4271680002723941|08|2033|999</code>\n\n<i>✨ Nome do titular gerado automaticamente.</i>';

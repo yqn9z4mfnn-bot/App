@@ -16,6 +16,7 @@ import {
   buildConfirmKeyboard,
   buildRechargeModeKeyboard,
   WELCOME,
+  rechargeStep,
 } from './lib/telegram-format.mjs';
 import {
   formatRechargeResult,
@@ -191,12 +192,12 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   busy.add(chatId);
   let msg = statusMsg;
   if (!msg) {
-    msg = await send(chatId, `🔗 Gerando login para <code>${access}</code>…`);
+    msg = await send(chatId, `🔗 ${rechargeStep(1, 4, 'Gerando login')}…\n<code>${access}</code>`);
   } else {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: msg.message_id,
-      text: `🔗 Gerando login para <code>${access}</code>…`,
+      text: `🔗 ${rechargeStep(1, 4, 'Gerando login')}…\n<code>${access}</code>`,
       parse_mode: 'HTML',
     });
   }
@@ -245,15 +246,15 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
     const header =
       title ??
       (cross
-        ? `<b>Recarga cruzada</b>\nLogin: <code>${access}</code>\nDestino: <code>${target}</code>`
+        ? `🔀 <b>Recarga cruzada</b>\n🔑 Login: <code>${access}</code>\n📱 Destino: <code>${target}</code>`
         : resolvedMode === 'other'
-          ? `<b>Outro número</b>\nLogin: <code>${access}</code>\n<i>Depois do valor, envie quem recebe.</i>`
-          : `<b>Recarga</b> — <code>${access}</code>`);
+          ? `🔀 <b>Outro número</b>\n🔑 Login: <code>${access}</code>\n<i>Depois do valor, envie quem recebe.</i>`
+          : `📱 <b>Recarga</b> — <code>${access}</code>`);
 
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: msg.message_id,
-      text: `${header}\n\nEscolha o valor:`,
+      text: `${header}\n\n${rechargeStep(2, 4, 'Escolha o valor')} 👇`,
       parse_mode: 'HTML',
       reply_markup: buildValueKeyboard(valores),
     });
@@ -284,20 +285,20 @@ async function startOtherNumberRecharge(chatId) {
   }
 
   busy.add(chatId);
-  const statusMsg = await send(chatId, '🎲 Gerando número de login (DDD do banco)…');
+  const statusMsg = await send(chatId, '🎲 Gerando login aleatório (DDD do banco)…');
   try {
     const { msisdn, attempt } = await generateLoginMsisdn();
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
-      text: `🎲 Login gerado: <code>${msisdn}</code> (${attempt}ª tentativa)\nBuscando valores…`,
+      text: `🎲 Login gerado: <code>${msisdn}</code> (${attempt}ª tentativa)\n🔗 Buscando valores…`,
       parse_mode: 'HTML',
     });
     busy.delete(chatId);
     await prepareRechargeSession(chatId, msisdn, {
       statusMsg,
       mode: 'other',
-      title: `<b>Outro número</b>\nLogin gerado: <code>${msisdn}</code>\n<i>Depois do valor, envie quem recebe.</i>`,
+      title: `🔀 <b>Outro número</b>\n🔑 Login gerado: <code>${msisdn}</code>\n<i>Depois do valor, envie quem recebe.</i>`,
     });
   } catch (err) {
     await tg('editMessageText', {
@@ -331,7 +332,7 @@ async function startRechargePicker(chatId) {
   }
 
   clearRecharge(chatId);
-  await send(chatId, `<b>Escolha o valor</b> (${entry.msisdn}):`, {
+  await send(chatId, `${rechargeStep(2, 4, 'Escolha o valor')}\n📱 <code>${entry.msisdn}</code>`, {
     reply_markup: buildValueKeyboard(entry.valores),
   });
 }
@@ -370,9 +371,10 @@ async function onValueSelected(chatId, messageId, productId) {
       chat_id: chatId,
       message_id: messageId,
       text:
-        `<b>${product.name}</b> selecionado.\n\n` +
-        `Login: <code>${entry.msisdn}</code>\n\n` +
-        'Envie o <b>número que vai receber</b> a recarga (11 dígitos):',
+        `${rechargeStep(3, 4, 'Quem recebe?')}\n\n` +
+        `💰 <b>${product.name}</b> selecionado\n` +
+        `🔑 Login: <code>${entry.msisdn}</code>\n\n` +
+        '📱 Envie o <b>número que vai receber</b> (11 dígitos):',
       parse_mode: 'HTML',
     });
     return;
@@ -382,7 +384,7 @@ async function onValueSelected(chatId, messageId, productId) {
   await tg('editMessageText', {
     chat_id: chatId,
     message_id: messageId,
-    text: `<b>${product.name}</b> selecionado.\n\nComo deseja pagar?`,
+    text: `${rechargeStep(3, 4, 'Forma de pagamento')}\n\n💰 <b>${product.name}</b> selecionado\n\nComo deseja pagar? 👇`,
     parse_mode: 'HTML',
     reply_markup: hasCards
       ? buildPayMethodKeyboard(entry.cards)
@@ -418,6 +420,7 @@ async function executeRecharge(chatId, card) {
   const crossNumber = targetMsisdn && entry.msisdn && targetMsisdn !== entry.msisdn;
 
   if ((flow.mode === 'other' || entry.awaitTargetMsisdn) && !entry.rechargeTargetNumber) {
+    busy.delete(chatId);
     await send(chatId, '❌ Informe o número destino antes do cartão (/start → Outro número).');
     clearRecharge(chatId);
     return;
@@ -428,9 +431,9 @@ async function executeRecharge(chatId, card) {
     chatId,
     useBrowser
       ? crossNumber
-        ? `💳 <b>${flow.productName}</b> → <code>${targetMsisdn}</code> (login <code>${entry.msisdn}</code>)…\n<i>HTTP → Edge → recarga cruzada</i>`
-        : `💳 Processando <b>${flow.productName}</b>…\n<i>HTTP → Edge → checkout → confirmação</i>`
-      : `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
+        ? `${rechargeStep(4, 4, 'Processando…')}\n\n💰 <b>${flow.productName}</b> → <code>${targetMsisdn}</code>\n🔑 login <code>${entry.msisdn}</code>\n\n<i>⚡ HTTP → Edge → recarga cruzada</i>`
+        : `${rechargeStep(4, 4, 'Processando…')}\n\n💰 <b>${flow.productName}</b>\n\n<i>⚡ HTTP → Edge → checkout</i>`
+      : `${rechargeStep(4, 4, 'Processando…')}\n\n💰 <b>${flow.productName}</b>\n\n<i>Tokenizando → pagamento → confirmação</i>`,
   );
 
   try {
@@ -458,7 +461,11 @@ async function executeRecharge(chatId, card) {
           card,
         });
 
-    const report = formatRechargeResult(outcome);
+    const report = formatRechargeResult({
+      ...outcome,
+      loginMsisdn: entry.msisdn,
+      targetMsisdn,
+    });
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
@@ -503,8 +510,9 @@ async function handleRechargeInput(chatId, text) {
     const hasCards = entry.cards?.length > 0;
     await send(
       chatId,
-      `<b>${flow.productName}</b> → <code>${target}</code>\n\n` +
-        (hasCards ? 'Como deseja pagar?' : 'Envie os dados do cartão:'),
+      `${rechargeStep(3, 4, 'Forma de pagamento')}\n\n` +
+        `💰 <b>${flow.productName}</b> → <code>${target}</code>\n\n` +
+        (hasCards ? 'Como deseja pagar? 👇' : '💳 Envie os dados do cartão:'),
       hasCards ? { reply_markup: buildPayMethodKeyboard(entry.cards) } : undefined,
     );
     if (!hasCards) {
@@ -875,10 +883,10 @@ async function handleCallback(query) {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
-      text: '<b>📱 Mesmo número</b>\n\nEnvie o número (login e recarga nele):',
+      text: `${rechargeStep(1, 4, 'Mesmo número')}\n\n📱 Envie o número (login e recarga nele):`,
       parse_mode: 'HTML',
     }).catch(() =>
-      send(chatId, '<b>📱 Mesmo número</b>\n\nEnvie o número (login e recarga nele):'),
+      send(chatId, `${rechargeStep(1, 4, 'Mesmo número')}\n\n📱 Envie o número (login e recarga nele):`),
     );
     return;
   }
@@ -893,7 +901,7 @@ async function handleCallback(query) {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
-      text: '❌ Recarga cancelada.',
+      text: '↩️ Recarga cancelada.\n\nUse /start para começar de novo.',
       parse_mode: 'HTML',
     });
     return;
@@ -926,7 +934,7 @@ async function handleCallback(query) {
     flow.step = 'cvv_saved';
     flow.savedCard = saved;
     rechargeFlow.set(chatId, flow);
-    await send(chatId, `🏦 <b>${saved.brand} *${saved.last}</b>\n\nDigite o <b>CVV</b>:`);
+    await send(chatId, `💳 <b>${saved.brand} ••${saved.last}</b>\n\n🔢 Digite o <b>CVV</b>:`);
     return;
   }
 
@@ -1529,7 +1537,7 @@ async function handleMessage(msg) {
         return;
       }
       if (!mode) {
-        await send(chatId, 'Escolha o modo de recarga:', { reply_markup: buildRechargeModeKeyboard() });
+        await send(chatId, '👇 Escolha o modo de recarga:', { reply_markup: buildRechargeModeKeyboard() });
         return;
       }
     }
@@ -1594,13 +1602,12 @@ async function main() {
   await tg('deleteWebhook', { drop_pending_updates: false });
   await tg('setMyCommands', {
     commands: [
-      { command: 'start', description: 'Ajuda' },
-      { command: 'valores', description: 'Pedir link por valor (R$ 20…)' },
-      { command: 'lista', description: 'Números salvos no banco' },
-      { command: 'erros', description: 'Números que falharam no .txt' },
-      { command: 'recarga', description: 'Escolher valor e pagar' },
-      { command: 'cartoes', description: 'Cartões da última varredura' },
-      { command: 'status', description: 'Bot online' },
+      { command: 'start', description: '🏠 Início e recarga' },
+      { command: 'valores', description: '💰 Link por valor (R$ 20…)' },
+      { command: 'lista', description: '🗄 Números no banco' },
+      { command: 'recarga', description: '💳 Escolher valor e pagar' },
+      { command: 'cartoes', description: '💳 Cartões da varredura' },
+      { command: 'status', description: '🟢 Bot online' },
     ],
   }).catch(() => {});
   poll();

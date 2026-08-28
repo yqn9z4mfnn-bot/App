@@ -9,6 +9,12 @@ function formatBRL(cents) {
   return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
 }
 
+function formatSeconds(ms) {
+  if (!ms) return null;
+  const s = ms / 1000;
+  return s >= 10 ? `${Math.round(s)}s` : `${s.toFixed(1).replace('.', ',')}s`;
+}
+
 function normalizeStatus(raw) {
   const st = String(raw ?? 'UNKNOWN').toUpperCase();
   if (st === 'CONFIRMED') return 'SUCCESS';
@@ -17,8 +23,17 @@ function normalizeStatus(raw) {
   return st;
 }
 
+
 export function formatRechargeResult(outcome) {
-  const { result, valueCents, cardMask, paymentId, latencyMs } = outcome ?? {};
+  const {
+    result,
+    valueCents,
+    cardMask,
+    paymentId,
+    latencyMs,
+    loginMsisdn,
+    targetMsisdn,
+  } = outcome ?? {};
 
   const status = normalizeStatus(result?.status);
   const visualVbv = Boolean(result?.visualVbv);
@@ -29,51 +44,67 @@ export function formatRechargeResult(outcome) {
     result?.message ??
     '';
 
+  const login = String(loginMsisdn ?? '').replace(/\D/g, '');
+  const target = String(targetMsisdn ?? login).replace(/\D/g, '');
+  const cross = login && target && login !== target;
+
   let icon = '⏳';
-  let title = 'Processando';
+  let title = 'Processando…';
   if (status === 'SUCCESS') {
-    icon = '✅';
-    title = 'Recarga aprovada';
+    icon = '🎉';
+    title = 'Recarga aprovada!';
   } else if (status === '3DS_REQUIRED') {
     if (visualVbv || threeDsKind === 'cardinal') {
       icon = '🔐';
       title = 'VBV visual — aprove no banco';
     } else if (threeDsKind === 'sms') {
-      icon = '📱';
+      icon = '📲';
       title = '3DS por SMS — aprove no banco';
     } else {
       icon = '🔐';
       title = '3DS — aguardando banco';
     }
   } else if (status === 'DENIED') {
-    icon = '❌';
+    icon = '😔';
     title = 'Recarga negada';
   } else if (status === 'TIMEOUT') {
-    icon = '⚠️';
-    title = 'Timeout';
+    icon = '⏰';
+    title = 'Tempo esgotado';
   }
 
   const lines = [
     `<b>${icon} ${title}</b>`,
     '',
-    `<b>Valor:</b> ${formatBRL(valueCents ?? 0)}`,
-    `<b>Cartão:</b> ${esc(cardMask)}`,
-    `<b>Status:</b> ${esc(status)}`,
+    `💰 <b>Valor:</b> ${formatBRL(valueCents ?? 0)}`,
+    `💳 <b>Cartão:</b> ${esc(cardMask)}`,
   ];
+
+  if (cross) {
+    lines.push(
+      `🔑 <b>Login:</b> <code>${esc(login)}</code>`,
+      `📱 <b>Destino:</b> <code>${esc(target)}</code>`,
+    );
+  } else if (target) {
+    lines.push(`📱 <b>Número:</b> <code>${esc(target)}</code>`);
+  }
 
   if (status === '3DS_REQUIRED' && (visualVbv || threeDsKind === 'cardinal' || threeDsKind === 'sms')) {
     lines.push(
       '',
-      '<i>O Edge foi fechado. Confirme a compra no app do banco, SMS ou token — a recarga conclui sozinha após aprovar.</i>',
+      '💡 <i>O Edge foi fechado. Confirme no app do banco, SMS ou token — a recarga conclui sozinha após aprovar.</i>',
     );
   }
 
-  if (reason) lines.push(`<b>Motivo:</b> ${esc(reason)}`);
-  if (result?.threeDsHint) {
-    lines.push(`<b>Tela:</b> ${esc(String(result.threeDsHint).slice(0, 160))}`);
+  if (reason && status !== 'SUCCESS') {
+    lines.push('', `📋 <b>Motivo:</b> ${esc(reason)}`);
   }
-  if (paymentId) lines.push(`<b>Ref:</b> <code>${esc(paymentId)}</code>`);
-  if (latencyMs) lines.push('', `<i>⏱ ${latencyMs}ms</i>`);
+  if (result?.threeDsHint) {
+    lines.push(`🖥 <b>Tela:</b> ${esc(String(result.threeDsHint).slice(0, 160))}`);
+  }
+  if (paymentId) lines.push('', `🔗 <b>Ref:</b> <code>${esc(paymentId)}</code>`);
+
+  const timing = formatSeconds(latencyMs);
+  if (timing) lines.push('', `<i>⏱ ${timing}</i>`);
 
   return lines.join('\n');
 }
@@ -85,26 +116,26 @@ export function buildValueKeyboard(valores) {
   const rows = [];
   for (let i = 0; i < valores.length; i += 2) {
     const row = valores.slice(i, i + 2).map((v) => ({
-      text: v.name ?? formatBRL(v.value),
+      text: `💰 ${v.name ?? formatBRL(v.value)}`,
       callback_data: `rcg:${v.id}`,
     }));
     rows.push(row);
   }
-  rows.push([{ text: '❌ Cancelar', callback_data: 'rcg:cancel' }]);
+  rows.push([{ text: '↩️ Cancelar', callback_data: 'rcg:cancel' }]);
   return { inline_keyboard: rows };
 }
 
 /** Escolher cartão salvo ou novo. */
 export function buildPayMethodKeyboard(cards) {
-  const rows = [[{ text: '💳 Cartão novo', callback_data: 'rcgpay:new' }]];
+  const rows = [[{ text: '✨ Cartão novo', callback_data: 'rcgpay:new' }]];
   for (const c of (cards ?? []).slice(0, 5)) {
     rows.push([
       {
-        text: `🏦 ${c.brand} *${c.last}`,
+        text: `💳 ${c.brand} ••${c.last}`,
         callback_data: `rcgpay:${c.token}`,
       },
     ]);
   }
-  rows.push([{ text: '❌ Cancelar', callback_data: 'rcg:cancel' }]);
+  rows.push([{ text: '↩️ Cancelar', callback_data: 'rcg:cancel' }]);
   return { inline_keyboard: rows };
 }

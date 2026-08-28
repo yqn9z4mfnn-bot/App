@@ -14,6 +14,12 @@ function fmtDate(iso) {
   }
 }
 
+/** Cabeçalho de passo no fluxo de recarga (ex.: passo 2/4). */
+export function rechargeStep(step, total, title) {
+  const bar = '▰'.repeat(step) + '▱'.repeat(Math.max(0, total - step));
+  return `${bar} <b>${step}/${total}</b> · ${title}`;
+}
+
 export function formatTelegramReport(summary) {
   const lines = [
     '<b>📱 Claro Recarga — Varredura</b>',
@@ -74,7 +80,9 @@ export function formatTelegramReport(summary) {
     lines.push('', `⚠️ ${esc(summary.walletScan.message)}`);
   }
 
-  lines.push('', `<i>⏱ ${summary.meta?.latencyMs ?? '?'}ms</i>`);
+  const ms = summary.meta?.latencyMs;
+  const timing = ms ? `${(ms / 1000).toFixed(1).replace('.', ',')}s` : '?';
+  lines.push('', `<i>⏱ ${timing}</i>`);
 
   let text = lines.join('\n');
   if (text.length > 3900) text = `${text.slice(0, 3890)}…`;
@@ -85,7 +93,7 @@ export function formatTelegramReport(summary) {
 export function buildCardKeyboard(walletCards, canRecharge = true) {
   const rows = [];
   if (canRecharge) {
-    rows.push([{ text: '💳 Recarregar', callback_data: 'recarga:start' }]);
+    rows.push([{ text: '💳 Fazer recarga', callback_data: 'recarga:start' }]);
   }
 
   if (!walletCards?.length) return { inline_keyboard: rows };
@@ -93,14 +101,14 @@ export function buildCardKeyboard(walletCards, canRecharge = true) {
   for (const c of walletCards) {
     rows.push([
       {
-        text: `🗑 ${c.brand} *${c.last}`,
+        text: `🗑 ${c.brand} ••${c.last}`,
         callback_data: `rm:${c.token}`,
       },
     ]);
   }
 
   if (walletCards.length > 1) {
-    rows.push([{ text: '🗑 Remover TODOS', callback_data: 'rmall:confirm' }]);
+    rows.push([{ text: '🗑 Remover todos', callback_data: 'rmall:confirm' }]);
   }
 
   return { inline_keyboard: rows };
@@ -111,7 +119,7 @@ export function buildConfirmKeyboard(token, action = 'rm') {
     inline_keyboard: [
       [
         { text: '✅ Sim, remover', callback_data: `${action}ok:${token}` },
-        { text: '❌ Cancelar', callback_data: 'cancel' },
+        { text: '↩️ Voltar', callback_data: 'cancel' },
       ],
     ],
   };
@@ -121,23 +129,25 @@ export function buildConfirmKeyboard(token, action = 'rm') {
 export function buildRechargeModeKeyboard() {
   return {
     inline_keyboard: [
-      [
-        { text: '📱 Mesmo número', callback_data: 'rcgmode:same' },
-        { text: '🔀 Outro número', callback_data: 'rcgmode:other' },
-      ],
+      [{ text: '📱 Mesmo número', callback_data: 'rcgmode:same' }],
+      [{ text: '🔀 Outro número (login aleatório)', callback_data: 'rcgmode:other' }],
     ],
   };
 }
 
-export const WELCOME = `<b>Claro Recarga Scanner</b>
+export const WELCOME = `<b>📱 Link Claro — Recarga</b>
 
-<b>Recarga rápida</b> — escolha o modo:
-• <b>Mesmo número</b> — envie o número; login e recarga nele
-• <b>Outro número</b> — geramos login aleatório; você informa quem recebe
+Escolha como quer recarregar 👇
 
-Também:
-• <b>.txt</b> → salva números no banco
-• /valores ou <code>20</code> → link de um número do banco
-• /recarga_para <code>LOGIN DESTINO</code> — recarga cruzada manual
+<b>📱 Mesmo número</b>
+Login e recarga no número que você enviar
 
-/valores · /lista · /recarga · /backup`;
+<b>🔀 Outro número</b>
+Geramos login aleatório — você informa quem recebe
+
+<i>━━━━━━━━━━━━━━</i>
+<b>📄 .txt</b> → salva números no banco
+<b>💰 /valores</b> ou <code>20</code> → link por valor
+<b>🔧 /recarga_para</b> <code>LOGIN DESTINO</code> → cruzada manual
+
+/start · /valores · /lista · /recarga`;
