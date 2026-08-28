@@ -17,7 +17,7 @@ import {
 } from './helpers.mjs';
 import { runWebLinkRecharge } from './web-flow.mjs';
 import { runWebLinkCheckoutPay } from './checkout.mjs';
-import { waitForPaymentResult } from './gate.mjs';
+import { waitForPaymentResult, waitForPaymentResultViaHttp, waitForPaymentIdFromGate } from './gate.mjs';
 import { prepareCheckoutViaHttp } from '../lib/prepare-checkout-http.mjs';
 import {
   fetchWalletCards,
@@ -544,10 +544,44 @@ export const startSessionFromCheckoutLink = async (payload) => {
       `[automation] gate-wait (checkout-link) msisdn=${accessNumber} valor=R$${rechargeValue}`,
     );
     const gateStarted = Date.now();
-    const paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture, session, {
-      pollMs: fast ? config.checkoutLinkGatePollMs : undefined,
-    });
+    const checkoutUrl = prep.checkoutUrl;
+    const bemobiToken =
+      session.gateCapture?.checkoutCtx?.bemobiToken || prep.bemobiToken || null;
+    let paymentResult;
+    let gateMode = 'browser';
+
+    if (config.checkoutLinkHttpGate) {
+      gateMode = 'http-sse';
+      const idWaitStarted = Date.now();
+      const idResult = await waitForPaymentIdFromGate(
+        session.gateCapture,
+        config.checkoutLinkPaymentIdWaitMs,
+      );
+      timings.paymentIdWaitMs = Date.now() - idWaitStarted;
+
+      const gateSnapshot = {
+        captures: session.gateCapture.captures,
+        checkoutCtx: { ...(session.gateCapture.checkoutCtx ?? {}) },
+        best: () => session.gateCapture.best(),
+      };
+      console.log('[automation] checkout-link: fechando Edge — gate via HTTP SSE…');
+      session.gateCapture?.detach?.();
+      clearSessionWatchdog(sessionId);
+      await closeSession(sessionId);
+
+      paymentResult = await waitForPaymentResultViaHttp(gateSnapshot, bemobiToken, checkoutUrl, {
+        idResult,
+      });
+      session.gateCapture = gateSnapshot;
+      timings.browserClosedBeforeGate = true;
+    } else {
+      paymentResult = await waitForPaymentResult(page, 120000, session.gateCapture, session, {
+        pollMs: fast ? config.checkoutLinkGatePollMs : undefined,
+      });
+    }
+
     timings.gateMs = Date.now() - gateStarted;
+    timings.gateMode = gateMode;
     timings.totalMs = Date.now() - runStarted;
     console.log(
       `[automation] timings checkout-link ms=${JSON.stringify(timings)}`,
@@ -564,9 +598,11 @@ export const startSessionFromCheckoutLink = async (payload) => {
 
     const finish = async () => {
       await cleanupUsedCard(session, paymentResult);
-      await finalizeSessionClose(sessionId, paymentResult);
+      if (gateMode === 'browser') {
+        await finalizeSessionClose(sessionId, paymentResult);
+      }
     };
-    if (fast) {
+    if (fast || gateMode === 'http-sse') {
       void finish().catch((err) => {
         console.log(`[automation] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
       });
@@ -581,8 +617,8 @@ export const startSessionFromCheckoutLink = async (payload) => {
       accessNumber,
       rechargeValue: payload.rechargeValue,
       browser: browserName,
-      url: page.url(),
-      mode: 'checkout-link',
+      url: gateMode === 'http-sse' ? checkoutUrl : page.url(),
+      mode: gateMode === 'http-sse' ? 'checkout-link-http' : 'checkout-link',
       timings,
       httpPrep: {
         checkoutUrl: session.httpPrep.checkoutUrl,

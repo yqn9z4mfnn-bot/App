@@ -7,6 +7,7 @@ import {
   get3dsChallengeApiCapture,
 } from './threeds.mjs';
 import { absorbCheckoutCtxFromCapture, createCheckoutCtx } from './card-cleanup.mjs';
+import { waitPaymentResult as waitHttpPaymentSse } from '../lib/recharge.mjs';
 
 const GATE_URL_RE =
   /eldorado\.m4u|claro-recarga-api|bemobi\.com|smart-checkout|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|\/tokenizer\/|wallet|card/i;
@@ -347,4 +348,127 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       ? { ...debugInfo.report, jsonPath: debugInfo.jsonPath, pngPath: debugInfo.pngPath }
       : null,
   );
+};
+
+/** POST /payments (não SSE) com id do pagamento. */
+export const findPaymentPostCapture = (gateCapture) => {
+  const list = gateCapture?.captures ?? [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const c = list[i];
+    const u = c.url || '';
+    if (!/api-bsc\/api\/v1\/payments/i.test(u) || /\/sse/i.test(u)) continue;
+    if (c.httpStatus >= 200 && c.httpStatus < 300 && c.body?.id) return c;
+  }
+  return null;
+};
+
+/** Aguarda id do pagamento (ou CONFIRMED) nas capturas do browser. */
+export async function waitForPaymentIdFromGate(gateCapture, timeoutMs = 12000) {
+  const deadline = Date.now() + timeoutMs;
+  const poll = config.checkoutLinkGatePollMs ?? 80;
+  while (Date.now() < deadline) {
+    const confirmed = findConfirmedPaymentCapture(gateCapture);
+    if (confirmed) {
+      const id = confirmed.body?.id ?? confirmed.body?.payments?.[0]?.id ?? null;
+      return { paymentId: id, alreadyConfirmed: true, capture: confirmed };
+    }
+    const post = findPaymentPostCapture(gateCapture);
+    if (post?.body?.id) {
+      return { paymentId: post.body.id, alreadyConfirmed: false, capture: post };
+    }
+    await sleep(poll);
+  }
+  return null;
+};
+
+export function buildPaymentResultFromHttpSse(sse, url, paymentId, opts = {}) {
+  const st = String(sse?.status ?? '').toUpperCase();
+  const base = { url, paymentId, httpGate: true, sseBody: sse };
+  if (st === 'CONFIRMED') {
+    return {
+      ...base,
+      status: 'success',
+      gateCode: 'CONFIRMED',
+      gateMessage: 'Pagamento confirmado',
+      message: 'Pagamento confirmado',
+      pagamentoErro: false,
+    };
+  }
+  if (st === 'DENIED') {
+    const msg = sse?.negativeReason || sse?.message || 'Pagamento negado';
+    return {
+      ...base,
+      status: 'error',
+      gateCode: 'DENIED',
+      gateMessage: msg,
+      message: msg,
+      pagamentoErro: true,
+    };
+  }
+  if (opts.had3ds && (!st || st === 'PENDING' || st === 'PROCESSING' || st === 'TIMEOUT')) {
+    return {
+      ...base,
+      status: '3ds_required',
+      gateCode: '3DS',
+      gateMessage: 'Validação 3DS — aprovar no banco (browser já fechado)',
+      message: 'Validação 3DS — aprovar no banco (browser já fechado)',
+      pagamentoErro: false,
+    };
+  }
+  const msg = sse?.message || 'Timeout aguardando SSE HTTP';
+  return {
+    ...base,
+    status: st === 'TIMEOUT' || !st ? 'timeout' : 'error',
+    gateCode: st || 'TIMEOUT',
+    gateMessage: msg,
+    message: msg,
+    pagamentoErro: true,
+  };
+}
+
+/** Fecha browser cedo: captura payment id → SSE HTTP. */
+export async function waitForPaymentResultViaHttp(gateCapture, bemobiToken, checkoutUrl, opts = {}) {
+  const idResult =
+    opts.idResult ??
+    (await waitForPaymentIdFromGate(
+      gateCapture,
+      opts.paymentIdWaitMs ?? config.checkoutLinkPaymentIdWaitMs ?? 12000,
+    ));
+  const sseTimeoutMs = opts.timeoutMs ?? 120000;
+  const had3ds = Boolean(get3dsChallengeApiCapture(gateCapture));
+
+  if (idResult?.alreadyConfirmed) {
+    return buildPaymentResult(null, 'success', checkoutUrl, gateCapture);
+  }
+
+  if (!idResult?.paymentId) {
+    if (had3ds) {
+      return buildPaymentResultFromHttpSse(
+        { status: 'PENDING' },
+        checkoutUrl,
+        null,
+        { had3ds: true },
+      );
+    }
+    return buildPaymentResult(
+      null,
+      'error',
+      checkoutUrl,
+      gateCapture,
+      'POST /payments não capturado antes de fechar o browser',
+    );
+  }
+
+  if (!bemobiToken) {
+    return buildPaymentResult(null, 'error', checkoutUrl, gateCapture, 'bemobiToken ausente para SSE HTTP');
+  }
+
+  console.log(
+    `[automation] gate-wait HTTP SSE paymentId=${idResult.paymentId} 3ds_api=${had3ds}`,
+  );
+  const sse = await waitHttpPaymentSse(bemobiToken, idResult.paymentId, sseTimeoutMs);
+  return buildPaymentResultFromHttpSse(sse, checkoutUrl, idResult.paymentId, {
+    had3ds,
+    gateCapture,
+  });
 };

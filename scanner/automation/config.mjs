@@ -58,6 +58,9 @@ export const config = {
   checkoutLinkCardSettleMs: toInt(process.env.CHECKOUT_LINK_CARD_SETTLE_MS, 60),
   checkoutLinkPanTimeoutMs: toInt(process.env.CHECKOUT_LINK_PAN_TIMEOUT_MS, 8000),
   checkoutLinkGatePollMs: toInt(process.env.CHECKOUT_LINK_GATE_POLL_MS, 80),
+  /** Após clicar pagar: fecha Edge e espera SSE via HTTP. */
+  checkoutLinkHttpGate: String(process.env.CHECKOUT_LINK_HTTP_GATE ?? '1').toLowerCase() !== '0',
+  checkoutLinkPaymentIdWaitMs: toInt(process.env.CHECKOUT_LINK_PAYMENT_ID_WAIT_MS, 12000),
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';
