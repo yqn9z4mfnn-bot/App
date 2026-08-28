@@ -170,13 +170,18 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   targetMsisdn = null,
   statusMsg = null,
   title = null,
+  mode = null,
 } = {}) {
   const access = normalizeBrMobile(accessMsisdn);
-  const target = normalizeBrMobile(targetMsisdn ?? accessMsisdn);
-  if (!access || !target) {
+  if (!access) {
     await send(chatId, '❌ Número inválido.');
     return false;
   }
+
+  const target = targetMsisdn ? normalizeBrMobile(targetMsisdn) : null;
+  const resolvedMode =
+    mode ?? chatRechargeMode.get(chatId) ?? (target && target !== access ? 'other' : 'same');
+  const cross = Boolean(target && target !== access);
 
   if (busy.has(chatId)) {
     await send(chatId, '⏳ Aguarde…');
@@ -220,9 +225,10 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
       cards: [],
       sessionId: session.id,
       msisdn: session.identifier || access,
-      rechargeTargetNumber: target !== access ? target : undefined,
+      rechargeTargetNumber: cross ? target : undefined,
       valores,
-      rechargeMode: target !== access ? 'other' : 'same',
+      rechargeMode: resolvedMode,
+      awaitTargetMsisdn: resolvedMode === 'other' && !cross,
     });
 
     if (!valores.length) {
@@ -236,12 +242,13 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
     }
 
     clearRecharge(chatId);
-    const cross = target !== access;
     const header =
       title ??
       (cross
         ? `<b>Recarga cruzada</b>\nLogin: <code>${access}</code>\nDestino: <code>${target}</code>`
-        : `<b>Recarga</b> — <code>${access}</code>`);
+        : resolvedMode === 'other'
+          ? `<b>Outro número</b>\nLogin: <code>${access}</code>\n<i>Depois do valor, envie quem recebe.</i>`
+          : `<b>Recarga</b> — <code>${access}</code>`);
 
     await tg('editMessageText', {
       chat_id: chatId,
@@ -289,6 +296,7 @@ async function startOtherNumberRecharge(chatId) {
     busy.delete(chatId);
     await prepareRechargeSession(chatId, msisdn, {
       statusMsg,
+      mode: 'other',
       title: `<b>Outro número</b>\nLogin gerado: <code>${msisdn}</code>\n<i>Depois do valor, envie quem recebe.</i>`,
     });
   } catch (err) {
@@ -341,13 +349,18 @@ async function onValueSelected(chatId, messageId, productId) {
     return;
   }
 
+  const mode = entry.rechargeMode || chatRechargeMode.get(chatId) || 'same';
+  const needsTarget = Boolean(
+    (mode === 'other' || entry.awaitTargetMsisdn) && !entry.rechargeTargetNumber,
+  );
+
   rechargeFlow.set(chatId, {
-    step: entry.rechargeMode === 'other' && !entry.rechargeTargetNumber ? 'target_msisdn' : 'pick_card',
-    mode: entry.rechargeMode || chatRechargeMode.get(chatId) || 'same',
+    step: needsTarget ? 'target_msisdn' : 'pick_card',
+    mode,
     productId: product.id,
     productValue: product.value,
     productName: product.name,
-    rechargeTargetNumber: entry.rechargeTargetNumber || entry.msisdn,
+    rechargeTargetNumber: needsTarget ? null : entry.rechargeTargetNumber || entry.msisdn,
     card: {},
   });
 
@@ -403,17 +416,20 @@ async function executeRecharge(chatId, card) {
   const useBrowser = isBrowserRechargeEnabled() && !card.token;
   const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
   const crossNumber = targetMsisdn && entry.msisdn && targetMsisdn !== entry.msisdn;
+
+  if ((flow.mode === 'other' || entry.awaitTargetMsisdn) && !entry.rechargeTargetNumber) {
+    await send(chatId, '❌ Informe o número destino antes do cartão (/start → Outro número).');
+    clearRecharge(chatId);
+    return;
+  }
+
   const useHybrid = useBrowser && isHybridRechargeEnabled();
   const statusMsg = await send(
     chatId,
     useBrowser
       ? crossNumber
-        ? `💳 ${flow.productName} → <code>${targetMsisdn}</code> (login <code>${entry.msisdn}</code>)…`
-        : useHybrid
-          ? crossNumber
-            ? `💳 <b>${flow.productName}</b> → <code>${targetMsisdn}</code> (login <code>${entry.msisdn}</code>)…\n<i>HTTP → Edge → recarga cruzada</i>`
-            : `💳 Processando <b>${flow.productName}</b>…\n<i>HTTP → Edge → checkout → confirmação</i>`
-          : `💳 Processando <b>${flow.productName}</b>…\n<i>Edge → JWT → checkout → confirmação</i>`
+        ? `💳 <b>${flow.productName}</b> → <code>${targetMsisdn}</code> (login <code>${entry.msisdn}</code>)…\n<i>HTTP → Edge → recarga cruzada</i>`
+        : `💳 Processando <b>${flow.productName}</b>…\n<i>HTTP → Edge → checkout → confirmação</i>`
       : `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
   );
 
