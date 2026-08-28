@@ -24,7 +24,7 @@ import {
   buildPayMethodKeyboard,
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
-import { createCardListStore, looksLikeCardsTxt } from './lib/card-list.mjs';
+import { createCardListStore, looksLikeCardsTxt, extractCardLinesFromText } from './lib/card-list.mjs';
 import { classifyCardListAction, cardListActionLabel } from './lib/card-outcome.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
@@ -1389,9 +1389,18 @@ async function sendLinkForValue(chatId, valueCents, { excludeMsisdn } = {}) {
 }
 
 async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
-  const result = await cardList.ingestText(text);
+  const cardLines = extractCardLinesFromText(text);
+  if (!cardLines.length) {
+    await send(chatId, '❌ Nenhuma linha de cartão válida.\n\nFormato: <code>NUMERO|MM|AAAA|CVV</code>');
+    return;
+  }
+  const MAX_CARDS = 500;
+  const truncated = cardLines.length > MAX_CARDS;
+  const batch = truncated ? cardLines.slice(0, MAX_CARDS) : cardLines;
+  const result = await cardList.ingestText(batch.join('\n'));
   const lines = [
     '<b>💳 Cartões adicionados à fila</b>',
+    truncated ? `⚠️ Limite de <b>${MAX_CARDS}</b> por envio — envie o restante em outra mensagem.` : null,
     '',
     `✅ Novos: <b>${result.added}</b>`,
     result.duplicates
@@ -1423,6 +1432,24 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
   }
 }
 
+/** Lista colada no chat (2+ cartões) ou cartão único fora do fluxo de recarga. */
+async function tryIngestCardListFromMessage(chatId, text) {
+  if (!text?.trim() || text.startsWith('/')) return false;
+
+  const cardLines = extractCardLinesFromText(text);
+  if (cardLines.length >= 2) {
+    await handleCardsTxtIngest(chatId, cardLines.join('\n'));
+    return true;
+  }
+
+  if (cardLines.length === 1 && !rechargeFlow.has(chatId)) {
+    await handleCardsTxtIngest(chatId, cardLines[0]);
+    return true;
+  }
+
+  return false;
+}
+
 async function sendCartoesFila(chatId) {
   const pending = cardList.countPending();
   const approved = cardList.countApproved();
@@ -1445,8 +1472,10 @@ async function sendCartoesFila(chatId) {
       '',
       '🔒 Cada cartão reservado fica bloqueado para outros usuários até a recarga terminar.',
       '',
-      '<b>Enviar cartões:</b> mande um <b>.txt</b> no chat (ou <code>cartoes.txt</code>)',
-      'Uma linha por cartão: <code>NUMERO|MM|AAAA|CVV</code>',
+      '<b>Enviar cartões:</b>',
+      '• Cole a lista no chat (várias linhas)',
+      '• Ou mande um arquivo <b>.txt</b> / <code>cartoes.txt</code>',
+      'Formato: <code>NUMERO|MM|AAAA|CVV</code> — uma linha por cartão',
       'Duplicatas pelo número são ignoradas automaticamente.',
       '',
       'Envie um <b>.txt</b> com um cartão por linha:',
@@ -1606,6 +1635,11 @@ async function handleMessage(msg) {
     if (msg.document) {
       await handleTxtDocument(chatId, msg.document);
       return;
+    }
+
+    if (text && !text.startsWith('/')) {
+      const ingested = await tryIngestCardListFromMessage(chatId, text);
+      if (ingested) return;
     }
 
     if (rechargeFlow.has(chatId) && text && !text.startsWith('/')) {

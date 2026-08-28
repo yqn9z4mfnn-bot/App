@@ -411,12 +411,27 @@ export function looksLikeCardLine(line) {
 }
 
 export function looksLikeCardsTxt(text) {
-  for (const line of String(text ?? '').split(/\r?\n/).slice(0, 8)) {
+  let cardLines = 0;
+  let otherLines = 0;
+  for (const line of String(text ?? '').split(/\r?\n/).slice(0, 50)) {
     const t = line.trim();
     if (!t || t.startsWith('#')) continue;
-    if (looksLikeCardLine(t)) return true;
-    const digits = t.replace(/\D/g, '');
-    if (digits.length === 11 || digits.length === 10) return false;
+    if (looksLikeCardLine(t)) cardLines += 1;
+    else otherLines += 1;
   }
+  if (cardLines >= 2) return true;
+  if (cardLines === 1 && otherLines === 0) return true;
   return false;
+}
+
+/** Extrai linhas de cartão válidas de texto colado (mensagem ou .txt). */
+export function extractCardLinesFromText(text, { maxLines = 500 } = {}) {
+  const out = [];
+  for (const raw of String(text ?? '').split(/\r?\n/)) {
+    if (out.length >= maxLines) break;
+    const line = raw.trim().replace(/\s+#.*$/, '');
+    if (!line || line.startsWith('#')) continue;
+    if (looksLikeCardLine(line)) out.push(line);
+  }
+  return out;
 }

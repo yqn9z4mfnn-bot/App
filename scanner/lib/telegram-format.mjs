@@ -147,7 +147,8 @@ Geramos login aleatório — você informa quem recebe
 
 <i>━━━━━━━━━━━━━━</i>
 <b>📄 .txt</b> → salva números no banco
-<b>💳 Enviar .txt de cartões</b> → fila automática (<code>NUMERO|MM|AAAA|CVV</code>)
+<b>💳 Cartões</b> — cole a lista no chat ou envie <b>.txt</b>
+<code>NUMERO|MM|AAAA|CVV</code> (um por linha) → fila 🤖 Automático
 <b>💰 /valores</b> ou <code>20</code> → link por valor
 <b>🔧 /recarga_para</b> <code>LOGIN DESTINO</code> → cruzada manual
 
