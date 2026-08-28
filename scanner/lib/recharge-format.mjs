@@ -112,6 +112,27 @@ export function formatRechargeResult(outcome) {
   return lines.join('\n');
 }
 
+export function isRechargeSuccess(outcome) {
+  const st = String(outcome?.result?.status ?? '').toUpperCase();
+  return st === 'CONFIRMED' || st === 'SUCCESS';
+}
+
+export function shouldOfferRechargeRetry(outcome, error) {
+  if (error) return true;
+  return !isRechargeSuccess(outcome);
+}
+
+/** Botão após recarga não confirmada. */
+export function buildRetryKeyboard({ autoAvailable = false } = {}) {
+  const hint = autoAvailable ? ' · próximo cartão' : '';
+  return {
+    inline_keyboard: [
+      [{ text: `🔄 Tentar novamente${hint}`, callback_data: 'rcg:retry' }],
+      [{ text: '🏠 Recomeçar', callback_data: 'rcg:home' }],
+    ],
+  };
+}
+
 /** Teclado com valores disponíveis (máx 8 por página). */
 export function buildValueKeyboard(valores) {
   if (!valores?.length) return undefined;

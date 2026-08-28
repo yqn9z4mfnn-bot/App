@@ -22,6 +22,9 @@ import {
   formatRechargeResult,
   buildValueKeyboard,
   buildPayMethodKeyboard,
+  isRechargeSuccess,
+  shouldOfferRechargeRetry,
+  buildRetryKeyboard,
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 import { createCardListStore, looksLikeCardsTxt, extractCardLinesFromText } from './lib/card-list.mjs';
@@ -76,6 +79,8 @@ const cache = new Map();
 const rechargeFlow = new Map();
 /** @type {Map<number, 'same'|'other'>} */
 const chatRechargeMode = new Map();
+/** @type {Map<number, object>} última recarga falha — para botão "Tentar novamente" */
+const rechargeRetry = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
 const BULK_CONCURRENCY = Math.max(1, Number(process.env.BULK_CONCURRENCY || 1));
 
@@ -164,8 +169,34 @@ function clearRecharge(chatId) {
   rechargeFlow.delete(chatId);
 }
 
+function saveRetryContext(chatId, {
+  mode,
+  productId,
+  productValue,
+  productName,
+  targetMsisdn,
+  loginMsisdn,
+  useAuto = true,
+}) {
+  rechargeRetry.set(chatId, {
+    mode: mode ?? 'same',
+    productId,
+    productValue,
+    productName,
+    targetMsisdn: normalizeBrMobile(targetMsisdn),
+    loginMsisdn: normalizeBrMobile(loginMsisdn),
+    useAuto,
+    savedAt: Date.now(),
+  });
+}
+
+function clearRetryContext(chatId) {
+  rechargeRetry.delete(chatId);
+}
+
 async function promptRechargeMode(chatId) {
   clearRecharge(chatId);
+  clearRetryContext(chatId);
   chatRechargeMode.delete(chatId);
   await send(chatId, WELCOME, { reply_markup: buildRechargeModeKeyboard() });
 }
@@ -389,6 +420,174 @@ async function executeAutoRecharge(chatId) {
   await executeRecharge(chatId, picked.card, { cardListLine: picked.line });
 }
 
+/** Nova sessão para retry: novo login (modo other), mesmo destino/valor. */
+async function prepareRetryRecharge(chatId, retry, statusMsg) {
+  let access = retry.loginMsisdn;
+  if (retry.mode === 'other') {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: '🎲 Gerando <b>novo login</b> para nova tentativa…',
+      parse_mode: 'HTML',
+    });
+    const { msisdn } = await generateLoginMsisdn();
+    access = msisdn;
+  } else {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: `🔄 Nova tentativa — login <code>${access}</code>…`,
+      parse_mode: 'HTML',
+    });
+  }
+
+  const target = normalizeBrMobile(retry.targetMsisdn) || access;
+  const cross = Boolean(target && access && target !== access);
+
+  if (busy.has(chatId)) return null;
+  busy.add(chatId);
+
+  try {
+    let link;
+    const row = getNumber(access);
+    if (row?.link) {
+      link = toLoginUrl(row.link);
+    } else {
+      const generated = await fetchClaroLoginLink(access);
+      link = generated.link;
+    }
+
+    const session = await createSession(parseLink(link).jwt);
+    const refreshed = await refreshMsisdnProducts(access, {
+      link,
+      sessionId: session.id,
+      identifier: session.identifier,
+    });
+    const valores = refreshed.valores ?? [];
+    const msisdnResolved = session.identifier || access;
+
+    const product =
+      valores.find((v) => v.id === retry.productId) ??
+      valores.find((v) => v.value === retry.productValue);
+
+    if (!product) {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsg.message_id,
+        text: `❌ Valor <b>${retry.productName}</b> indisponível no login <code>${msisdnResolved}</code>.`,
+        parse_mode: 'HTML',
+      });
+      return null;
+    }
+
+    let walletAuth = null;
+    if (retry.mode === 'other') {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsg.message_id,
+        text: `🧹 Limpando cartões do login <code>${msisdnResolved}</code>…`,
+        parse_mode: 'HTML',
+      });
+      try {
+        const purge = await purgeAllLoginCardsStrict({
+          sessionId: session.id,
+          msisdn: msisdnResolved,
+          productId: product.id,
+        });
+        walletAuth = purge.walletAuth;
+      } catch (err) {
+        console.error('[bot][retry][purge]', err.message);
+      }
+    }
+
+    setCache(chatId, {
+      link,
+      walletAuth,
+      cards: [],
+      sessionId: session.id,
+      msisdn: msisdnResolved,
+      rechargeTargetNumber: cross ? target : undefined,
+      valores,
+      rechargeMode: retry.mode,
+      awaitTargetMsisdn: false,
+    });
+
+    chatRechargeMode.set(chatId, retry.mode);
+
+    return { product, access: msisdnResolved, target };
+  } catch (err) {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text: `❌ <b>Erro ao preparar retry:</b> ${err.message.replace(/</g, '&lt;')}`,
+      parse_mode: 'HTML',
+    });
+    return null;
+  } finally {
+    busy.delete(chatId);
+  }
+}
+
+async function runRechargeRetry(chatId, messageId) {
+  const retry = rechargeRetry.get(chatId);
+  if (!retry) {
+    await send(chatId, '❌ Nada para tentar de novo. Use /start');
+    return;
+  }
+
+  if (busy.has(chatId)) {
+    await send(chatId, '⏳ Aguarde a recarga anterior…');
+    return;
+  }
+
+  const statusMsg = { message_id: messageId, chat: { id: chatId } };
+  await tg('editMessageText', {
+    chat_id: chatId,
+    message_id: messageId,
+    text: '🔄 <b>Tentando novamente</b>…\n\n<i>Mesmo destino e valor · novo login · próximo cartão</i>',
+    parse_mode: 'HTML',
+  });
+
+  const prep = await prepareRetryRecharge(chatId, retry, statusMsg);
+  if (!prep) return;
+
+  rechargeFlow.set(chatId, {
+    mode: retry.mode,
+    productId: prep.product.id,
+    productValue: prep.product.value,
+    productName: prep.product.name,
+    rechargeTargetNumber: prep.target,
+    autoPay: true,
+  });
+
+  const pending = cardList.countPending();
+  if (pending > 0 || retry.useAuto !== false) {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text:
+        `🔄 Retry — <b>${prep.product.name}</b> → <code>${prep.target}</code>\n` +
+        `🔑 login <code>${prep.access}</code>\n\n` +
+        '🤖 Pegando próximo cartão da fila…',
+      parse_mode: 'HTML',
+    });
+    await executeAutoRecharge(chatId);
+    return;
+  }
+
+  await tg('editMessageText', {
+    chat_id: chatId,
+    message_id: messageId,
+    text:
+      `🔄 Retry — <b>${prep.product.name}</b> → <code>${prep.target}</code>\n` +
+      `🔑 login <code>${prep.access}</code>\n\n` +
+      '❌ Fila de cartões vazia — envie cartões ou escolha manual:',
+    parse_mode: 'HTML',
+    reply_markup: payMethodKeyboard([]),
+  });
+  rechargeFlow.get(chatId).step = 'pick_card';
+}
+
 async function startRechargePickerForTarget(chatId, accessMsisdn, targetMsisdn) {
   chatRechargeMode.set(chatId, 'other');
   await prepareRechargeSession(chatId, accessMsisdn, { targetMsisdn });
@@ -567,11 +766,30 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
       loginMsisdn: entry.msisdn,
       targetMsisdn,
     });
+
+    const offerRetry = shouldOfferRechargeRetry(outcome, null);
+    if (offerRetry) {
+      saveRetryContext(chatId, {
+        mode: flow.mode,
+        productId: flow.productId,
+        productValue: flow.productValue,
+        productName: flow.productName,
+        targetMsisdn,
+        loginMsisdn: entry.msisdn,
+        useAuto: Boolean(flow.autoPay || listLine),
+      });
+    } else {
+      clearRetryContext(chatId);
+    }
+
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
       text: report + listNote,
       parse_mode: 'HTML',
+      reply_markup: offerRetry
+        ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
+        : undefined,
     });
   } catch (err) {
     let listNote = '';
@@ -581,11 +799,23 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
       listNote = `\n\n🗂 ${cardListActionLabel(action)} · fila: <b>${applied.pendingLeft}</b>`;
       if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
     }
+
+    saveRetryContext(chatId, {
+      mode: flow.mode,
+      productId: flow.productId,
+      productValue: flow.productValue,
+      productName: flow.productName,
+      targetMsisdn,
+      loginMsisdn: entry.msisdn,
+      useAuto: Boolean(flow.autoPay || listLine),
+    });
+
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
       text: `❌ <b>Erro na recarga:</b> ${err.message.replace(/</g, '&lt;')}${listNote}`,
       parse_mode: 'HTML',
+      reply_markup: buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 }),
     });
   } finally {
     busy.delete(chatId);
@@ -1015,6 +1245,16 @@ async function handleCallback(query) {
       text: '↩️ Recarga cancelada.\n\nUse /start para começar de novo.',
       parse_mode: 'HTML',
     });
+    return;
+  }
+
+  if (data === 'rcg:retry') {
+    await runRechargeRetry(chatId, messageId);
+    return;
+  }
+
+  if (data === 'rcg:home') {
+    await promptRechargeMode(chatId);
     return;
   }
 
