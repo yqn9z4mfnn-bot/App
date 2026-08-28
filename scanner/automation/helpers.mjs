@@ -8,6 +8,95 @@ export const normalizeBrMobile = (raw) => {
   return digits;
 };
 
+export const formatBrMobileDisplay = (raw) => {
+  const d = normalizeBrMobile(raw);
+  if (d.length !== 11) return d;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+};
+
+/** Escolhe "Outro número Claro" e preenche o destino da recarga. */
+export const selectOutroNumeroClaro = async (page, session, targetMsisdn) => {
+  const target = normalizeBrMobile(targetMsisdn);
+  if (!target || target.length !== 11) {
+    throw new Error('Número destino inválido para recarga.');
+  }
+
+  if (session) {
+    setSessionStep(session, 'web_numero', `Recarga para ${formatBrMobileDisplay(target)}…`);
+  }
+
+  const display = formatBrMobileDisplay(target);
+  const alreadyOnTarget =
+    (await visibleTextMatch(page, new RegExp(display.replace(/[()\-]/g, '.'), 'i'))) &&
+    (await visibleTextMatch(page, /Escolha um valor de recarga/i));
+
+  if (alreadyOnTarget) return true;
+
+  await dismissBlockingModals(page);
+  await clickByText(page, ['Outro número Claro', 'Outro numero Claro'], 6000);
+
+  const inputCandidates = [
+    page.locator('input[type="tel"]').first(),
+    page.locator('input[inputmode="numeric"]').first(),
+    page.locator('input[name*="phone" i], input[name*="msisdn" i], input[name*="numero" i]').first(),
+    page.locator('input[placeholder*="número" i], input[placeholder*="numero" i]').first(),
+    page.locator('input').filter({ hasNot: page.locator('[type="hidden"]') }).first(),
+  ];
+
+  let filled = false;
+  for (const loc of inputCandidates) {
+    try {
+      if ((await loc.count()) === 0) continue;
+      if (!(await loc.isVisible().catch(() => false))) continue;
+      await loc.click({ timeout: 2000, force: true });
+      await loc.fill('', { force: true });
+      await loc.type(display, { delay: 40, force: true });
+      filled = true;
+      break;
+    } catch {
+      try {
+        await loc.fill(target, { force: true });
+        filled = true;
+        break;
+      } catch {
+        // próximo
+      }
+    }
+  }
+
+  if (!filled) {
+    filled = await page
+      .evaluate(({ displayText, digits }) => {
+        for (const el of document.querySelectorAll('input, textarea')) {
+          const type = (el.getAttribute('type') || 'text').toLowerCase();
+          if (type === 'hidden' || type === 'checkbox' || type === 'radio') continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 80 || r.height < 20) continue;
+          el.focus();
+          el.value = displayText;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        return false;
+      }, { displayText: display, digits: target })
+      .catch(() => false);
+  }
+
+  if (!filled) throw new Error('Campo "Outro número Claro" não encontrado.');
+
+  await sleep(config.pauseAfterClickMs);
+  await clickByText(page, ['Continuar', 'Confirmar', 'Avançar', 'Prosseguir'], 5000);
+  await sleep(config.pauseAfterClickMs);
+
+  const onValuePage = await visibleTextMatch(page, /Escolha um valor de recarga/i);
+  if (!onValuePage) {
+    await page.goto(webPortalPath('numero'), { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+    await dismissCookieBanner(page);
+  }
+  return true;
+};
+
 /** Normaliza JWT ou URL para select-login minhaclaro_web. */
 export function normalizeMinhaClaroWebLink(raw) {
   const s = String(raw ?? '').trim();

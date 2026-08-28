@@ -23,6 +23,9 @@ import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-pa
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
 import { describeProxy } from './lib/proxy.mjs';
+import { execSync } from 'node:child_process';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import {
   getNumber,
   listNumbers,
@@ -42,6 +45,7 @@ import {
 } from './lib/bulk-scan.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const DATA_DIR = join(process.env.XDG_DATA_HOME || join(homedir(), '.local/share'), 'linkclaro-bot');
 
 if (!TOKEN) {
   console.error('Defina TELEGRAM_BOT_TOKEN');
@@ -153,6 +157,55 @@ async function promptCardLine(chatId) {
   await send(chatId, CARD_INPUT_HINT);
 }
 
+async function startRechargePickerForTarget(chatId, accessMsisdn, targetMsisdn) {
+  const access = normalizeBrMobile(accessMsisdn);
+  const target = normalizeBrMobile(targetMsisdn);
+  if (!access || !target) {
+    await send(chatId, '❌ Números inválidos.');
+    return;
+  }
+
+  let row = getNumber(access);
+  let link = row?.link;
+  if (!link) {
+    const generated = await fetchClaroLoginLink(access);
+    link = generated.link;
+  }
+
+  const session = await createSession(parseLink(toLoginUrl(link)).jwt);
+  const refreshed = await refreshMsisdnProducts(access, {
+    link,
+    sessionId: session.id,
+    identifier: session.identifier,
+  });
+
+  setCache(chatId, {
+    link,
+    walletAuth: null,
+    cards: [],
+    sessionId: session.id,
+    msisdn: session.identifier,
+    rechargeTargetNumber: target,
+    valores: refreshed.valores ?? [],
+  });
+
+  if (!refreshed.valores?.length) {
+    await send(
+      chatId,
+      `❌ O número <code>${access}</code> não tem valores disponíveis para recarga.\n` +
+        `Destino seria <code>${target}</code>.`,
+    );
+    return;
+  }
+
+  clearRecharge(chatId);
+  await send(
+    chatId,
+    `<b>Recarga cruzada</b>\nLogin: <code>${access}</code>\nDestino: <code>${target}</code>\n\nEscolha o valor:`,
+    { reply_markup: buildValueKeyboard(refreshed.valores) },
+  );
+}
+
 async function startRechargePicker(chatId) {
   const entry = getCache(chatId);
   if (!entry?.sessionId || !entry?.valores?.length) {
@@ -187,6 +240,7 @@ async function onValueSelected(chatId, messageId, productId) {
     productId: product.id,
     productValue: product.value,
     productName: product.name,
+    rechargeTargetNumber: entry.rechargeTargetNumber || entry.msisdn,
     card: {},
   });
 
@@ -226,10 +280,14 @@ async function executeRecharge(chatId, card) {
 
   busy.add(chatId);
   const useBrowser = isBrowserRechargeEnabled() && !card.token;
+  const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
+  const crossNumber = targetMsisdn && entry.msisdn && targetMsisdn !== entry.msisdn;
   const statusMsg = await send(
     chatId,
     useBrowser
-      ? `💳 Processando <b>${flow.productName}</b>…\n<i>Edge → JWT → checkout → confirmação</i>`
+      ? crossNumber
+        ? `💳 ${flow.productName} → <code>${targetMsisdn}</code> (login <code>${entry.msisdn}</code>)…`
+        : `💳 Processando <b>${flow.productName}</b>…\n<i>Edge → JWT → checkout → confirmação</i>`
       : `💳 Processando <b>${flow.productName}</b>…\n<i>Tokenizando → pagamento → confirmação</i>`,
   );
 
@@ -238,6 +296,7 @@ async function executeRecharge(chatId, card) {
       ? await runBrowserRecharge({
           loginUrl: toLoginUrl(entry.link),
           msisdn: entry.msisdn,
+          targetMsisdn,
           productValue: flow.productValue,
           card,
         })
@@ -1122,6 +1181,32 @@ async function handleMessage(msg) {
 
     if (text === '/recarga' || text.startsWith('/recarga@')) {
       await startRechargePicker(chatId);
+      return;
+    }
+
+    if (text.startsWith('/recarga_para')) {
+      const args = text.replace(/^\/recarga_para(@\S+)?\s*/, '').trim().split(/\s+/).filter(Boolean);
+      if (args.length < 2) {
+        await send(
+          chatId,
+          'Uso: <code>/recarga_para NUMERO_LOGIN NUMERO_DESTINO</code>\n' +
+            'Ex: login <code>91986097858</code> → recarga <code>68992403595</code>',
+        );
+        return;
+      }
+      await startRechargePickerForTarget(chatId, args[0], args[1]);
+      return;
+    }
+
+    if (text === '/backup' || text.startsWith('/backup@')) {
+      try {
+        const out = execSync(`bash "${join(DATA_DIR, 'backup.sh')}"`, { encoding: 'utf8', env: process.env });
+        await send(chatId, `<b>Backup criado</b>\n<pre>${out.replace(/</g, '&lt;').slice(-900)}</pre>`, {
+          parse_mode: 'HTML',
+        });
+      } catch (err) {
+        await send(chatId, `❌ Backup falhou: ${err.message}`);
+      }
       return;
     }
 

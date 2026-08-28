@@ -23,6 +23,7 @@ async function automationFetch(path, body) {
 export async function runBrowserRecharge({
   loginUrl,
   msisdn,
+  targetMsisdn = null,
   productValue,
   card,
   browser = process.env.BROWSER_NAME || 'edge',
@@ -31,11 +32,13 @@ export async function runBrowserRecharge({
   const pamInfo = cardToPam(card);
   const rechargeValue = centsToRechargeValue(productValue);
   const pan = pamInfo.split('|')[0];
+  const accessNumber = String(msisdn ?? '').replace(/\D/g, '');
+  const rechargeTargetNumber = String(targetMsisdn ?? msisdn ?? '').replace(/\D/g, '');
 
   const data = await automationFetch('/api/session/start-web-link', {
     loginUrl,
-    accessNumber: msisdn,
-    rechargeTargetNumber: msisdn,
+    accessNumber,
+    rechargeTargetNumber,
     rechargeValue,
     pamInfo,
     browser,

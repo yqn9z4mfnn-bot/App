@@ -14,6 +14,7 @@ import {
   clickValueGridCard,
   hasPrezaoBanner,
   selectRechargeValue,
+  selectOutroNumeroClaro,
   setSessionStep,
   webPortalPath,
   visibleTextMatch,
@@ -35,7 +36,10 @@ const webNeedsOutroNumero = (session) => {
 export const ensureWebRechargeReady = async (session) => {
   const { page } = session;
   await dismissCookieBanner(page);
-  if (webNeedsOutroNumero(session)) return;
+  if (webNeedsOutroNumero(session)) {
+    await selectOutroNumeroClaro(page, session, session.rechargeTargetNumber);
+    return;
+  }
   if (await visibleTextMatch(page, /Escolha um valor de recarga/i)) return;
 
   const hasValueBtn = await page

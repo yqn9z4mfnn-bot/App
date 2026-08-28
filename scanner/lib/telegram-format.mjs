@@ -123,4 +123,7 @@ export const WELCOME = `<b>Claro Recarga Scanner</b>
 • <b>número avulso</b> → varredura normal, <b>não salva</b>
 • /valores ou <code>20</code> → envia o <b>link</b> de um número do banco
 
-/valores · /valor 20 · /lista · /erros · /recarga`;
+• /recarga_para <code>LOGIN DESTINO</code> — JWT de um, recarga no outro
+• /backup — snapshot do banco antes de mudanças
+
+/valores · /valor 20 · /lista · /erros · /recarga · /recarga_para · /backup`;

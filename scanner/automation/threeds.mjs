@@ -8,7 +8,7 @@ const THREEDS_URL_RE =
 const THREEDS_TEXT_RE =
   /verifica[cç][aã]o necess[aá]ria|valida[cç][aã]o de seguran[cç]a|enviar sms|autentica[cç][aã]o.*cart[aã]o|secure code|c[oó]digo.*sms|confirme.*compra|clique em continuar/i;
 
-const describe3dsKind = (kind, hint = '') => {
+export const describe3dsKind = (kind, hint = '') => {
   if (kind === 'sms' || /enviar sms/i.test(hint)) {
     return '3DS por SMS — confirme manualmente no Edge (Enviar SMS → CONTINUAR)';
   }

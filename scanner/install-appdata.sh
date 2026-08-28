@@ -109,6 +109,9 @@ echo "Logs e PID limpos em $DATA_DIR"
 CLEAREOF
 
 chmod +x "$DATA_DIR/run.sh" "$DATA_DIR/stop.sh" "$DATA_DIR/clear.sh"
+cp "$SCRIPT_DIR/backup-appdata.sh" "$DATA_DIR/backup.sh"
+cp "$SCRIPT_DIR/restore-appdata.sh" "$DATA_DIR/restore.sh"
+chmod +x "$DATA_DIR/backup.sh" "$DATA_DIR/restore.sh"
 
 # Para instâncias antigas (workspace ou appdata)
 pkill -f "telegram-bot.mjs" 2>/dev/null || true
