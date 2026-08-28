@@ -435,7 +435,7 @@ export const fillWebLinkCardDirect = async (session, pam) => {
     setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');
     await fillCardFormDirectly(page, pam, {
       fast: config.checkoutLinkFast && !config.antifraudHumanFill,
-      human: true,
+      human: config.antifraudHumanFill,
     });
     session.pamTouchCommitted = true;
     return;

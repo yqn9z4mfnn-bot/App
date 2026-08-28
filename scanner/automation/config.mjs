@@ -61,15 +61,16 @@ export const config = {
   checkoutLinkCardSettleMs: toInt(process.env.CHECKOUT_LINK_CARD_SETTLE_MS, 60),
   checkoutLinkPanTimeoutMs: toInt(process.env.CHECKOUT_LINK_PAN_TIMEOUT_MS, 8000),
   checkoutLinkGatePollMs: toInt(process.env.CHECKOUT_LINK_GATE_POLL_MS, 80),
-  /** Após clicar pagar: fecha Edge e espera SSE via HTTP. */
-  checkoutLinkHttpGate: String(process.env.CHECKOUT_LINK_HTTP_GATE ?? '1').toLowerCase() !== '0',
+  /** Após clicar pagar: fecha Edge e espera SSE via HTTP (experimental). */
+  checkoutLinkHttpGate: String(process.env.CHECKOUT_LINK_HTTP_GATE ?? '0').toLowerCase() !== '0',
   checkoutLinkPaymentIdWaitMs: toInt(process.env.CHECKOUT_LINK_PAYMENT_ID_WAIT_MS, 12000),
-  /** Antifraude browser: digitação humana + wait fingerprint. */
-  antifraudHumanFill: String(process.env.ANTIFRAUD_HUMAN_FILL ?? '1').toLowerCase() !== '0',
+  /** Antifraude browser: digitação humana + wait fingerprint (desligado = modo ~22s). */
+  antifraudHumanFill: String(process.env.ANTIFRAUD_HUMAN_FILL ?? '0').toLowerCase() !== '0',
   antifraudWaitMs: toInt(process.env.ANTIFRAUD_WAIT_MS, 3500),
   antifraudSettleMs: toInt(process.env.ANTIFRAUD_SETTLE_MS, 280),
   antifraudFieldGapMs: toInt(process.env.ANTIFRAUD_FIELD_GAP_MS, 220),
-  antifraudPrePayMotion: String(process.env.ANTIFRAUD_PRE_PAY_MOTION ?? '1').toLowerCase() !== '0',
+  antifraudPrePayMotion:
+    String(process.env.ANTIFRAUD_PRE_PAY_MOTION ?? '0').toLowerCase() !== '0',
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';
