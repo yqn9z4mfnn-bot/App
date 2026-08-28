@@ -49,6 +49,9 @@ export const config = {
     String(process.env.CLOSE_ALL_SESSIONS_ON_START ?? '0').toLowerCase() === '1',
   /** Fecha sessão órfã/travada após este tempo (ms). 0 = desligado. */
   sessionMaxLifetimeMs: toInt(process.env.SESSION_MAX_LIFETIME_MS, 180000),
+  /** Remove cartão da wallet Eldorado após cada recarga browser. */
+  removeCardAfterRecharge:
+    String(process.env.REMOVE_CARD_AFTER_RECHARGE ?? '1').toLowerCase() !== '0',
 };
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';

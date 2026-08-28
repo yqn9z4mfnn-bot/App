@@ -8,7 +8,7 @@ import {
 } from './threeds.mjs';
 
 const GATE_URL_RE =
-  /eldorado\.m4u|claro-recarga-api|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|wallet|card/i;
+  /eldorado\.m4u|claro-recarga-api|bemobi\.com|smart-checkout|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|\/tokenizer\/|wallet|card/i;
 
 const PAYMENT_ERROR_TEXT_RE =
   /n[aã]o conseguimos processar|n[aã]o foi poss[ií]vel processar|pagamento recusad|transa[cç][aã]o negad|cart[aã]o recusad|algo deu errado/i;

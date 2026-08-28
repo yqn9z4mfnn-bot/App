@@ -17,6 +17,7 @@ import {
 } from './helpers.mjs';
 import { runWebLinkRecharge } from './web-flow.mjs';
 import { stopVncIfIdle } from './vnc.mjs';
+import { removeUsedCardAfterRecharge } from './card-cleanup.mjs';
 
 const sessions = new Map();
 let pendingBrowserSlots = 0;
@@ -205,6 +206,13 @@ const finalizeSessionClose = async (sessionId, paymentResult) => {
   scheduleSessionClose(sessionId, keepMs);
 };
 
+const cleanupUsedCard = async (session, paymentResult) => {
+  if (!session?.pamTouchCommitted && !session?.gateCapture?.captures?.length) return;
+  await removeUsedCardAfterRecharge(session, paymentResult).catch((err) => {
+    console.log(`[automation][card] cleanup: ${String(err?.message || err).slice(0, 120)}`);
+  });
+};
+
 const buildPamPayload = (payload) => {
   const pamRaw = String(payload?.pamInfo ?? '').trim();
   if (!pamRaw) throw new Error('pamInfo é obrigatório (PAN|MES|ANO|CVV).');
@@ -315,6 +323,7 @@ export const startSessionFromWebLink = async (payload) => {
     } catch (err) {
       session.status = 'error_manual';
       session.lastError = String(err?.message || err);
+      await cleanupUsedCard(session, { status: 'error' });
       await finalizeSessionClose(sessionId, { status: 'error' });
       throw err;
     }
@@ -328,6 +337,7 @@ export const startSessionFromWebLink = async (payload) => {
       session.status = 'error_manual';
     }
 
+    await cleanupUsedCard(session, paymentResult);
     await finalizeSessionClose(sessionId, paymentResult);
 
     return {
@@ -343,6 +353,7 @@ export const startSessionFromWebLink = async (payload) => {
     session.status = 'error_manual';
     session.lastError = String(err?.message || err);
     setSessionStep(session, 'erro', session.lastError);
+    await cleanupUsedCard(session, { status: 'error' });
     if (sessionPageAlive(session)) await finalizeSessionClose(sessionId, { status: 'error' });
     throw err;
   }
