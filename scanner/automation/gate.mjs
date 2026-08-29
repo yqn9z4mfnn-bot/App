@@ -5,7 +5,6 @@ import {
   detect3dsChallenge,
   build3dsRequiredResult,
   get3dsChallengeApiCapture,
-  threedsRequiresImmediateAction,
 } from './threeds.mjs';
 import { absorbCheckoutCtxFromCapture, createCheckoutCtx } from './card-cleanup.mjs';
 import { waitPaymentResult as waitHttpPaymentSse } from '../lib/recharge.mjs';
@@ -306,28 +305,14 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       threedsUiWaitMs: config.threedsUiWaitMs,
     });
     if (threeDs?.detected) {
-      if (session && !session.threeDsSeen) {
-        session.threeDsSeen = threeDs;
-        session.threeDsSeenAt = Date.now();
-      }
-      const continueWait = config.threedsContinueGateWait === true;
-      if (!continueWait || threedsRequiresImmediateAction(threeDs)) {
-        console.log('[automation][3ds] detectado — encerrando gate-wait');
-        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, threedsResultOpts());
-      }
-      const extraMs = config.threedsExtraWaitMs ?? 60000;
-      if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
-        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, threedsResultOpts());
-      }
+      console.log('[automation][3ds] detectado — encerrando gate-wait');
+      return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, threedsResultOpts());
     }
 
     await sleep(pollMs);
   }
 
   const elapsed = Date.now() - start;
-  if (session?.threeDsSeen) {
-    return build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed, threedsResultOpts());
-  }
 
   const debugInfo = session
     ? await saveStallDebug(page, session, gateCapture, 'gate_timeout', {
@@ -465,6 +450,16 @@ export async function waitForPaymentResultViaHttp(gateCapture, bemobiToken, chec
 
   if (!bemobiToken) {
     return buildPaymentResult(null, 'error', checkoutUrl, gateCapture, 'bemobiToken ausente para SSE HTTP');
+  }
+
+  if (had3ds) {
+    console.log('[automation][3ds] challenge API — pulando SSE gate-wait');
+    return buildPaymentResultFromHttpSse(
+      { status: 'PENDING' },
+      checkoutUrl,
+      idResult.paymentId,
+      { had3ds: true },
+    );
   }
 
   console.log(
