@@ -361,11 +361,33 @@ export function startAdminServer() {
     res.json({ cleared: true });
   });
 
+  function extrasFromRecharge(row) {
+    let sessionId = null;
+    let nsu = null;
+    let auth = null;
+    let brand = null;
+    try {
+      const raw = JSON.parse(row.raw_json || '{}');
+      const outcome = raw?.outcome ?? {};
+      sessionId = outcome.automation?.sessionId ?? null;
+      const pay = outcome.automation?.raw?.gateResponse?.body?.payments?.[0];
+      nsu = pay?.nsu ?? null;
+      auth = pay?.authorizationCode ?? null;
+      brand = pay?.card?.brand ?? null;
+    } catch {
+      // ignore
+    }
+    const { raw_json, ...safe } = row;
+    return { ...safe, sessionId, nsu, auth, brand };
+  }
+
   app.get('/api/recharges', requireAuth, (req, res) => {
     const limit = Math.min(200, Number(req.query.limit) || 50);
     const offset = Math.max(0, Number(req.query.offset) || 0);
     const chatId = req.query.chatId || null;
-    const items = listRechargeEvents({ limit, offset, chatId }).map(repairRechargeRow);
+    const items = listRechargeEvents({ limit, offset, chatId })
+      .map(repairRechargeRow)
+      .map(extrasFromRecharge);
     res.json({
       total: countRechargeEvents(),
       items,
@@ -496,13 +518,85 @@ export function startAdminServer() {
     }
   });
 
+  function slimSession(s) {
+    if (!s) return null;
+    const pr = s.paymentResult;
+    const body = pr?.gateResponse?.body;
+    const pay = Array.isArray(body?.payments) ? body.payments[0] : null;
+    return {
+      sessionId: s.sessionId ?? null,
+      status: s.status ?? null,
+      step: s.step ?? null,
+      stepLabel: s.stepLabel ?? null,
+      accessNumber: s.accessNumber ?? null,
+      rechargeTargetNumber: s.rechargeTargetNumber ?? null,
+      browserAlive: Boolean(s.browserAlive),
+      createdAt: s.createdAt ?? null,
+      closedAt: s.closedAt ?? null,
+      lastError: s.lastError ?? null,
+      paymentStatus: s.paymentStatus ?? pr?.status ?? null,
+      gateCode: s.gateCode ?? pr?.gateCode ?? body?.status ?? null,
+      gateMessage: s.gateMessage ?? pr?.gateMessage ?? pr?.message ?? null,
+      nsu: s.nsu ?? pay?.nsu ?? null,
+      username: s.username ?? null,
+      productName: s.productName ?? null,
+      fromHistory: Boolean(s.fromHistory),
+    };
+  }
+
   app.get('/api/automation/sessions', requireAuth, async (_req, res) => {
+    let auto = { sessions: [], recent: [], aliveSessions: 0, maxConcurrentSessions: 3 };
     try {
       const r = await proxyAutomation('/api/sessions');
-      res.status(r.status).json(r.body);
+      if (r.body && typeof r.body === 'object') auto = { ...auto, ...r.body };
     } catch (err) {
-      res.status(502).json({ error: err.message });
+      auto.error = err.message;
     }
+
+    const live = (auto.sessions || []).map(slimSession).filter(Boolean);
+    const liveIds = new Set(live.map((s) => s.sessionId).filter(Boolean));
+    const recentAuto = (auto.recent || []).map(slimSession).filter(Boolean);
+
+    const fromRecharges = listRechargeEvents({ limit: 40 })
+      .map(repairRechargeRow)
+      .map((row) => {
+        const extra = extrasFromRecharge(row);
+        return slimSession({
+          sessionId: extra.sessionId,
+          status: extra.status,
+          accessNumber: extra.login_msisdn,
+          rechargeTargetNumber: extra.target_msisdn,
+          browserAlive: false,
+          createdAt: extra.created_at,
+          paymentStatus: extra.status,
+          gateCode: extra.gate_code,
+          gateMessage: extra.gate_message,
+          nsu: extra.nsu,
+          username: extra.username,
+          productName: extra.product_name,
+          fromHistory: true,
+        });
+      })
+      .filter((s) => s?.sessionId || s?.accessNumber);
+
+    const recent = [];
+    const seen = new Set(liveIds);
+    for (const s of [...recentAuto, ...fromRecharges]) {
+      const key = s.sessionId || `${s.accessNumber}:${s.createdAt}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      recent.push(s);
+    }
+
+    res.json({
+      ok: !auto.error,
+      error: auto.error ?? null,
+      aliveSessions: auto.aliveSessions ?? live.length,
+      pendingSlots: auto.pendingSlots ?? 0,
+      maxConcurrentSessions: auto.maxConcurrentSessions ?? 3,
+      sessions: live,
+      recent: recent.slice(0, 40),
+    });
   });
 
   app.post('/api/automation/sessions/:id/close', requireAuth, async (req, res) => {

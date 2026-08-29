@@ -7,6 +7,7 @@ import {
   getConcurrencyPublic,
   getSessionPublic,
   listAllSessionsPublic,
+  listRecentSessions,
   startSessionFromWebLink,
   startSessionFromCheckoutLink,
 } from './sessions.mjs';
@@ -29,6 +30,7 @@ app.get('/api/sessions', (_req, res) => {
   return res.json({
     ...getConcurrencyPublic(),
     sessions: listAllSessionsPublic(),
+    recent: listRecentSessions(),
   });
 });
 

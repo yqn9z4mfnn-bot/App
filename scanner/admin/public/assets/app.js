@@ -131,6 +131,7 @@ function showLogin() {
 
 function logout(callApi = true) {
   stopLogLive();
+  stopSessionLive();
   if (callApi && token) {
     api('/logout', { method: 'POST' }).catch(() => {});
   }
@@ -276,28 +277,42 @@ async function viewCards() {
     </div>`;
 }
 
+function rechargeCard(r) {
+  const dest = r.target_msisdn && r.target_msisdn !== r.login_msisdn
+    ? `${r.login_msisdn} → ${r.target_msisdn}`
+    : (r.login_msisdn || '—');
+  const meta = [
+    r.brand ? r.brand : null,
+    r.card_last4 ? `****${r.card_last4}` : null,
+    r.nsu ? `NSU ${r.nsu}` : null,
+    r.auth ? `AUTH ${r.auth}` : null,
+    r.mode ? r.mode : null,
+  ].filter(Boolean).join(' · ');
+  return `<article class="hist-card">
+    <div class="hist-top">
+      ${badge(r.status)}
+      <strong>${esc(productLabel(r))}</strong>
+      <span class="muted">${fmtDate(r.created_at)} · ${fmtDuration(r.duration_ms)}</span>
+    </div>
+    <div class="hist-grid">
+      <div><span class="label">Usuário</span><b>@${esc(r.username || r.chat_id || '—')}</b></div>
+      <div><span class="label">Números</span><b class="mono">${esc(dest)}</b></div>
+      <div><span class="label">Gate</span><b>${esc(r.gate_code || '—')}</b></div>
+    </div>
+    <p class="hist-msg">${esc(r.gate_message || '')}</p>
+    ${meta ? `<p class="muted">${esc(meta)}</p>` : ''}
+  </article>`;
+}
+
 async function viewRecharges() {
   const data = await api('/recharges?limit=80');
-  const rows = data.items.length
-    ? data.items.map((r) => `<tr>
-        <td>${fmtDate(r.created_at)}</td>
-        <td>${esc(r.username || r.chat_id)}</td>
-        <td class="mono">${esc(r.login_msisdn)}</td>
-        <td class="mono">${esc(r.target_msisdn)}</td>
-        <td>${esc(productLabel(r))}</td>
-        <td>****${esc(r.card_last4 || '—')}</td>
-        <td>${badge(r.status)}</td>
-        <td class="mono">${esc([r.gate_code, r.gate_message].filter(Boolean).join(' · ') || '—')}</td>
-        <td>${fmtDuration(r.duration_ms)}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="9" class="empty">Sem recargas ainda — elas aparecem após o próximo pagamento no bot</td></tr>';
+  const cards = data.items.length
+    ? data.items.map(rechargeCard).join('')
+    : '<p class="empty">Sem recargas ainda</p>';
   return `
     <div class="panel">
       <h3>Histórico de recargas (${data.total})</h3>
-      ${tableWrap(`
-        <thead><tr><th>Data</th><th>Usuário</th><th>Login</th><th>Destino</th><th>Produto</th><th>Cartão</th><th>Status</th><th>Gate</th><th>ms</th></tr></thead>
-        <tbody>${rows}</tbody>
-      `)}
+      <div class="hist-list">${cards}</div>
     </div>`;
 }
 
@@ -328,32 +343,88 @@ async function viewUsers() {
     </div>`;
 }
 
+function sessionCard(s, { live = false } = {}) {
+  const dest = s.rechargeTargetNumber && s.rechargeTargetNumber !== s.accessNumber
+    ? `${s.accessNumber} → ${s.rechargeTargetNumber}`
+    : (s.accessNumber || '—');
+  const closeBtn = live && s.sessionId
+    ? `<button type="button" class="btn small danger" data-action="close-session" data-id="${esc(s.sessionId)}">Fechar Edge</button>`
+    : '';
+  return `<article class="hist-card">
+    <div class="hist-top">
+      ${badge(s.paymentStatus || s.status || '—')}
+      ${badge(s.browserAlive ? 'ok' : 'offline')}
+      <span class="muted">${fmtDate(s.createdAt)}</span>
+      ${closeBtn}
+    </div>
+    <div class="hist-grid">
+      <div><span class="label">Número</span><b class="mono">${esc(dest)}</b></div>
+      <div><span class="label">Passo</span><b>${esc(s.stepLabel || s.step || '—')}</b></div>
+      <div><span class="label">Gate</span><b>${esc(s.gateCode || '—')}</b></div>
+    </div>
+    ${s.username || s.productName ? `<p class="muted">${esc([s.username && '@'+s.username, s.productName, s.nsu && 'NSU '+s.nsu].filter(Boolean).join(' · '))}</p>` : ''}
+    ${s.gateMessage || s.lastError ? `<p class="hist-msg">${esc(s.gateMessage || s.lastError)}</p>` : ''}
+  </article>`;
+}
+
+function renderSessionsBody(data) {
+  const live = data.sessions || [];
+  const recent = data.recent || [];
+  return `
+    <div class="panel">
+      <h3>Ao vivo (${data.aliveSessions ?? live.length}/${data.maxConcurrentSessions ?? '?'})</h3>
+      <div id="sessions-live">${live.length ? live.map((s) => sessionCard(s, { live: true })).join('') : '<p class="empty">Nenhum Edge aberto agora — as recargas recentes ficam abaixo</p>'}</div>
+    </div>
+    <div class="panel">
+      <h3>Sessões recentes (${recent.length})</h3>
+      <div id="sessions-recent">${recent.length ? recent.map((s) => sessionCard(s)).join('') : '<p class="empty">Ainda sem histórico de Edge</p>'}</div>
+    </div>`;
+}
+
+let sessionTimer = null;
+
+function stopSessionLive() {
+  if (sessionTimer) {
+    clearInterval(sessionTimer);
+    sessionTimer = null;
+  }
+}
+
+function startSessionLive() {
+  stopSessionLive();
+  sessionTimer = setInterval(async () => {
+    if (currentView !== 'sessions' || !token) {
+      stopSessionLive();
+      return;
+    }
+    try {
+      const data = await api('/automation/sessions');
+      const live = $('#sessions-live');
+      const recent = $('#sessions-recent');
+      if (live) {
+        live.innerHTML = (data.sessions || []).length
+          ? data.sessions.map((s) => sessionCard(s, { live: true })).join('')
+          : '<p class="empty">Nenhum Edge aberto agora — as recargas recentes ficam abaixo</p>';
+      }
+      if (recent) {
+        recent.innerHTML = (data.recent || []).length
+          ? data.recent.map((s) => sessionCard(s)).join('')
+          : '<p class="empty">Ainda sem histórico de Edge</p>';
+      }
+      $('#status-dot').className = 'status-dot ok';
+    } catch (err) {
+      $('#status-dot').className = 'status-dot err';
+    }
+  }, 2000);
+}
+
 async function viewSessions() {
-  let data;
   try {
-    data = await api('/automation/sessions');
+    const data = await api('/automation/sessions');
+    return renderSessionsBody(data);
   } catch (err) {
     return `<div class="panel"><p class="error">Automação offline: ${esc(err.message)}</p></div>`;
   }
-  const rows = (data.sessions || []).length
-    ? data.sessions.map((s) => `<tr>
-        <td class="mono">${esc((s.sessionId || '').slice(0, 8))}…</td>
-        <td class="mono">${esc(s.accessNumber)}</td>
-        <td class="mono">${esc(s.rechargeTargetNumber || '—')}</td>
-        <td>${badge(s.status)}</td>
-        <td>${esc(s.stepLabel || s.step || '—')}</td>
-        <td>${badge(s.browserAlive ? 'ok' : 'offline')}</td>
-        <td><button type="button" class="btn small danger" data-action="close-session" data-id="${esc(s.sessionId)}">Fechar</button></td>
-      </tr>`).join('')
-    : '<tr><td colspan="7" class="empty">Nenhuma sessão ativa</td></tr>';
-  return `
-    <div class="panel">
-      <h3>Sessões Edge (${data.aliveSessions ?? 0}/${data.maxConcurrentSessions ?? '?'} ativas)</h3>
-      ${tableWrap(`
-        <thead><tr><th>ID</th><th>Número</th><th>Destino</th><th>Status</th><th>Step</th><th>Browser</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      `)}
-    </div>`;
 }
 
 function stopLogLive() {
@@ -475,6 +546,7 @@ async function renderView() {
   if (rendering) return;
   rendering = true;
   stopLogLive();
+  stopSessionLive();
   const route = parseRoute();
   currentView = route.view;
   $('#view-title').textContent = route.title;
@@ -489,6 +561,7 @@ async function renderView() {
       if (output) output.scrollTop = output.scrollHeight;
       startLogLive();
     }
+    if (currentView === 'sessions') startSessionLive();
   } catch (err) {
     el.innerHTML = `<div class="panel"><p class="error">${esc(err.message)}</p></div>`;
     $('#status-dot').className = 'status-dot err';

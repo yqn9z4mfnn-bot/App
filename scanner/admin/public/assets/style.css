@@ -355,6 +355,38 @@ tr:hover td { background: var(--surface2); }
   z-index: 30;
 }
 
+.hist-list { display: flex; flex-direction: column; gap: 0.7rem; }
+
+.hist-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 0.95rem;
+}
+
+.hist-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin-bottom: 0.55rem;
+}
+
+.hist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.45rem 0.8rem;
+}
+
+.hist-grid .label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.hist-msg { margin-top: 0.45rem; font-size: 0.86rem; }
+.muted { color: var(--muted); font-size: 0.78rem; }
+
 @media (max-width: 900px) {
   .icon-btn { display: inline-flex; align-items: center; justify-content: center; }
 

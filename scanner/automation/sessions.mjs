@@ -86,6 +86,11 @@ export const closeSession = async (sessionId) => {
   clearSessionWatchdog(sessionId);
   const session = sessions.get(sessionId);
   if (!session) return { sessionId, closed: false };
+  rememberSession({
+    ...getSessionPublic(sessionId),
+    browserAlive: false,
+    closedAt: Date.now(),
+  });
   session.closing = true;
   sessions.delete(sessionId);
   try {
@@ -140,9 +145,34 @@ export const closeSessionsByAccessNumber = async (accessNumber) => {
   return { closed: results.filter((r) => r.closed).length, results };
 };
 
+const sessionHistory = [];
+const SESSION_HISTORY_MAX = 40;
+
+function slimPayment(pr) {
+  if (!pr) return null;
+  const body = pr.gateResponse?.body ?? {};
+  const pay = Array.isArray(body.payments) ? body.payments[0] : null;
+  return {
+    status: pr.status ?? body.status ?? null,
+    gateCode: pr.gateCode ?? body.status ?? null,
+    message: pr.gateMessage ?? pr.message ?? null,
+    nsu: pay?.nsu ?? null,
+    auth: pay?.authorizationCode ?? null,
+  };
+}
+
+function rememberSession(entry) {
+  if (!entry?.sessionId) return;
+  const idx = sessionHistory.findIndex((s) => s.sessionId === entry.sessionId);
+  if (idx >= 0) sessionHistory.splice(idx, 1);
+  sessionHistory.unshift(entry);
+  if (sessionHistory.length > SESSION_HISTORY_MAX) sessionHistory.length = SESSION_HISTORY_MAX;
+}
+
 export const getSessionPublic = (sessionId) => {
   const session = sessions.get(sessionId);
   if (!session) return null;
+  const payment = slimPayment(session.paymentResult);
   return {
     sessionId: session.id,
     status: session.status,
@@ -151,7 +181,10 @@ export const getSessionPublic = (sessionId) => {
     accessNumber: session.accessNumber,
     rechargeTargetNumber: session.rechargeTargetNumber ?? null,
     browserAlive: sessionPageAlive(session),
-    paymentResult: session.paymentResult ?? null,
+    paymentStatus: payment?.status ?? null,
+    gateCode: payment?.gateCode ?? null,
+    gateMessage: payment?.message ?? session.lastError ?? null,
+    nsu: payment?.nsu ?? null,
     lastError: session.lastError ?? null,
     createdAt: session.createdAt ?? null,
     browserName: session.browserName ?? null,
@@ -162,11 +195,15 @@ export const getSessionPublic = (sessionId) => {
 export const listAllSessionsPublic = () => {
   const items = [];
   for (const session of sessions.values()) {
-    items.push(getSessionPublic(session.id));
+    const pub = getSessionPublic(session.id);
+    items.push(pub);
+    rememberSession(pub);
   }
   items.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   return items;
 };
+
+export const listRecentSessions = () => sessionHistory.slice();
 
 const scheduleSessionClose = (sessionId, delayMs) => {
   const ms = Math.max(400, delayMs);
