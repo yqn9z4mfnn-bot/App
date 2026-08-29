@@ -770,35 +770,11 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
           card,
         });
 
-    logRechargeEvent({
-      chatId,
-      username: telegramUser?.username ?? null,
-      loginMsisdn: entry.msisdn,
-      targetMsisdn,
-      productName: flow.productName,
-      productValueCents: flow.productValue,
-      card,
-      outcome,
-      mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
-      startedAt,
-    });
-
-    let listNote = '';
-    if (listLine) {
-      const action = classifyCardListAction({ outcome, error: null });
-      const meta =
-        action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
-      const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
-      listNote = `\n\n🗂 ${cardListActionLabel(action, { outcome })} · fila: <b>${applied.pendingLeft}</b>`;
-      if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
-    }
-
     const report = formatRechargeResult({
       ...outcome,
       loginMsisdn: entry.msisdn,
       targetMsisdn,
     });
-
     const offerRetry = shouldOfferRechargeRetry(outcome, null);
     if (offerRetry) {
       saveRetryContext(chatId, {
@@ -817,12 +793,43 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
-      text: report + listNote,
+      text: report,
       parse_mode: 'HTML',
       reply_markup: offerRetry
         ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
         : undefined,
     });
+
+    logRechargeEvent({
+      chatId,
+      username: telegramUser?.username ?? null,
+      loginMsisdn: entry.msisdn,
+      targetMsisdn,
+      productName: flow.productName,
+      productValueCents: flow.productValue,
+      card,
+      outcome,
+      mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
+      startedAt,
+    });
+
+    if (listLine) {
+      const action = classifyCardListAction({ outcome, error: null });
+      const meta =
+        action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
+      const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
+      let listNote = `\n\n🗂 ${cardListActionLabel(action, { outcome })} · fila: <b>${applied.pendingLeft}</b>`;
+      if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsg.message_id,
+        text: report + listNote,
+        parse_mode: 'HTML',
+        reply_markup: offerRetry
+          ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
+          : undefined,
+      }).catch(() => {});
+    }
   } catch (err) {
     logRechargeEvent({
       chatId,

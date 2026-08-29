@@ -148,6 +148,27 @@ export const closeSessionsByAccessNumber = async (accessNumber) => {
 const sessionHistory = [];
 const SESSION_HISTORY_MAX = 40;
 
+export function slimPaymentResultForApi(pr) {
+  if (!pr || typeof pr !== 'object') return pr ?? null;
+  return {
+    status: pr.status ?? null,
+    gateCode: pr.gateCode ?? null,
+    gateMessage: pr.gateMessage ?? null,
+    message: pr.message ?? null,
+    pagamentoErro: Boolean(pr.pagamentoErro),
+    url: pr.url ?? null,
+    threeDs: pr.threeDs
+      ? {
+          kind: pr.threeDs.kind ?? null,
+          source: pr.threeDs.source ?? null,
+          uiVisible: pr.threeDs.uiVisible ?? null,
+        }
+      : null,
+    visualVbv: Boolean(pr.visualVbv),
+    requiresImmediateAction: Boolean(pr.requiresImmediateAction),
+  };
+}
+
 function slimPayment(pr) {
   if (!pr) return null;
   const body = pr.gateResponse?.body ?? {};
@@ -428,16 +449,28 @@ export const startSessionFromWebLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    await scheduleFinishPaymentSession(sessionId, session, paymentResult);
+    const replyUrl = (() => {
+      try {
+        return page.url();
+      } catch {
+        return loginUrl;
+      }
+    })();
+    setImmediate(() => {
+      scheduleFinishPaymentSession(sessionId, session, paymentResult).catch((err) => {
+        console.log(`[automation] finish deferred: ${String(err?.message || err).slice(0, 100)}`);
+      });
+    });
+    console.log('[automation] respondendo API agora — cleanup/Edge em background');
 
     return {
       sessionId,
       status: session.status,
-      paymentResult,
+      paymentResult: slimPaymentResultForApi(paymentResult),
       accessNumber,
       rechargeValue: payload.rechargeValue,
       browser: browserName,
-      url: page.url(),
+      url: replyUrl,
     };
   } catch (err) {
     session.status = 'error_manual';
@@ -687,23 +720,39 @@ export const startSessionFromCheckoutLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    await scheduleFinishPaymentSession(sessionId, session, paymentResult, { gateMode, fast });
+    const replyUrl = gateMode === 'http-sse'
+      ? checkoutUrl
+      : (() => {
+          try {
+            return page.url();
+          } catch {
+            return checkoutUrl;
+          }
+        })();
+    setImmediate(() => {
+      scheduleFinishPaymentSession(sessionId, session, paymentResult, { gateMode, fast }).catch(
+        (err) => {
+          console.log(`[automation] finish deferred: ${String(err?.message || err).slice(0, 100)}`);
+        },
+      );
+    });
+    console.log('[automation] respondendo API agora — cleanup/Edge em background');
 
     return {
       sessionId,
       status: session.status,
-      paymentResult,
+      paymentResult: slimPaymentResultForApi(paymentResult),
       accessNumber,
       rechargeValue: payload.rechargeValue,
       browser: browserName,
-      url: gateMode === 'http-sse' ? checkoutUrl : page.url(),
+      url: replyUrl,
       mode: gateMode === 'http-sse' ? 'checkout-link-http' : 'checkout-link',
       timings,
       httpPrep: {
-        checkoutUrl: session.httpPrep.checkoutUrl,
-        checkoutCode: session.httpPrep.checkoutCode,
-        productName: session.httpPrep.product?.name,
-        httpLatencyMs: session.httpPrep.httpLatencyMs,
+        checkoutUrl: session.httpPrep?.checkoutUrl,
+        checkoutCode: session.httpPrep?.checkoutCode,
+        productName: session.httpPrep?.product?.name,
+        httpLatencyMs: session.httpPrep?.httpLatencyMs,
       },
     };
   } catch (err) {
