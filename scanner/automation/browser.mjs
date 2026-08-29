@@ -1,5 +1,6 @@
 import { chromium, firefox, devices } from 'playwright';
 import { config } from './config.mjs';
+import { describeProxy, getPlaywrightProxy, proxyEnabled } from '../lib/proxy.mjs';
 
 export const normalizeBrowserName = (raw) => {
   const name = String(raw ?? config.defaultBrowser).trim().toLowerCase();
@@ -20,6 +21,7 @@ export const isBrowserLockedByEnv = () =>
 export const launchBrowser = async (browserName) => {
   const name = normalizeBrowserName(browserName);
   const headless = config.headless === true;
+  const proxy = getPlaywrightProxy();
   const launchOpts = {
     headless,
     ignoreDefaultArgs: ['--enable-automation'],
@@ -27,9 +29,20 @@ export const launchBrowser = async (browserName) => {
       `--window-size=${config.browserWindowWidth},${config.browserWindowHeight}`,
       '--window-position=80,40',
       '--disable-blink-features=AutomationControlled',
+      // HTTP/3 (QUIC) fura proxy HTTP e vaza o IP da VPS para a gate.
+      '--disable-quic',
+      '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+      '--enforce-webrtc-ip-permission-check',
     ],
   };
-  console.log(`[automation] launch browser=${name} headless=${headless}`);
+  if (proxy) launchOpts.proxy = proxy;
+  else if (proxyEnabled()) {
+    console.warn('[automation] PROXY_ENABLED=1 mas dados do proxy incompletos — Edge sai pelo IP da VPS');
+  }
+
+  console.log(
+    `[automation] launch browser=${name} headless=${headless} proxy=${describeProxy() || 'OFF (IP da VPS)'}`,
+  );
 
   if (name === 'chrome') {
     return chromium.launch({ ...launchOpts, channel: 'chrome' });
@@ -38,13 +51,17 @@ export const launchBrowser = async (browserName) => {
     return chromium.launch({ ...launchOpts, channel: 'msedge' });
   }
   if (name === 'firefox') {
-    return firefox.launch({ headless });
+    return firefox.launch({
+      headless,
+      ...(proxy ? { proxy } : {}),
+    });
   }
   return chromium.launch(launchOpts);
 };
 
-export const createMobileContext = async (browser) =>
-  browser.newContext({
+export const createMobileContext = async (browser) => {
+  const proxy = getPlaywrightProxy();
+  return browser.newContext({
     ...devices['iPhone 12'],
     locale: 'pt-BR',
     timezoneId: 'America/Sao_Paulo',
@@ -59,4 +76,6 @@ export const createMobileContext = async (browser) =>
     },
     userAgent:
       'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    ...(proxy ? { proxy } : {}),
   });
+};
