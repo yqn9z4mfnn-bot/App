@@ -130,9 +130,43 @@ export function createCardListStore(dataDir) {
     return { ok: true };
   };
 
+  const returnLinesToPending = (items) => {
+    if (!items?.length) return loadPending();
+    const pending = loadPending();
+    for (const item of items) {
+      const pan = item?.pan || normalizeCardKey(item?.line);
+      if (!item?.line || item.adHoc || !pan) continue;
+      if (pending.some((l) => normalizeCardKey(l) === pan)) continue;
+      pending.unshift(item.line);
+    }
+    writeLines(pendingPath, pending);
+    return pending;
+  };
+
+  /** Devolve todas as reservas à fila (bot reiniciou — recargas em voo morreram). */
+  const releaseAllReservations = () =>
+    withLock(() => {
+      const reservations = loadReserved();
+      const pending = returnLinesToPending(reservations);
+      saveReserved([]);
+      return { released: reservations.filter((r) => r.line && !r.adHoc).length, pendingLeft: pending.length };
+    });
+
+  /** Devolve as reservas deste chat (saída antecipada / erro antes do resultado). */
+  const releaseChatReservations = (chatId) =>
+    withLock(() => {
+      const reservations = loadReserved();
+      const mine = reservations.filter((r) => r.chatId === chatId);
+      const keep = reservations.filter((r) => r.chatId !== chatId);
+      const pending = returnLinesToPending(mine);
+      saveReserved(keep);
+      return { released: mine.filter((r) => r.line && !r.adHoc).length, pendingLeft: pending.length };
+    });
+
   /**
    * Reserva atomicamente o próximo cartão disponível — sai da fila até concluir a recarga.
    * Impede que dois usuários peguem o mesmo cartão.
+   * Se este chat já tem reserva, reutiliza em vez de queimar outro cartão.
    */
   const reserveNextCard = (chatId) =>
     withLock(() => {
@@ -140,13 +174,18 @@ export function createCardListStore(dataDir) {
       const purged = purgeStaleReservations(reservations);
       reservations = purged.fresh;
       if (purged.expired.length) {
-        const pending = loadPending();
-        for (const exp of purged.expired) {
-          if (exp.line && !pending.some((l) => normalizeCardKey(l) === exp.pan)) {
-            pending.unshift(exp.line);
-          }
-        }
-        writeLines(pendingPath, pending);
+        returnLinesToPending(purged.expired);
+      }
+
+      const existing = reservations.find((r) => r.chatId === chatId && !r.adHoc && r.line);
+      if (existing) {
+        saveReserved(reservations);
+        return {
+          line: existing.line,
+          card: parseCardInput(existing.line),
+          pan: existing.pan,
+          reused: true,
+        };
       }
 
       const inUse = pansInUse(reservations);
@@ -391,6 +430,8 @@ export function createCardListStore(dataDir) {
     applyOutcome,
     reserveNextCard,
     reserveAdHocCard,
+    releaseAllReservations,
+    releaseChatReservations,
     assertCardAvailable,
     getReservationForPan,
     withLock,

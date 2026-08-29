@@ -249,6 +249,7 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   mode = null,
   loginLink = null,
   skipValuePrompt = false,
+  skipPurge = false,
 } = {}) {
   const access = normalizeBrMobile(accessMsisdn);
   if (!access) {
@@ -300,7 +301,7 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
 
     let walletAuth = null;
     let cardsPurged = 0;
-    if (resolvedMode === 'other' && valores.length) {
+    if (resolvedMode === 'other' && valores.length && !skipPurge) {
       await editBubble(chatId, msg, {
         ...bubbleFields,
         login: msisdnResolved,
@@ -403,6 +404,7 @@ async function startOtherNumberRecharge(chatId) {
       statusMsg,
       mode: 'other',
       loginLink: link,
+      skipPurge: true,
     });
   } catch (err) {
     await editBubble(chatId, statusMsg, {
@@ -547,23 +549,7 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
         }
 
         let walletAuth = null;
-        if (retry.mode === 'other') {
-          await editBubble(chatId, statusMsg, {
-            ...retryBubble,
-            login: msisdnResolved,
-            hint: 'Limpando cartões do login…',
-          });
-          try {
-            const purge = await purgeAllLoginCardsStrict({
-              sessionId: session.id,
-              msisdn: msisdnResolved,
-              productId: product.id,
-            });
-            walletAuth = purge.walletAuth;
-          } catch (err) {
-            console.error('[bot][retry][purge]', err.message);
-          }
-        }
+        // Login recém-gerado não tem cartão salvo — purge só atrasava/travava o retry.
 
         setCache(chatId, {
           link,
@@ -857,18 +843,20 @@ async function onValueSelected(chatId, messageId, productId) {
 async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: incomingStatus = null } = {}) {
   const entry = getCache(chatId);
   const flow = rechargeFlow.get(chatId);
+  let listLine = cardListLine ?? flow?.cardListLine ?? null;
+
   if (!entry?.sessionId || !flow?.productId) {
+    if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
     await send(chatId, '❌ Sessão expirada. Comece de novo com /recarga');
     clearRecharge(chatId);
     return;
   }
 
   if (busy.has(chatId)) {
+    if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
     await send(chatId, '⏳ Aguarde…');
     return;
   }
-
-  let listLine = cardListLine ?? flow.cardListLine ?? null;
   if (!card.token && card.number) {
     const check = cardList.assertCardAvailable(card, chatId);
     if (!check.ok) {
@@ -2338,6 +2326,11 @@ async function poll() {
 }
 
 async function main() {
+  const released = await cardList.releaseAllReservations();
+  if (released.released) {
+    console.log(`[bot] ${released.released} reserva(s) órfã(s) devolvida(s) à fila (${released.pendingLeft} pendente(s))`);
+  }
+
   const me = await tg('getMe');
   const proxy = describeProxy();
   console.log(

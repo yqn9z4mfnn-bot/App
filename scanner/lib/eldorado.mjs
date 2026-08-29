@@ -12,14 +12,15 @@ function bemobiSessionBase(checkoutUrl) {
   return 'https://smart-checkout.bemobi.com';
 }
 
-export async function fetchBemobiSession(checkoutUrl, checkoutCode) {
+export async function fetchBemobiSession(checkoutUrl, checkoutCode, httpOpts = {}) {
   const base = bemobiSessionBase(checkoutUrl);
   return request(`${base}/api/v1/session?code=${checkoutCode}`, {
     headers: { accept: 'application/json' },
+    ...httpOpts,
   });
 }
 
-export async function fetchWalletCards(bemobiToken, checkoutCode) {
+export async function fetchWalletCards(bemobiToken, checkoutCode, httpOpts = {}) {
   return request(
     'https://eldorado.m4u.com.br/api-bsc/api/v1/cards?all_tokens=true',
     {
@@ -29,13 +30,15 @@ export async function fetchWalletCards(bemobiToken, checkoutCode) {
         'x-session-id': checkoutCode,
         accept: 'application/json',
       },
+      ...httpOpts,
     },
   );
 }
 
 export async function openWalletSession(sessionId, msisdn, productId, opts = {}) {
-  const maxRetries = Number(process.env.CLARO_API_429_RETRIES) || 4;
+  const maxRetries = opts.max429Retries ?? (Number(process.env.CLARO_API_429_RETRIES) || 4);
   const backoffMs = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 1500;
+  const httpOpts = opts.http ?? {};
 
   let checkoutRes = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -45,6 +48,7 @@ export async function openWalletSession(sessionId, msisdn, productId, opts = {})
       logLabel:
         attempt === 1 && process.env.PROXY_LOG_IP ? `smartcheckout msisdn=${msisdn}` : undefined,
       rotateIp: attempt > 1,
+      ...httpOpts,
     });
 
     if (checkoutRes.status !== 429) break;
@@ -74,7 +78,7 @@ export async function openWalletSession(sessionId, msisdn, productId, opts = {})
   }
 
   const { token: checkoutCode, url: checkoutUrl } = checkoutRes.body;
-  const bemobiRes = await fetchBemobiSession(checkoutUrl, checkoutCode);
+  const bemobiRes = await fetchBemobiSession(checkoutUrl, checkoutCode, httpOpts);
 
   if (bemobiRes.status !== 200 && bemobiRes.status !== 201) {
     return {
@@ -176,8 +180,8 @@ export function unifySavedCards(walletBody, paymentMethodsBody) {
   return [...byToken.values()];
 }
 
-export async function scanWallet(sessionId, msisdn, productId) {
-  const session = await openWalletSession(sessionId, msisdn, productId);
+export async function scanWallet(sessionId, msisdn, productId, opts = {}) {
+  const session = await openWalletSession(sessionId, msisdn, productId, opts);
   if (session.error) {
     return {
       error: session.error,
@@ -188,7 +192,7 @@ export async function scanWallet(sessionId, msisdn, productId) {
   }
 
   const { bemobiToken, checkoutCode, checkout, bemobi } = session;
-  const cardsRes = await fetchWalletCards(bemobiToken, checkoutCode);
+  const cardsRes = await fetchWalletCards(bemobiToken, checkoutCode, opts.http);
 
   return {
     checkout,

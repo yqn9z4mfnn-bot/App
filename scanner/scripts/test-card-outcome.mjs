@@ -181,15 +181,45 @@ for (const c of mapCases) {
 const dir = mkdtempSync(join(tmpdir(), 'card-list-'));
 try {
   const store = createCardListStore(dir);
-  await store.ingestText('4111111111111111|12|2030|123');
+  await store.ingestText('4111111111111111|12|2030|123\n4222222222222222|12|2030|123');
   const reserved = await store.reserveNextCard(1);
   if (!reserved?.line) throw new Error('reserva falhou');
-  if (store.countPending() !== 0) throw new Error('reserva deveria esvaziar a fila');
-  const applied = await store.applyOutcome(reserved.line, 'return', '', 1);
+  if (store.countPending() !== 1) throw new Error('reserva deveria deixar 1 na fila');
+
+  const reused = await store.reserveNextCard(1);
+  if (!reused?.reused || reused.pan !== reserved.pan) {
+    failed += 1;
+    console.error('FAIL reserve reutiliza o mesmo chat', reused);
+  } else if (store.countPending() !== 1) {
+    failed += 1;
+    console.error('FAIL reuse queimou outro cartão', store.countPending());
+  }
+
+  const other = await store.reserveNextCard(2);
+  if (!other?.pan || other.pan === reserved.pan) {
+    failed += 1;
+    console.error('FAIL outro chat deveria pegar o segundo', other);
+  }
+
+  const released = await store.releaseAllReservations();
+  if (released.released !== 2 || store.countPending() !== 2 || store.countInUse() !== 0) {
+    failed += 1;
+    console.error('FAIL releaseAllReservations', released, store.countPending(), store.countInUse());
+  }
+
+  const again = await store.reserveNextCard(1);
+  await store.releaseChatReservations(1);
+  if (store.countInUse() !== 0 || store.countPending() !== 2) {
+    failed += 1;
+    console.error('FAIL releaseChatReservations', store.countPending(), store.countInUse(), again);
+  }
+
+  const reserved2 = await store.reserveNextCard(1);
+  const applied = await store.applyOutcome(reserved2.line, 'return', '', 1);
   if (!applied.returned) {
     failed += 1;
     console.error('FAIL applyOutcome return', applied);
-  } else if (store.countPending() !== 1) {
+  } else if (store.countPending() !== 2) {
     failed += 1;
     console.error('FAIL fila após return', store.countPending());
   }

@@ -7,24 +7,47 @@ import {
 } from './eldorado.mjs';
 import { claroGet } from './http.mjs';
 
+const PURGE_TIMEOUT_MS = Number(process.env.PURGE_LOGIN_TIMEOUT_MS || 12_000);
+const PURGE_HTTP = { timeoutMs: 8_000, retries: 1 };
+
 function strictPurgeEnabled() {
   return ['1', 'true', 'yes'].includes(String(process.env.PURGE_LOGIN_STRICT || '').toLowerCase());
+}
+
+async function withTimeout(promise, ms, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timeout ${label}`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
  * Remove todos os cartões vinculados ao login (wallet Eldorado + API Claro).
  * Usado no modo "Outro número" antes da recarga, para não atrapalhar a automação.
  */
-export async function purgeAllLoginCards({ sessionId, msisdn, productId }) {
+export async function purgeAllLoginCards({ sessionId, msisdn, productId, timeoutMs = PURGE_TIMEOUT_MS } = {}) {
+  return withTimeout(purgeAllLoginCardsInner({ sessionId, msisdn, productId }), timeoutMs, 'purge-login');
+}
+
+async function purgeAllLoginCardsInner({ sessionId, msisdn, productId }) {
   const msisdnNorm = String(msisdn ?? '').replace(/\D/g, '');
   if (!sessionId || !msisdnNorm) {
     return { removed: 0, total: 0, walletAuth: null };
   }
 
   const walletPromise = productId
-    ? scanWallet(sessionId, msisdnNorm, productId)
+    ? scanWallet(sessionId, msisdnNorm, productId, { max429Retries: 1, http: PURGE_HTTP })
     : Promise.resolve({ error: 'no_product' });
-  const claroPromise = claroGet(`/customers/${msisdnNorm}/payment-methods`, sessionId);
+  const claroPromise = claroGet(`/customers/${msisdnNorm}/payment-methods`, sessionId, PURGE_HTTP).catch(
+    (err) => ({ ok: false, body: null, error: err.message }),
+  );
 
   const [wallet, claroRes] = await Promise.all([walletPromise, claroPromise]);
 
@@ -95,6 +118,7 @@ export async function purgeAllLoginCardsStrict(args) {
     const cardsRes = await fetchWalletCards(
       result.walletAuth.bemobiToken,
       result.walletAuth.checkoutCode,
+      PURGE_HTTP,
     );
     const remaining = Array.isArray(cardsRes.body) ? cardsRes.body : [];
     if (remaining.length) {
