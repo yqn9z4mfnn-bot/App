@@ -21,6 +21,8 @@ import {
 } from './lib/telegram-format.mjs';
 import {
   formatRechargeResult,
+  formatStatusBubble,
+  formatQueueFooter,
   buildValueKeyboard,
   buildPayMethodKeyboard,
   isRechargeSuccess,
@@ -29,7 +31,7 @@ import {
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 import { createCardListStore, looksLikeCardsTxt, extractCardLinesFromText } from './lib/card-list.mjs';
-import { classifyCardListAction, cardListActionLabel } from './lib/card-outcome.mjs';
+import { classifyCardListAction } from './lib/card-outcome.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
 import { describeProxy, resetProxyAgent } from './lib/proxy.mjs';
@@ -89,6 +91,26 @@ const chatRechargeMode = new Map();
 const rechargeRetry = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
 const BULK_CONCURRENCY = Math.max(1, Number(process.env.BULK_CONCURRENCY || 1));
+
+function cardMaskFrom(card) {
+  const n = String(card?.number ?? '').replace(/\D/g, '');
+  return n.length >= 4 ? `****${n.slice(-4)}` : '—';
+}
+
+async function editBubble(chatId, statusMsg, fields, extra = {}) {
+  const text = formatStatusBubble(fields);
+  if (!statusMsg?.message_id) {
+    return send(chatId, text, extra);
+  }
+  await tg('editMessageText', {
+    chat_id: chatId,
+    message_id: statusMsg.message_id,
+    text,
+    parse_mode: 'HTML',
+    ...extra,
+  });
+  return statusMsg;
+}
 
 function formatBRL(cents) {
   return `R$ ${(Number(cents) / 100).toFixed(2).replace('.', ',')}`;
@@ -246,17 +268,16 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   }
 
   busy.add(chatId);
-  let msg = statusMsg;
-  if (!msg) {
-    msg = await send(chatId, `🔗 ${rechargeStep(1, 4, 'Gerando login')}…\n<code>${access}</code>`);
-  } else {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: msg.message_id,
-      text: `🔗 ${rechargeStep(1, 4, 'Gerando login')}…\n<code>${access}</code>`,
-      parse_mode: 'HTML',
-    });
-  }
+  const bubbleFields = {
+    title: 'Recarga',
+    valueLabel: title && /R\$/.test(String(title)) ? String(title) : '—',
+    cardMask: '—',
+    login: access,
+    target: target || access,
+    status: '🔗 Gerando login…',
+    footer: '—',
+  };
+  let msg = await editBubble(chatId, statusMsg, bubbleFields);
 
   try {
     let link;
@@ -282,11 +303,10 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
     let walletAuth = null;
     let cardsPurged = 0;
     if (resolvedMode === 'other' && valores.length) {
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: msg.message_id,
-        text: `🧹 ${rechargeStep(1, 4, 'Limpando cartões')}…\n<code>${msisdnResolved}</code>`,
-        parse_mode: 'HTML',
+      await editBubble(chatId, msg, {
+        ...bubbleFields,
+        login: msisdnResolved,
+        status: '🧹 Limpando cartões…',
       });
       try {
         const purge = await purgeAllLoginCardsStrict({
@@ -314,50 +334,36 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
     });
 
     if (!valores.length) {
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: msg.message_id,
-        text: `❌ <code>${access}</code> sem valores disponíveis para recarga.`,
-        parse_mode: 'HTML',
+      await editBubble(chatId, msg, {
+        ...bubbleFields,
+        login: msisdnResolved,
+        status: '❌ Sem valores',
+        footer: access,
       });
       return false;
     }
 
     clearRecharge(chatId);
-    const purgeNote =
-      cardsPurged > 0 ? `\n🧹 <i>${cardsPurged} cartão(ões) removido(s) do login</i>` : '';
-    const header =
-      title ??
-      (cross
-        ? `🔀 <b>Recarga cruzada</b>\n🔑 Login: <code>${access}</code>\n📱 Destino: <code>${target}</code>`
-        : resolvedMode === 'other'
-          ? `🔀 <b>Outro número</b>\n🔑 Login: <code>${access}</code>\n<i>Depois do valor, envie quem recebe.</i>`
-          : `📱 <b>Recarga</b> — <code>${access}</code>`);
+    const readyFields = {
+      ...bubbleFields,
+      login: msisdnResolved,
+      target: target || (resolvedMode === 'other' ? '—' : msisdnResolved),
+      status: skipValuePrompt ? '✅ Login pronto' : '👇 Escolha o valor',
+      footer: cardsPurged > 0 ? `${cardsPurged} cartão(ões) limpos` : '—',
+    };
 
     if (skipValuePrompt) {
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: msg.message_id,
-        text: `${header}${purgeNote}\n\n${rechargeStep(2, 4, 'Login pronto')}`,
-        parse_mode: 'HTML',
-      });
+      await editBubble(chatId, msg, readyFields);
       return true;
     }
 
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: msg.message_id,
-      text: `${header}${purgeNote}\n\n${rechargeStep(2, 4, 'Escolha o valor')} 👇`,
-      parse_mode: 'HTML',
-      reply_markup: buildValueKeyboard(valores),
-    });
+    await editBubble(chatId, msg, readyFields, { reply_markup: buildValueKeyboard(valores) });
     return true;
   } catch (err) {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: msg.message_id,
-      text: `❌ <b>Erro:</b> ${err.message.replace(/</g, '&lt;')}`,
-      parse_mode: 'HTML',
+    await editBubble(chatId, msg, {
+      ...bubbleFields,
+      status: '❌ Erro',
+      footer: formatFetchError(err),
     });
     return false;
   } finally {
@@ -378,28 +384,37 @@ async function startOtherNumberRecharge(chatId) {
   }
 
   busy.add(chatId);
-  const statusMsg = await send(chatId, '🎲 Gerando login aleatório (DDD do banco)…');
+  const statusMsg = await editBubble(chatId, null, {
+    title: 'Recarga',
+    valueLabel: '—',
+    cardMask: '—',
+    login: '—',
+    target: '—',
+    status: '🎲 Gerando login…',
+    footer: '—',
+  });
   try {
-    const { msisdn, link, attempt } = await generateLoginMsisdn();
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: `🎲 Login gerado: <code>${msisdn}</code> (${attempt}ª tentativa)\n🔗 Buscando valores…`,
-      parse_mode: 'HTML',
+    const { msisdn, link } = await generateLoginMsisdn();
+    await editBubble(chatId, statusMsg, {
+      title: 'Recarga',
+      valueLabel: '—',
+      cardMask: '—',
+      login: msisdn,
+      target: '—',
+      status: '🔗 Buscando valores…',
+      footer: '—',
     });
     busy.delete(chatId);
     await prepareRechargeSession(chatId, msisdn, {
       statusMsg,
       mode: 'other',
       loginLink: link,
-      title: `🔀 <b>Outro número</b>\n🔑 Login gerado: <code>${msisdn}</code>\n<i>Depois do valor, envie quem recebe.</i>`,
     });
   } catch (err) {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: `❌ <b>Falha ao gerar número:</b> ${err.message.replace(/</g, '&lt;')}`,
-      parse_mode: 'HTML',
+    await editBubble(chatId, statusMsg, {
+      title: 'Recarga',
+      status: '❌ Falha ao gerar',
+      footer: formatFetchError(err),
     });
   } finally {
     busy.delete(chatId);
@@ -429,7 +444,7 @@ async function pickAutoCardLine(chatId) {
   return { line: reserved.line, card: reserved.card, pan: reserved.pan };
 }
 
-async function executeAutoRecharge(chatId) {
+async function executeAutoRecharge(chatId, { statusMsg = null } = {}) {
   const picked = await pickAutoCardLine(chatId);
   if (!picked) {
     const inUse = cardList.countInUse();
@@ -449,9 +464,17 @@ async function executeAutoRecharge(chatId) {
     rechargeFlow.set(chatId, flow);
   }
 
-  const mask = picked.card.number.slice(-4);
-  await send(chatId, `🤖 Cartão da fila: <code>****${mask}</code>`);
-  await executeRecharge(chatId, picked.card, { cardListLine: picked.line });
+  const entry = getCache(chatId);
+  const msg = await editBubble(chatId, statusMsg, {
+    title: 'Recarga',
+    valueLabel: flow?.productName ?? '—',
+    cardMask: cardMaskFrom(picked.card),
+    login: entry?.msisdn || flow?.loginMsisdn || '—',
+    target: flow?.rechargeTargetNumber || entry?.rechargeTargetNumber || entry?.msisdn || '—',
+    status: '🤖 Cartão da fila',
+    footer: '—',
+  });
+  await executeRecharge(chatId, picked.card, { cardListLine: picked.line, statusMsg: msg });
 }
 
 /** Nova sessão para retry: novo login (modo other), mesmo destino/valor. */
@@ -460,33 +483,33 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
   busy.add(chatId);
 
   const maxPrep = 3;
+  const retryBubble = {
+    title: 'Recarga',
+    valueLabel: retry.productName ?? '—',
+    cardMask: '—',
+    login: retry.loginMsisdn || '—',
+    target: retry.targetMsisdn || retry.loginMsisdn || '—',
+    status: '🔄 Retry',
+    footer: '—',
+  };
   try {
     for (let attempt = 1; attempt <= maxPrep; attempt++) {
       try {
         let access = retry.loginMsisdn;
         let prefetchedLink = null;
         if (retry.mode === 'other') {
-          await tg('editMessageText', {
-            chat_id: chatId,
-            message_id: statusMsg.message_id,
-            text:
-              attempt === 1
-                ? '🎲 Gerando <b>novo login</b> para nova tentativa…'
-                : `🎲 Rede falhou — gerando login de novo (${attempt}/${maxPrep})…`,
-            parse_mode: 'HTML',
+          await editBubble(chatId, statusMsg, {
+            ...retryBubble,
+            status: attempt === 1 ? '🎲 Novo login…' : `🎲 Rede · login ${attempt}/${maxPrep}`,
           });
           const generated = await generateLoginMsisdn();
           access = generated.msisdn;
           prefetchedLink = generated.link;
+          retryBubble.login = access;
         } else {
-          await tg('editMessageText', {
-            chat_id: chatId,
-            message_id: statusMsg.message_id,
-            text:
-              attempt === 1
-                ? `🔄 Nova tentativa — login <code>${access}</code>…`
-                : `🔄 Rede falhou — nova tentativa (${attempt}/${maxPrep})…`,
-            parse_mode: 'HTML',
+          await editBubble(chatId, statusMsg, {
+            ...retryBubble,
+            status: attempt === 1 ? '🔄 Nova tentativa…' : `🔄 Rede · retry ${attempt}/${maxPrep}`,
           });
         }
 
@@ -518,22 +541,21 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
           valores.find((v) => v.value === retry.productValue);
 
         if (!product) {
-          await tg('editMessageText', {
-            chat_id: chatId,
-            message_id: statusMsg.message_id,
-            text: `❌ Valor <b>${retry.productName}</b> indisponível no login <code>${msisdnResolved}</code>.`,
-            parse_mode: 'HTML',
+          await editBubble(chatId, statusMsg, {
+            ...retryBubble,
+            login: msisdnResolved,
+            status: '❌ Valor indisponível',
+            footer: msisdnResolved,
           });
           return null;
         }
 
         let walletAuth = null;
         if (retry.mode === 'other') {
-          await tg('editMessageText', {
-            chat_id: chatId,
-            message_id: statusMsg.message_id,
-            text: `🧹 Limpando cartões do login <code>${msisdnResolved}</code>…`,
-            parse_mode: 'HTML',
+          await editBubble(chatId, statusMsg, {
+            ...retryBubble,
+            login: msisdnResolved,
+            status: '🧹 Limpando cartões…',
           });
           try {
             const purge = await purgeAllLoginCardsStrict({
@@ -569,11 +591,10 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
           await sleep(700 * attempt);
           continue;
         }
-        await tg('editMessageText', {
-          chat_id: chatId,
-          message_id: statusMsg.message_id,
-          text: `❌ <b>Erro ao preparar retry:</b> ${formatFetchError(err).replace(/</g, '&lt;')}`,
-          parse_mode: 'HTML',
+        await editBubble(chatId, statusMsg, {
+          ...retryBubble,
+          status: '❌ Erro no retry',
+          footer: formatFetchError(err),
         });
         return null;
       }
@@ -597,11 +618,14 @@ async function runRechargeRetry(chatId, messageId) {
   }
 
   const statusMsg = { message_id: messageId, chat: { id: chatId } };
-  await tg('editMessageText', {
-    chat_id: chatId,
-    message_id: messageId,
-    text: '🔄 <b>Tentando novamente</b>…\n\n<i>Mesmo destino e valor · novo login · próximo cartão</i>',
-    parse_mode: 'HTML',
+  await editBubble(chatId, statusMsg, {
+    title: 'Recarga',
+    valueLabel: retry.productName ?? '—',
+    cardMask: '—',
+    login: retry.loginMsisdn || '—',
+    target: retry.targetMsisdn || '—',
+    status: '🔄 Tentando novamente…',
+    footer: 'próximo cartão',
   });
 
   const prep = await prepareRetryRecharge(chatId, retry, statusMsg);
@@ -618,29 +642,33 @@ async function runRechargeRetry(chatId, messageId) {
 
   const pending = cardList.countPending();
   if (pending > 0 || retry.useAuto !== false) {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        `🔄 Retry — <b>${prep.product.name}</b> → <code>${prep.target}</code>\n` +
-        `🔑 login <code>${prep.access}</code>\n\n` +
-        '🤖 Pegando próximo cartão da fila…',
-      parse_mode: 'HTML',
+    await editBubble(chatId, statusMsg, {
+      title: 'Recarga',
+      valueLabel: prep.product.name,
+      cardMask: '—',
+      login: prep.access,
+      target: prep.target,
+      status: '🤖 Próximo cartão…',
+      footer: '—',
     });
-    await executeAutoRecharge(chatId);
+    await executeAutoRecharge(chatId, { statusMsg });
     return;
   }
 
-  await tg('editMessageText', {
-    chat_id: chatId,
-    message_id: messageId,
-    text:
-      `🔄 Retry — <b>${prep.product.name}</b> → <code>${prep.target}</code>\n` +
-      `🔑 login <code>${prep.access}</code>\n\n` +
-      '❌ Fila de cartões vazia — envie cartões ou escolha manual:',
-    parse_mode: 'HTML',
-    reply_markup: payMethodKeyboard([]),
-  });
+  await editBubble(
+    chatId,
+    statusMsg,
+    {
+      title: 'Recarga',
+      valueLabel: prep.product.name,
+      cardMask: '—',
+      login: prep.access,
+      target: prep.target,
+      status: '❌ Fila vazia',
+      footer: 'envie cartões ou manual',
+    },
+    { reply_markup: payMethodKeyboard([]) },
+  );
   rechargeFlow.get(chatId).step = 'pick_card';
 }
 
@@ -668,13 +696,15 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
     return;
   }
 
-  const statusMsg = await send(
-    chatId,
-    `⚡ <b>Recarga automática</b>\n` +
-      `📱 Destino: <code>${target}</code>\n` +
-      `💰 ${formatBRL(cents)} · Claro\n\n` +
-      '🔑 Procurando login com esse valor…',
-  );
+  const statusMsg = await editBubble(chatId, null, {
+    title: 'Recarga',
+    valueLabel: formatBRL(cents),
+    cardMask: '—',
+    login: '—',
+    target,
+    status: '🔑 Procurando login…',
+    footer: '—',
+  });
 
   const used = new Set([target]);
   let lastErr = null;
@@ -687,16 +717,14 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
     }
     used.add(picked.msisdn);
 
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text:
-        `⚡ <b>Recarga automática</b>\n` +
-        `📱 Destino: <code>${target}</code>\n` +
-        `💰 ${formatBRL(cents)} · Claro\n` +
-        `🔑 Login: <code>${picked.msisdn}</code> (${attempt}ª)\n\n` +
-        '🔗 Abrindo sessão…',
-      parse_mode: 'HTML',
+    await editBubble(chatId, statusMsg, {
+      title: 'Recarga',
+      valueLabel: formatBRL(cents),
+      cardMask: '—',
+      login: picked.msisdn,
+      target,
+      status: '🔗 Abrindo sessão…',
+      footer: `${attempt}ª tentativa`,
     }).catch(() => {});
 
     const ok = await prepareRechargeSession(chatId, picked.msisdn, {
@@ -705,10 +733,6 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
       mode: 'other',
       loginLink: picked.link,
       skipValuePrompt: true,
-      title:
-        `⚡ <b>Recarga automática</b>\n` +
-        `🔑 Login: <code>${picked.msisdn}</code>\n` +
-        `📱 Destino: <code>${target}</code>`,
     });
     if (!ok) {
       lastErr = new Error(`Login ${picked.msisdn} falhou`);
@@ -733,28 +757,28 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
       autoPay: true,
     });
 
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text:
-        `⚡ <b>Recarga automática</b>\n` +
-        `💰 <b>${product.name}</b> → <code>${target}</code>\n` +
-        `🔑 login <code>${entry.msisdn}</code>\n\n` +
-        '🤖 Pegando cartão da fila…',
-      parse_mode: 'HTML',
+    await editBubble(chatId, statusMsg, {
+      title: 'Recarga',
+      valueLabel: product.name,
+      cardMask: '—',
+      login: entry.msisdn,
+      target,
+      status: '🤖 Pegando cartão…',
+      footer: '—',
     }).catch(() => {});
 
-    await executeAutoRecharge(chatId);
+    await executeAutoRecharge(chatId, { statusMsg });
     return;
   }
 
-  await tg('editMessageText', {
-    chat_id: chatId,
-    message_id: statusMsg.message_id,
-    text:
-      `❌ Não consegui iniciar a recarga automática de <b>${formatBRL(cents)}</b> ` +
-      `para <code>${target}</code>.\n\n${String(lastErr?.message || 'sem login').replace(/</g, '&lt;')}`,
-    parse_mode: 'HTML',
+  await editBubble(chatId, statusMsg, {
+    title: 'Recarga',
+    valueLabel: formatBRL(cents),
+    cardMask: '—',
+    login: '—',
+    target,
+    status: '❌ Não iniciou',
+    footer: lastErr?.message || 'sem login',
   }).catch(() => {});
 }
 
@@ -841,7 +865,7 @@ async function onValueSelected(chatId, messageId, productId) {
   }
 }
 
-async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
+async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: incomingStatus = null } = {}) {
   const entry = getCache(chatId);
   const flow = rechargeFlow.get(chatId);
   if (!entry?.sessionId || !flow?.productId) {
@@ -877,7 +901,6 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
   busy.add(chatId);
   const useBrowser = isBrowserRechargeEnabled() && !card.token;
   const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
-  const crossNumber = targetMsisdn && entry.msisdn && targetMsisdn !== entry.msisdn;
   const startedAt = Date.now();
   let telegramUser = null;
   try {
@@ -894,14 +917,16 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
   }
 
   const useHybrid = useBrowser && isHybridRechargeEnabled();
-  const statusMsg = await send(
-    chatId,
-    useBrowser
-      ? crossNumber
-        ? `${rechargeStep(4, 4, 'Processando…')}\n\n💰 <b>${flow.productName}</b> → <code>${targetMsisdn}</code>\n🔑 login <code>${entry.msisdn}</code>\n\n<i>⚡ HTTP → Edge → recarga cruzada</i>`
-        : `${rechargeStep(4, 4, 'Processando…')}\n\n💰 <b>${flow.productName}</b>\n\n<i>⚡ HTTP → Edge → checkout</i>`
-      : `${rechargeStep(4, 4, 'Processando…')}\n\n💰 <b>${flow.productName}</b>\n\n<i>Tokenizando → pagamento → confirmação</i>`,
-  );
+  const runBubble = {
+    title: 'Recarga',
+    valueLabel: flow.productName ?? '—',
+    cardMask: cardMaskFrom(card),
+    login: entry.msisdn,
+    target: targetMsisdn || entry.msisdn,
+    status: '⏳ Processando…',
+    footer: '—',
+  };
+  const statusMsg = await editBubble(chatId, incomingStatus, runBubble);
 
   try {
     const outcome = useBrowser
@@ -928,11 +953,6 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
           card,
         });
 
-    const report = formatRechargeResult({
-      ...outcome,
-      loginMsisdn: entry.msisdn,
-      targetMsisdn,
-    });
     const offerRetry = shouldOfferRechargeRetry(outcome, null);
     if (offerRetry) {
       saveRetryContext(chatId, {
@@ -948,14 +968,21 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
       clearRetryContext(chatId);
     }
 
+    const resultPayload = {
+      ...outcome,
+      loginMsisdn: entry.msisdn,
+      targetMsisdn,
+    };
+    let report = formatRechargeResult(resultPayload);
+    const retryKb = offerRetry
+      ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
+      : undefined;
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
       text: report,
       parse_mode: 'HTML',
-      reply_markup: offerRetry
-        ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
-        : undefined,
+      reply_markup: retryKb,
     });
 
     logRechargeEvent({
@@ -976,16 +1003,15 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
       const meta =
         action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
       const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
-      let listNote = `\n\n🗂 ${cardListActionLabel(action, { outcome })} · fila: <b>${applied.pendingLeft}</b>`;
-      if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
+      report = formatRechargeResult(resultPayload, {
+        footer: formatQueueFooter(action, applied.pendingLeft),
+      });
       await tg('editMessageText', {
         chat_id: chatId,
         message_id: statusMsg.message_id,
-        text: report + listNote,
+        text: report,
         parse_mode: 'HTML',
-        reply_markup: offerRetry
-          ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
-          : undefined,
+        reply_markup: retryKb,
       }).catch(() => {});
     }
   } catch (err) {
@@ -999,13 +1025,13 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
       useAuto: Boolean(flow.autoPay || listLine),
     });
 
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: `❌ <b>Erro na recarga:</b> ${err.message.replace(/</g, '&lt;')}`,
-      parse_mode: 'HTML',
-      reply_markup: buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 }),
-    });
+    const retryKb = buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 });
+    await editBubble(
+      chatId,
+      statusMsg,
+      { ...runBubble, status: '❌ Erro', footer: formatFetchError(err) },
+      { reply_markup: retryKb },
+    );
 
     logRechargeEvent({
       chatId,
@@ -1023,15 +1049,16 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
     if (listLine) {
       const action = classifyCardListAction({ outcome: null, error: err });
       const applied = await cardList.applyOutcome(listLine, action, '', chatId);
-      let listNote = `\n\n🗂 ${cardListActionLabel(action, { error: err })} · fila: <b>${applied.pendingLeft}</b>`;
-      if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: statusMsg.message_id,
-        text: `❌ <b>Erro na recarga:</b> ${err.message.replace(/</g, '&lt;')}${listNote}`,
-        parse_mode: 'HTML',
-        reply_markup: buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 }),
-      }).catch(() => {});
+      await editBubble(
+        chatId,
+        statusMsg,
+        {
+          ...runBubble,
+          status: '❌ Erro',
+          footer: formatQueueFooter(action, applied.pendingLeft),
+        },
+        { reply_markup: retryKb },
+      ).catch(() => {});
     }
   } finally {
     busy.delete(chatId);

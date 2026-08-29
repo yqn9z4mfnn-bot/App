@@ -15,6 +15,65 @@ function formatSeconds(ms) {
   return s >= 10 ? `${Math.round(s)}s` : `${s.toFixed(1).replace('.', ',')}s`;
 }
 
+export const BUBBLE_LINES = 8;
+const FIELD_MAX = 28;
+
+function digits(value) {
+  return String(value ?? '').replace(/\D/g, '') || '—';
+}
+
+function clip(text, max = FIELD_MAX) {
+  const t = String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return '—';
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+}
+
+function shortReason(msg) {
+  const t = String(msg ?? '');
+  if (!t.trim()) return '—';
+  if (/fraud|fraude|suspeit/i.test(t)) return 'fraude suspeita';
+  if (/insuficiente|saldo/i.test(t)) return 'saldo insuficiente';
+  if (/3ds|vbv|banco/i.test(t)) return 'confirme no banco';
+  if (/timeout|esgotad/i.test(t)) return 'tempo esgotado';
+  if (/proxy|fetch failed|rede/i.test(t)) return 'falha de rede';
+  if (/negad|denied|recus/i.test(t)) return 'negada pela gate';
+  return clip(t.replace(/CREDIT_CARD\s*-\s*/i, ''), FIELD_MAX);
+}
+
+/** Bolha fixa (sempre 8 linhas) — não cresce quando o bot edita. */
+export function formatStatusBubble({
+  title = 'Recarga',
+  valueLabel = '—',
+  cardMask = '—',
+  login = '—',
+  target = '—',
+  status = '…',
+  footer = '—',
+} = {}) {
+  const loginD = digits(login);
+  const targetD = digits(target);
+  return [
+    `<b>${esc(clip(title, 22))}</b>`,
+    `💰 ${esc(clip(valueLabel, 20))}`,
+    `💳 ${esc(clip(cardMask, 16))}`,
+    `🔑 <code>${esc(loginD)}</code>`,
+    `📱 <code>${esc(targetD)}</code>`,
+    '',
+    esc(clip(status, FIELD_MAX)),
+    `<i>${esc(clip(footer, FIELD_MAX))}</i>`,
+  ].join('\n');
+}
+
+export function formatQueueFooter(action, pendingLeft) {
+  const n = pendingLeft ?? '—';
+  if (action === 'approved') return `✅ aprovado · fila ${n}`;
+  if (action === 'consumed') return `🚫 saiu · fila ${n}`;
+  if (action === 'return') return `↩️ voltou · fila ${n}`;
+  return `fila ${n}`;
+}
+
 function normalizeStatus(raw) {
   const st = String(raw ?? 'UNKNOWN').toUpperCase();
   if (st === 'CONFIRMED') return 'SUCCESS';
@@ -24,12 +83,11 @@ function normalizeStatus(raw) {
 }
 
 
-export function formatRechargeResult(outcome) {
+export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
   const {
     result,
     valueCents,
     cardMask,
-    paymentId,
     latencyMs,
     loginMsisdn,
     targetMsisdn,
@@ -46,70 +104,45 @@ export function formatRechargeResult(outcome) {
 
   const login = String(loginMsisdn ?? '').replace(/\D/g, '');
   const target = String(targetMsisdn ?? login).replace(/\D/g, '');
-  const cross = login && target && login !== target;
 
   let icon = '⏳';
   let title = 'Processando…';
   if (status === 'SUCCESS') {
     icon = '🎉';
-    title = 'Recarga aprovada!';
+    title = 'Aprovada';
   } else if (status === '3DS_REQUIRED') {
-    if (visualVbv || threeDsKind === 'cardinal') {
-      icon = '🔐';
-      title = 'VBV visual — aprove no banco';
-    } else if (threeDsKind === 'sms') {
-      icon = '📲';
-      title = '3DS por SMS — aprove no banco';
-    } else {
-      icon = '🔐';
-      title = '3DS — aguardando banco';
-    }
+    icon = '🔐';
+    title = visualVbv || threeDsKind === 'cardinal' ? '3DS visual' : threeDsKind === 'sms' ? '3DS SMS' : '3DS';
   } else if (status === 'DENIED') {
     icon = '😔';
-    title = 'Recarga negada';
+    title = 'Negada';
   } else if (status === 'AUTOMATION_FAIL') {
     icon = '🔧';
-    title = 'Falha na automação';
+    title = 'Falha automação';
   } else if (status === 'TIMEOUT') {
     icon = '⏰';
     title = 'Tempo esgotado';
+  } else if (status === 'ERROR') {
+    icon = '❌';
+    title = 'Erro';
   }
 
-  const lines = [
-    `<b>${icon} ${title}</b>`,
-    '',
-    `💰 <b>Valor:</b> ${formatBRL(valueCents ?? 0)}`,
-    `💳 <b>Cartão:</b> ${esc(cardMask)}`,
-  ];
-
-  if (cross) {
-    lines.push(
-      `🔑 <b>Login:</b> <code>${esc(login)}</code>`,
-      `📱 <b>Destino:</b> <code>${esc(target)}</code>`,
-    );
-  } else if (target) {
-    lines.push(`📱 <b>Número:</b> <code>${esc(target)}</code>`);
+  let footer = extraFooter ?? '—';
+  if (!extraFooter) {
+    if (status === 'SUCCESS') footer = formatSeconds(latencyMs) ? `⏱ ${formatSeconds(latencyMs)}` : 'ok';
+    else if (status === '3DS_REQUIRED') footer = 'confirme no banco';
+    else footer = shortReason(reason);
   }
 
-  if (status === '3DS_REQUIRED') {
-    lines.push(
-      '',
-      '💡 <i>Edge fechado. Confirme no app/SMS do banco — a recarga conclui após aprovar.</i>',
-    );
-  }
-
-  if (reason && status !== 'SUCCESS') {
-    lines.push('', `📋 <b>Motivo:</b> ${esc(reason)}`);
-  }
-  if (result?.threeDsHint) {
-    lines.push(`🖥 <b>Tela:</b> ${esc(String(result.threeDsHint).slice(0, 160))}`);
-  }
-  if (paymentId) lines.push('', `🔗 <b>Ref:</b> <code>${esc(paymentId)}</code>`);
-
-  const timing = formatSeconds(latencyMs);
-  if (timing) lines.push('', `<i>⏱ ${timing}</i>`);
-
-  return lines.join('\n');
+  return formatStatusBubble({
+    title: 'Recarga',
+    valueLabel: formatBRL(valueCents ?? 0),
+    cardMask: cardMask || '—',
+    login: login || '—',
+    target: target || login || '—',
+    status: `${icon} ${title}`,
+    footer,
+  });
 }
 
 export function isRechargeSuccess(outcome) {
