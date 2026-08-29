@@ -30,6 +30,7 @@ import {
 import { createCardListStore } from '../lib/card-list.mjs';
 import { parseCardInput } from '../lib/card-parse.mjs';
 import { describeProxy, proxyEnabled } from '../lib/proxy.mjs';
+import { repairRechargeRow } from '../lib/recharge-events.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
@@ -308,9 +309,10 @@ export function startAdminServer() {
     const limit = Math.min(200, Number(req.query.limit) || 50);
     const offset = Math.max(0, Number(req.query.offset) || 0);
     const chatId = req.query.chatId || null;
+    const items = listRechargeEvents({ limit, offset, chatId }).map(repairRechargeRow);
     res.json({
       total: countRechargeEvents(),
-      items: listRechargeEvents({ limit, offset, chatId }),
+      items,
     });
   });
 
@@ -498,6 +500,14 @@ export function startAdminServer() {
     if (req.path.startsWith('/api/') || req.path.startsWith('/assets/')) return next();
     return sendIndex(req, res);
   });
+
+  try {
+    const repaired = listRechargeEvents({ limit: 500 }).map(repairRechargeRow);
+    const fixed = repaired.filter((r) => r?.status && r.status !== 'unknown').length;
+    console.log(`[admin] histórico: ${repaired.length} recargas (${fixed} com status)`);
+  } catch (err) {
+    console.warn('[admin] repair histórico:', err.message);
+  }
 
   app.listen(ADMIN_PORT, '0.0.0.0', () => {
     console.log(`[admin] painel em http://0.0.0.0:${ADMIN_PORT}`);

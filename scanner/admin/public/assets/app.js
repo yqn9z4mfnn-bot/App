@@ -137,11 +137,41 @@ function logout(callApi = true) {
 }
 
 function badge(status) {
-  const s = String(status || '—');
-  const cls = s === 'success' || s === 'ok' || s === 'done' ? 'ok'
-    : s === 'error' || s === 'error_manual' ? 'err'
+  const s = String(status || '—').toLowerCase();
+  const label = {
+    success: 'aprovada',
+    ok: 'ok',
+    done: 'ok',
+    confirmed: 'aprovada',
+    denied: 'negada',
+    error: 'erro',
+    fail: 'falha',
+    timeout: 'timeout',
+    '3ds': '3DS',
+    '3ds_required': '3DS',
+    unknown: 'indefinido',
+    offline: 'offline',
+    bloqueado: 'bloqueado',
+  }[s] || s;
+  const cls = ['success', 'ok', 'done', 'confirmed'].includes(s) ? 'ok'
+    : ['error', 'fail', 'denied', 'offline', 'bloqueado'].includes(s) ? 'err'
       : 'warn';
-  return `<span class="badge ${cls}">${esc(s)}</span>`;
+  return `<span class="badge ${cls}">${esc(label)}</span>`;
+}
+
+function productLabel(r) {
+  const name = String(r.product_name || '').trim();
+  if (/r\$/i.test(name)) return name;
+  if (r.product_value_cents != null) return name ? `${name} · ${fmtBRL(r.product_value_cents)}` : fmtBRL(r.product_value_cents);
+  return name || '—';
+}
+
+function fmtDuration(ms) {
+  if (ms == null || ms === '') return '—';
+  const n = Number(ms);
+  if (!Number.isFinite(n)) return '—';
+  if (n < 1000) return `${Math.round(n)}ms`;
+  return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace('.', ',')}s`;
 }
 
 function tableWrap(inner, compact = false) {
@@ -251,11 +281,11 @@ async function viewRecharges() {
         <td>${esc(r.username || r.chat_id)}</td>
         <td class="mono">${esc(r.login_msisdn)}</td>
         <td class="mono">${esc(r.target_msisdn)}</td>
-        <td>${esc(r.product_name)} ${fmtBRL(r.product_value_cents)}</td>
+        <td>${esc(productLabel(r))}</td>
         <td>****${esc(r.card_last4 || '—')}</td>
         <td>${badge(r.status)}</td>
-        <td class="mono">${esc(r.gate_code || r.gate_message || '—')}</td>
-        <td>${r.duration_ms ?? '—'}</td>
+        <td class="mono">${esc([r.gate_code, r.gate_message].filter(Boolean).join(' · ') || '—')}</td>
+        <td>${fmtDuration(r.duration_ms)}</td>
       </tr>`).join('')
     : '<tr><td colspan="9" class="empty">Sem recargas ainda — elas aparecem após o próximo pagamento no bot</td></tr>';
   return `

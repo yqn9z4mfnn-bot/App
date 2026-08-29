@@ -189,6 +189,19 @@ export function insertRechargeEvent(event) {
   return r.lastInsertRowid;
 }
 
+export function backfillRechargeEvent(id, { status, gateCode, gateMessage, cardLast4 }) {
+  getDb()
+    .prepare(
+      `UPDATE recharge_events
+       SET status = COALESCE(?, status),
+           gate_code = COALESCE(?, gate_code),
+           gate_message = COALESCE(?, gate_message),
+           card_last4 = COALESCE(?, card_last4)
+       WHERE id = ?`,
+    )
+    .run(status ?? null, gateCode ?? null, gateMessage ?? null, cardLast4 ?? null, id);
+}
+
 export function listRechargeEvents({ limit = 50, offset = 0, chatId = null } = {}) {
   if (chatId) {
     return getDb()
