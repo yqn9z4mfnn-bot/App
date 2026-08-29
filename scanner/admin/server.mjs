@@ -26,7 +26,6 @@ import {
   deleteNumber,
   listErrors,
   listValueStock,
-  countForValue,
 } from '../lib/numbers-db.mjs';
 import { createCardListStore } from '../lib/card-list.mjs';
 import { parseCardInput } from '../lib/card-parse.mjs';
@@ -129,20 +128,36 @@ function requireAuth(req, res, next) {
   return res.status(401).json({ error: 'Não autenticado' });
 }
 
+function safeCall(fn, fallback) {
+  try {
+    return fn();
+  } catch (err) {
+    console.warn('[admin]', err.message);
+    return fallback;
+  }
+}
+
 async function proxyAutomation(path, opts = {}) {
   const url = `${AUTOMATION_URL}${path}`;
-  const res = await fetch(url, {
-    ...opts,
-    headers: { 'content-type': 'application/json', ...(opts.headers || {}) },
-  });
-  const text = await res.text();
-  let body;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2500);
   try {
-    body = JSON.parse(text);
-  } catch {
-    body = { raw: text };
+    const res = await fetch(url, {
+      ...opts,
+      signal: ctrl.signal,
+      headers: { 'content-type': 'application/json', ...(opts.headers || {}) },
+    });
+    const text = await res.text();
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = { raw: text };
+    }
+    return { status: res.status, body };
+  } finally {
+    clearTimeout(timer);
   }
-  return { status: res.status, body };
 }
 
 export function startAdminServer() {
@@ -185,22 +200,31 @@ export function startAdminServer() {
     }
 
     res.json({
-      numbers: {
-        total: countNumbers({ onlyOk: false }),
-        ok: countNumbers({ onlyOk: true }),
-        withValues: countWithValues(),
-        errors: listErrors({ limit: 1 }).length ? 'has' : 0,
-      },
-      cards: {
-        pending: cardList.countPending(),
-        approved: cardList.countApproved(),
-        inUse: cardList.countInUse(),
-      },
-      users: countTelegramUsers(),
-      recharges: {
-        total: countRechargeEvents(),
-        last24h: rechargeStatsSince(dayAgo),
-      },
+      numbers: safeCall(
+        () => ({
+          total: countNumbers({ onlyOk: false }),
+          ok: countNumbers({ onlyOk: true }),
+          withValues: countWithValues(),
+          errors: listErrors({ limit: 1 }).length ? 'has' : 0,
+        }),
+        { total: 0, ok: 0, withValues: 0, errors: 0 },
+      ),
+      cards: safeCall(
+        () => ({
+          pending: cardList.countPending(),
+          approved: cardList.countApproved(),
+          inUse: cardList.countInUse(),
+        }),
+        { pending: 0, approved: 0, inUse: 0 },
+      ),
+      users: safeCall(() => countTelegramUsers(), 0),
+      recharges: safeCall(
+        () => ({
+          total: countRechargeEvents(),
+          last24h: rechargeStatsSince(dayAgo),
+        }),
+        { total: 0, last24h: {} },
+      ),
       processes: {
         bot: { pid: readPid('bot'), alive: isAlive(readPid('bot')) },
         automation: { pid: readPid('automation'), alive: isAlive(readPid('automation')) },
@@ -208,7 +232,7 @@ export function startAdminServer() {
       },
       automation,
       proxy: describeProxy() || (proxyEnabled() ? 'ON' : 'OFF'),
-      valueStock: listValueStock().slice(0, 12),
+      valueStock: safeCall(() => listValueStock().slice(0, 12), []),
     });
   });
 
@@ -431,11 +455,48 @@ export function startAdminServer() {
     }
   });
 
-  app.use(express.static(PUBLIC_DIR));
-  app.get('*', (_req, res) => {
+  app.use(
+    '/assets',
+    express.static(join(PUBLIC_DIR, 'assets'), {
+      maxAge: 0,
+      etag: false,
+      lastModified: false,
+    }),
+  );
+
+  const sendIndex = (_req, res) => {
     const index = join(PUBLIC_DIR, 'index.html');
-    if (existsSync(index)) return res.sendFile(index);
-    return res.status(404).send('Admin UI não encontrada');
+    if (!existsSync(index)) return res.status(404).send('Admin UI não encontrada');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.sendFile(index);
+  };
+
+  const spaPaths = [
+    '/',
+    '/dashboard',
+    '/numeros',
+    '/numbers',
+    '/cartoes',
+    '/cards',
+    '/recargas',
+    '/recharges',
+    '/usuarios',
+    '/users',
+    '/sessoes',
+    '/sessions',
+    '/logs',
+    '/config',
+    '/sistema',
+    '/system',
+  ];
+  for (const path of spaPaths) {
+    app.get(path, sendIndex);
+  }
+
+  app.use((req, res, next) => {
+    if (req.method !== 'GET') return next();
+    if (req.path.startsWith('/api/') || req.path.startsWith('/assets/')) return next();
+    return sendIndex(req, res);
   });
 
   app.listen(ADMIN_PORT, '0.0.0.0', () => {
