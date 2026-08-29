@@ -1,5 +1,5 @@
 import express from 'express';
-import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -76,9 +76,55 @@ function writeEnvKey(key, value) {
   });
 }
 
-function tailFile(filePath, lines = 200) {
-  if (!existsSync(filePath)) return { path: filePath, lines: [], size: 0, mtime: null };
+function readNewBytes(filePath, afterBytes) {
   const stat = statSync(filePath);
+  const size = stat.size;
+  if (afterBytes >= size) {
+    return { text: '', size, mtime: stat.mtimeMs };
+  }
+  const start = Math.max(0, afterBytes);
+  const length = size - start;
+  const buf = Buffer.alloc(length);
+  const fd = openSync(filePath, 'r');
+  try {
+    readSync(fd, buf, 0, length, start);
+  } finally {
+    closeSync(fd);
+  }
+  return { text: buf.toString('utf8'), size, mtime: stat.mtimeMs };
+}
+
+function tailFile(filePath, { lines = 200, afterBytes = null } = {}) {
+  if (!existsSync(filePath)) {
+    return { path: filePath, lines: [], size: 0, mtime: null, totalLines: 0, appended: false };
+  }
+  const stat = statSync(filePath);
+  if (afterBytes != null && Number.isFinite(afterBytes) && afterBytes >= 0) {
+    if (afterBytes > stat.size) {
+      const content = readFileSync(filePath, 'utf8');
+      const all = content.split(/\r?\n/);
+      return {
+        path: filePath,
+        lines: all.slice(-lines),
+        size: stat.size,
+        mtime: stat.mtimeMs,
+        totalLines: all.length,
+        appended: false,
+        reset: true,
+      };
+    }
+    const chunk = readNewBytes(filePath, afterBytes);
+    const raw = chunk.text.replace(/\r/g, '');
+    const parts = raw.split('\n');
+    if (parts.length && parts[parts.length - 1] === '') parts.pop();
+    return {
+      path: filePath,
+      lines: parts.filter((l, i) => !(i === 0 && l === '' && afterBytes > 0)),
+      size: chunk.size,
+      mtime: chunk.mtime,
+      appended: true,
+    };
+  }
   const content = readFileSync(filePath, 'utf8');
   const all = content.split(/\r?\n/);
   return {
@@ -87,6 +133,7 @@ function tailFile(filePath, lines = 200) {
     size: stat.size,
     mtime: stat.mtimeMs,
     totalLines: all.length,
+    appended: false,
   };
 }
 
@@ -109,9 +156,11 @@ function isAlive(pid) {
 
 function maskPan(line) {
   const card = parseCardInput(String(line ?? '').replace(/\s+#.*$/, ''));
-  if (!card?.number) return line;
+  if (!card?.number) return String(line ?? '');
   const pan = card.number.replace(/\D/g, '');
-  return `${pan.slice(0, 6)}******${pan.slice(-4)}|${card.expMonth}|${card.expYear}|***`;
+  const mm = String(card.expirationMonth ?? '').padStart(2, '0');
+  const yyyy = String(card.expirationYear ?? '');
+  return `${pan.slice(0, 6)}******${pan.slice(-4)}|${mm}|${yyyy}|***`;
 }
 
 function authToken(req) {
@@ -276,17 +325,24 @@ export function startAdminServer() {
       reservations = [];
     }
 
+    const pendingAll = cardList.loadPending();
+    const approvedAll = cardList.loadApproved();
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 80));
     res.json({
-      pending: cardList.loadPending().map(mapLine),
-      approved: cardList.loadApproved().map(mapLine),
+      pending: pendingAll.slice(0, limit).map(mapLine),
+      approved: approvedAll.slice(-limit).map(mapLine),
       reserved: reservations.map((r) => ({
-        ...r,
+        chatId: r.chatId,
+        reservedAt: r.reservedAt,
+        pan: r.pan ? `****${String(r.pan).slice(-4)}` : null,
         line: reveal ? r.line : maskPan(r.line),
       })),
       counts: {
-        pending: cardList.countPending(),
-        approved: cardList.countApproved(),
+        pending: pendingAll.length,
+        approved: approvedAll.length,
         inUse: cardList.countInUse(),
+        pendingShown: Math.min(limit, pendingAll.length),
+        approvedShown: Math.min(limit, approvedAll.length),
       },
     });
   });
@@ -350,7 +406,9 @@ export function startAdminServer() {
     const path = allowed[name];
     if (!path) return res.status(400).json({ error: 'Log inválido' });
     const lines = Math.min(2000, Number(req.query.lines) || 300);
-    res.json(tailFile(path, lines));
+    const afterRaw = req.query.afterBytes;
+    const afterBytes = afterRaw != null && afterRaw !== '' ? Number(afterRaw) : null;
+    res.json(tailFile(path, { lines, afterBytes }));
   });
 
   app.get('/api/audit', requireAuth, (req, res) => {

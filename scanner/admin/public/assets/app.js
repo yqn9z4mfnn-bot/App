@@ -36,6 +36,8 @@ let currentView = 'dashboard';
 let revealCards = false;
 let logName = 'bot';
 let rendering = false;
+let logTimer = null;
+let logBytes = 0;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -128,6 +130,7 @@ function showLogin() {
 }
 
 function logout(callApi = true) {
+  stopLogLive();
   if (callApi && token) {
     api('/logout', { method: 'POST' }).catch(() => {});
   }
@@ -262,8 +265,8 @@ async function viewCards() {
         <button type="submit" class="btn" style="margin-top:0.6rem">Importar</button>
       </form>
     </div>
-    <div class="panel"><h3>Fila pendente</h3>${list(data.pending)}</div>
-    <div class="panel"><h3>Aprovados</h3>${list(data.approved)}</div>
+    <div class="panel"><h3>Fila pendente (${data.counts.pendingShown ?? data.pending.length}/${data.counts.pending})</h3>${list(data.pending)}</div>
+    <div class="panel"><h3>Aprovados (${data.counts.approvedShown ?? data.approved.length}/${data.counts.approved})</h3>${list(data.approved)}</div>
     <div class="panel">
       <h3>Reservados</h3>
       ${data.reserved.length ? tableWrap(`
@@ -353,15 +356,57 @@ async function viewSessions() {
     </div>`;
 }
 
+function stopLogLive() {
+  if (logTimer) {
+    clearInterval(logTimer);
+    logTimer = null;
+  }
+}
+
+function startLogLive() {
+  stopLogLive();
+  logTimer = setInterval(async () => {
+    if (currentView !== 'logs' || !token) {
+      stopLogLive();
+      return;
+    }
+    const output = $('#log-output');
+    const meta = $('#log-meta');
+    if (!output) return;
+    try {
+      const data = await api(`/logs/${logName}?afterBytes=${logBytes}&lines=200`);
+      if (data.reset || !data.appended) {
+        output.textContent = (data.lines || []).join('\n') || '(vazio)';
+        output.scrollTop = output.scrollHeight;
+      } else if (data.lines?.length) {
+        const chunk = data.lines.join('\n');
+        output.textContent = output.textContent
+          ? `${output.textContent}\n${chunk}`
+          : chunk;
+        output.scrollTop = output.scrollHeight;
+      }
+      logBytes = data.size ?? logBytes;
+      if (meta) {
+        meta.textContent = `ao vivo · ${Math.round((logBytes || 0) / 1024)} KB`;
+      }
+      $('#status-dot').className = 'status-dot ok';
+    } catch (err) {
+      if (meta) meta.textContent = `log: ${err.message}`;
+      $('#status-dot').className = 'status-dot err';
+    }
+  }, 1500);
+}
+
 async function viewLogs() {
   const data = await api(`/logs/${logName}?lines=400`);
+  logBytes = data.size || 0;
   const tabs = ['bot', 'automation', 'admin']
     .map((n) => `<button type="button" class="tab ${n === logName ? 'active' : ''}" data-action="log-tab" data-log="${n}">${n === 'automation' ? 'Automação' : n[0].toUpperCase() + n.slice(1)}</button>`)
     .join('');
   return `
     <div class="tabs">${tabs}</div>
     <div class="log-view" id="log-output">${esc((data.lines || []).join('\n') || '(vazio)')}</div>
-    <p class="sub" style="margin-top:0.5rem;color:var(--muted)">${data.totalLines ?? (data.lines || []).length} linhas · ${Math.round((data.size || 0) / 1024)} KB</p>`;
+    <p class="sub" id="log-meta" style="margin-top:0.5rem;color:var(--muted)">ao vivo · ${data.totalLines ?? (data.lines || []).length} linhas · ${Math.round((data.size || 0) / 1024)} KB</p>`;
 }
 
 async function viewConfig() {
@@ -429,6 +474,7 @@ async function renderView() {
   }
   if (rendering) return;
   rendering = true;
+  stopLogLive();
   const route = parseRoute();
   currentView = route.view;
   $('#view-title').textContent = route.title;
@@ -438,6 +484,11 @@ async function renderView() {
   try {
     el.innerHTML = await VIEWS[currentView]();
     $('#status-dot').className = 'status-dot ok';
+    if (currentView === 'logs') {
+      const output = $('#log-output');
+      if (output) output.scrollTop = output.scrollHeight;
+      startLogLive();
+    }
   } catch (err) {
     el.innerHTML = `<div class="panel"><p class="error">${esc(err.message)}</p></div>`;
     $('#status-dot').className = 'status-dot err';
@@ -585,15 +636,6 @@ function bootUi() {
     onContentClick(e).catch((err) => toast(err.message));
   });
   $('#content').addEventListener('submit', onContentSubmit);
-
-  setInterval(() => {
-    if (!token || $('#app').classList.contains('hidden')) return;
-    if (document.visibilityState !== 'visible') return;
-    if (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-    if (currentView === 'dashboard' || currentView === 'logs' || currentView === 'sessions') {
-      renderView();
-    }
-  }, 20000);
 }
 
 async function start() {
