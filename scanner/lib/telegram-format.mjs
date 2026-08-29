@@ -150,6 +150,10 @@ Geramos login aleatório — você informa quem recebe
 <b>💳 Cartões</b> — cole a lista no chat ou envie <b>.txt</b>
 <code>NUMERO|MM|AAAA|CVV</code> (um por linha) → fila 🤖 Automático
 <b>💰 /valores</b> ou <code>20</code> → link por valor
+<b>⚡ Atalho cruzado + fila</b>
+<code>13991019331|Claro|30</code>
+→ recarga de outro login no destino, R$ 30, cartão automático
+
 <b>🔧 /recarga_para</b> <code>LOGIN DESTINO</code> → cruzada manual
 
 /start · /valores · /lista · /recarga`;

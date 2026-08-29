@@ -58,6 +58,7 @@ import { purgeAllLoginCardsStrict } from './lib/purge-login-cards.mjs';
 import { upsertTelegramUser, isTelegramUserAllowed } from './lib/admin-db.mjs';
 import { logRechargeEvent } from './lib/recharge-events.mjs';
 import { getDataDir } from './lib/data-dir.mjs';
+import { parseQuickCrossRecharge } from './lib/quick-cross-recharge.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DATA_DIR = getDataDir();
@@ -212,6 +213,7 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   title = null,
   mode = null,
   loginLink = null,
+  skipValuePrompt = false,
 } = {}) {
   const access = normalizeBrMobile(accessMsisdn);
   if (!access) {
@@ -317,6 +319,16 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
         : resolvedMode === 'other'
           ? `🔀 <b>Outro número</b>\n🔑 Login: <code>${access}</code>\n<i>Depois do valor, envie quem recebe.</i>`
           : `📱 <b>Recarga</b> — <code>${access}</code>`);
+
+    if (skipValuePrompt) {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: msg.message_id,
+        text: `${header}${purgeNote}\n\n${rechargeStep(2, 4, 'Login pronto')}`,
+        parse_mode: 'HTML',
+      });
+      return true;
+    }
 
     await tg('editMessageText', {
       chat_id: chatId,
@@ -598,6 +610,120 @@ async function runRechargeRetry(chatId, messageId) {
     reply_markup: payMethodKeyboard([]),
   });
   rechargeFlow.get(chatId).step = 'pick_card';
+}
+
+async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents }) {
+  const target = normalizeBrMobile(targetMsisdn);
+  const cents = Number(valueCents);
+  if (!target || !cents) {
+    await send(chatId, '❌ Atalho inválido. Ex: <code>13991019331|Claro|30</code>');
+    return;
+  }
+
+  if (busy.has(chatId)) {
+    await send(chatId, '⏳ Aguarde a recarga anterior…');
+    return;
+  }
+
+  if (cardList.countPending() === 0) {
+    const inUse = cardList.countInUse();
+    await send(
+      chatId,
+      inUse > 0
+        ? `❌ Nenhum cartão livre na fila (<b>${inUse}</b> em uso).\n\nAguarde ou envie mais cartões.`
+        : '❌ Fila automática vazia.\n\nEnvie cartões: <code>NUMERO|MM|AAAA|CVV</code>',
+    );
+    return;
+  }
+
+  const statusMsg = await send(
+    chatId,
+    `⚡ <b>Recarga automática</b>\n` +
+      `📱 Destino: <code>${target}</code>\n` +
+      `💰 ${formatBRL(cents)} · Claro\n\n` +
+      '🔑 Procurando login com esse valor…',
+  );
+
+  const used = new Set([target]);
+  let lastErr = null;
+
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    const picked = pickLinkForValue(cents, { excludeMsisdns: [...used] });
+    if (!picked?.msisdn) {
+      lastErr = lastErr || new Error(`Nenhum login no banco com ${formatBRL(cents)} (exceto o destino).`);
+      break;
+    }
+    used.add(picked.msisdn);
+
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text:
+        `⚡ <b>Recarga automática</b>\n` +
+        `📱 Destino: <code>${target}</code>\n` +
+        `💰 ${formatBRL(cents)} · Claro\n` +
+        `🔑 Login: <code>${picked.msisdn}</code> (${attempt}ª)\n\n` +
+        '🔗 Abrindo sessão…',
+      parse_mode: 'HTML',
+    }).catch(() => {});
+
+    const ok = await prepareRechargeSession(chatId, picked.msisdn, {
+      targetMsisdn: target,
+      statusMsg,
+      mode: 'other',
+      loginLink: picked.link,
+      skipValuePrompt: true,
+      title:
+        `⚡ <b>Recarga automática</b>\n` +
+        `🔑 Login: <code>${picked.msisdn}</code>\n` +
+        `📱 Destino: <code>${target}</code>`,
+    });
+    if (!ok) {
+      lastErr = new Error(`Login ${picked.msisdn} falhou`);
+      continue;
+    }
+
+    const entry = getCache(chatId);
+    const product = (entry?.valores || []).find((v) => Number(v.value) === cents);
+    if (!product) {
+      lastErr = new Error(`${formatBRL(cents)} sumiu no login ${picked.msisdn}`);
+      continue;
+    }
+
+    chatRechargeMode.set(chatId, 'other');
+    rechargeFlow.set(chatId, {
+      step: 'pick_card',
+      mode: 'other',
+      productId: product.id,
+      productValue: product.value,
+      productName: product.name,
+      rechargeTargetNumber: target,
+      autoPay: true,
+    });
+
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text:
+        `⚡ <b>Recarga automática</b>\n` +
+        `💰 <b>${product.name}</b> → <code>${target}</code>\n` +
+        `🔑 login <code>${entry.msisdn}</code>\n\n` +
+        '🤖 Pegando cartão da fila…',
+      parse_mode: 'HTML',
+    }).catch(() => {});
+
+    await executeAutoRecharge(chatId);
+    return;
+  }
+
+  await tg('editMessageText', {
+    chat_id: chatId,
+    message_id: statusMsg.message_id,
+    text:
+      `❌ Não consegui iniciar a recarga automática de <b>${formatBRL(cents)}</b> ` +
+      `para <code>${target}</code>.\n\n${String(lastErr?.message || 'sem login').replace(/</g, '&lt;')}`,
+    parse_mode: 'HTML',
+  }).catch(() => {});
 }
 
 async function startRechargePickerForTarget(chatId, accessMsisdn, targetMsisdn) {
@@ -1957,6 +2083,12 @@ async function handleMessage(msg) {
     if (text && !text.startsWith('/')) {
       const ingested = await tryIngestCardListFromMessage(chatId, text);
       if (ingested) return;
+    }
+
+    const quickCross = parseQuickCrossRecharge(text);
+    if (quickCross) {
+      await startQuickCrossAutoRecharge(chatId, quickCross);
+      return;
     }
 
     if (rechargeFlow.has(chatId) && text && !text.startsWith('/')) {

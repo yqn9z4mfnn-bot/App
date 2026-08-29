@@ -246,11 +246,17 @@ export function pickRandomMsisdnByDdd(ddd) {
   return row?.msisdn ?? null;
 }
 
-export function pickLinkForValue(valueCents, { excludeMsisdn } = {}) {
+export function pickLinkForValue(valueCents, { excludeMsisdn, excludeMsisdns } = {}) {
   const cents = Number(valueCents);
   if (!Number.isFinite(cents) || cents <= 0) return null;
-  const exclude = excludeMsisdn ? String(excludeMsisdn) : '';
-  const row = exclude
+  const exclude = [
+    ...new Set(
+      [excludeMsisdn, ...(excludeMsisdns || [])]
+        .map((n) => String(n ?? '').replace(/\D/g, ''))
+        .filter(Boolean),
+    ),
+  ];
+  const row = exclude.length
     ? getDb()
         .prepare(
           `SELECT n.msisdn, n.link, nv.name, nv.product_id, nv.value_cents
@@ -259,11 +265,11 @@ export function pickLinkForValue(valueCents, { excludeMsisdn } = {}) {
            WHERE nv.value_cents = ?
              AND n.status = 'ok'
              AND n.link IS NOT NULL
-             AND n.msisdn != ?
+             AND n.msisdn NOT IN (${exclude.map(() => '?').join(', ')})
            ORDER BY n.scanned_at ASC
            LIMIT 1`,
         )
-        .get(cents, exclude)
+        .get(cents, ...exclude)
     : getDb()
         .prepare(
           `SELECT n.msisdn, n.link, nv.name, nv.product_id, nv.value_cents
