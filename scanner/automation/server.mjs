@@ -64,7 +64,9 @@ app.post('/api/session/:sessionId/close', async (req, res) => {
 app.listen(config.port, () => {
   console.log(`[automation] API online em http://127.0.0.1:${config.port}`);
   console.log(`[automation] browser=${normalizeBrowserName(config.defaultBrowser)} headless=${config.headless}`);
-  console.log('[automation] 3DS: encerra gate-wait na hora (sem espera frictionless)');
+  console.log(
+    `[automation] 3DS frictionless: UI ${config.threedsUiWaitMs}ms + CONFIRMED ${config.threedsExtraWaitMs}ms (VBV para na hora)`,
+  );
   const p = describeProxy();
   console.log(`[automation] proxy=${p || (proxyEnabled() ? 'config incompleta' : 'OFF')}`);
 });

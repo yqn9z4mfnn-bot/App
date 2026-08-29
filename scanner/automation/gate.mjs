@@ -3,9 +3,9 @@ import { config } from './config.mjs';
 import { saveStallDebug, summarizeGateBody, summarizeGateCaptures } from './debug.mjs';
 import {
   detect3dsChallenge,
-  detect3dsFast,
   build3dsRequiredResult,
   get3dsChallengeApiCapture,
+  threedsRequiresImmediateAction,
 } from './threeds.mjs';
 import { absorbCheckoutCtxFromCapture, createCheckoutCtx } from './card-cleanup.mjs';
 import { waitPaymentResult as waitHttpPaymentSse } from '../lib/recharge.mjs';
@@ -262,9 +262,10 @@ const logGateWaitHeartbeat = (elapsedMs, page, gateCapture, lastPending) => {
 export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture = null, session = null, opts = {}) => {
   const start = Date.now();
   let lastHeartbeat = 0;
+  let challengeApiFirstSeen = null;
+  let threedsWaitLogged = false;
   const lastPending = { value: false };
   const pollMs = opts.pollMs ?? config.pollIntervalMs;
-  const threedsResultOpts = () => ({ browserOpen: false });
 
   while (Date.now() - start < timeoutMs) {
     const elapsed = Date.now() - start;
@@ -279,12 +280,6 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       return buildPaymentResult(page, 'success', url, { ...gateCapture, best: () => confirmed });
     }
 
-    const fast3ds = detect3dsFast(page, gateCapture);
-    if (fast3ds?.detected) {
-      console.log(`[automation][3ds] VBV/3DS fast (${fast3ds.source}) — encerrando gate-wait`);
-      return build3dsRequiredResult(page, session, gateCapture, fast3ds, elapsed, threedsResultOpts());
-    }
-
     const best = gateCapture?.best?.() || null;
     if (best && gateIndicatesError(best)) {
       return buildPaymentResult(page, 'error', url, gateCapture);
@@ -294,10 +289,42 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       return buildPaymentResult(page, 'error', url, gateCapture);
     }
 
-    const threeDs = await detect3dsChallenge(page, gateCapture);
+    const apiCap = get3dsChallengeApiCapture(gateCapture);
+    if (apiCap && challengeApiFirstSeen == null) {
+      challengeApiFirstSeen = apiCap.ts || Date.now();
+    }
+    if (challengeApiFirstSeen != null && !threedsWaitLogged) {
+      threedsWaitLogged = true;
+      console.log(
+        `[automation][3ds] API challenge — vendo se abre VBV (até ${Math.round((config.threedsUiWaitMs || 8000) / 1000)}s)…`,
+      );
+    }
+
+    const threeDs = await detect3dsChallenge(page, gateCapture, {
+      challengeApiFirstSeen,
+      threedsUiWaitMs: config.threedsUiWaitMs,
+    });
     if (threeDs?.detected) {
-      console.log('[automation][3ds] detectado — encerrando gate-wait');
-      return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, threedsResultOpts());
+      const stopNow = threedsRequiresImmediateAction(threeDs);
+      if (session && !session.threeDsSeen) {
+        session.threeDsSeen = threeDs;
+        session.threeDsSeenAt = Date.now();
+        if (stopNow) {
+          console.log('[automation][3ds] VBV visual — parando na hora');
+        } else {
+          console.log(
+            `[automation][3ds] frictionless — aguardando CONFIRMED até ${Math.round((config.threedsExtraWaitMs || 12000) / 1000)}s…`,
+          );
+        }
+      }
+      const continueWait = config.threedsContinueGateWait !== false;
+      if (!continueWait || stopNow) {
+        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, { browserOpen: stopNow });
+      }
+      const extraMs = config.threedsExtraWaitMs ?? 12000;
+      if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
+        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+      }
     }
 
     const visible = await scanPageForPaymentOutcome(page);
@@ -309,6 +336,9 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
   }
 
   const elapsed = Date.now() - start;
+  if (session?.threeDsSeen) {
+    return build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed);
+  }
 
   const debugInfo = session
     ? await saveStallDebug(page, session, gateCapture, 'gate_timeout', {
@@ -448,8 +478,20 @@ export async function waitForPaymentResultViaHttp(gateCapture, bemobiToken, chec
     return buildPaymentResult(null, 'error', checkoutUrl, gateCapture, 'bemobiToken ausente para SSE HTTP');
   }
 
+  if (had3ds && config.threedsContinueGateWait) {
+    const frictionlessMs = config.threedsExtraWaitMs ?? 12000;
+    console.log(
+      `[automation][3ds] frictionless HTTP SSE — aguardando CONFIRMED até ${Math.round(frictionlessMs / 1000)}s…`,
+    );
+    const sse = await waitHttpPaymentSse(bemobiToken, idResult.paymentId, frictionlessMs);
+    if (String(sse?.status ?? '').toUpperCase() === 'CONFIRMED') {
+      return buildPaymentResultFromHttpSse(sse, checkoutUrl, idResult.paymentId);
+    }
+    return buildPaymentResultFromHttpSse(sse, checkoutUrl, idResult.paymentId, { had3ds: true });
+  }
+
   if (had3ds) {
-    console.log('[automation][3ds] challenge API — pulando SSE gate-wait');
+    console.log('[automation][3ds] challenge API — sem frictionless, retorna 3DS');
     return buildPaymentResultFromHttpSse(
       { status: 'PENDING' },
       checkoutUrl,

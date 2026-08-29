@@ -1,5 +1,5 @@
 #!/bin/bash
-# Corrige .env da VPS se ainda tiver espera frictionless no 3DS (88s).
+# Ajusta 3DS frictionless curto (8s VBV + 12s CONFIRMED — não 88s).
 set -euo pipefail
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/linkclaro-bot"
 ENV_FILE="$DATA_DIR/.env"
@@ -14,9 +14,9 @@ set_var() {
   fi
 }
 
-set_var THREEDS_CONTINUE_GATE_WAIT 0
-set_var THREEDS_UI_WAIT_MS 0
-set_var THREEDS_EXTRA_WAIT_MS 0
+set_var THREEDS_CONTINUE_GATE_WAIT 1
+set_var THREEDS_UI_WAIT_MS 8000
+set_var THREEDS_EXTRA_WAIT_MS 12000
 
-echo "3DS wait desligado em $ENV_FILE"
+echo "3DS frictionless curto em $ENV_FILE (8s UI + 12s CONFIRMED)"
 echo "Reinicie: bash $DATA_DIR/stop.sh && bash $DATA_DIR/run.sh"

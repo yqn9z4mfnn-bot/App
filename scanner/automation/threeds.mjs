@@ -1,3 +1,4 @@
+import { config } from './config.mjs';
 import { saveStallDebug } from './debug.mjs';
 
 /** URLs típicas de fluxo 3DS (Cardinal, Visa, Eldorado challenge). */
@@ -21,7 +22,7 @@ export const describe3dsKind = (kind, hint = '', opts = {}) => {
       : 'VBV visual — aprove no app/SMS do banco (Edge fechado)';
   }
   if (kind === 'challenge_api') {
-    return '3DS acionado pelo banco — confirme no app/SMS do banco';
+    return '3DS frictionless — aguardando confirmação automática';
   }
   return browserOpen
     ? 'Validação 3DS do cartão — confirme manualmente no Edge'
@@ -36,19 +37,19 @@ export function get3dsChallengeApiCapture(gateCapture) {
   return null;
 }
 
-/** VBV/3DS com tela visível (iframe Cardinal, CReq, etc.). */
+/** VBV/3DS com tela visível (iframe Cardinal, CReq, texto SMS, etc.). */
 export function isVisualVbv(threeDs) {
   if (!threeDs?.detected) return false;
-  if (threeDs.uiVisible === true) return true;
-  if (threeDs.kind === 'cardinal') return true;
+  if (threeDs.uiVisible === true && threeDs.hint && THREEDS_TEXT_RE.test(threeDs.hint)) return true;
+  if (threeDs.kind === 'sms') return true;
   const url = String(threeDs.url || '');
-  if (/ThreeDSecure|\/CReq|authentication\.cardinal/i.test(url)) return true;
+  if (/ThreeDSecure\/V2|\/CReq|authentication\.cardinal.*CReq/i.test(url)) return true;
   const hint = String(threeDs.hint || '');
   if (THREEDS_TEXT_RE.test(hint)) return true;
   return false;
 }
 
-/** VBV visual / SMS → para na hora; frictionless API só se THREEDS_CONTINUE_GATE_WAIT=0. */
+/** VBV visual / SMS → para na hora; API frictionless continua gate-wait. */
 export function threedsRequiresImmediateAction(threeDs) {
   if (!threeDs?.detected) return false;
   if (isVisualVbv(threeDs)) return true;
@@ -56,35 +57,7 @@ export function threedsRequiresImmediateAction(threeDs) {
   const hint = String(threeDs.hint || '');
   if (/enviar sms|digite o c[oó]digo|c[oó]digo.*sms|token.*seguran/i.test(hint)) return true;
   if (threeDs.kind === 'challenge_api' && !threeDs.uiVisible) return false;
-  return true;
-}
-
-/** Detecção síncrona — rede + URL de iframe (sem evaluate lento). */
-export function detect3dsFast(page, gateCapture = null) {
-  for (const cap of gateCapture?.captures ?? []) {
-    const u = cap.url || '';
-    if (/cardinalcommerce\.com/i.test(u) && /ThreeDSecure|CReq|centinelapi/i.test(u)) {
-      return { detected: true, source: 'network', url: u, kind: 'cardinal', uiVisible: true };
-    }
-    if (/auth\.visa\.com|secure\.checkout\.visa\.com/i.test(u) && /ThreeDSecure|CReq|oauth2/i.test(u)) {
-      return { detected: true, source: 'network', url: u, kind: 'cardinal', uiVisible: true };
-    }
-    if (/\/3ds\/challenge/i.test(u)) {
-      return { detected: true, source: 'api', url: u, kind: 'challenge_api', uiVisible: false };
-    }
-  }
-
-  if (page) {
-    for (const frame of page.frames()) {
-      const u = frame.url() || '';
-      if (!THREEDS_URL_RE.test(u)) continue;
-      if (/ThreeDSecure|CReq|3ds\/challenge|auth\.visa\.com\/oauth2|cardinalcommerce/i.test(u)) {
-        return { detected: true, source: 'frame_url', url: u, kind: 'cardinal', uiVisible: true };
-      }
-    }
-  }
-
-  return null;
+  return false;
 }
 
 /** Procura iframe/tela 3DS visível (prioridade sobre API). */
@@ -97,16 +70,16 @@ async function scan3dsUiFrames(page) {
     try {
       text = await frame.evaluate(() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim());
     } catch {
-      if (/ThreeDSecure|CReq|3ds\/challenge|auth\.visa\.com\/oauth2/i.test(frameUrl)) {
+      if (/ThreeDSecure\/V2|\/CReq/i.test(frameUrl)) {
         return { detected: true, source: 'frame_url', url: frameUrl, kind: 'cardinal', uiVisible: true };
       }
       continue;
     }
 
-    if (!text && !/ThreeDSecure|CReq|auth\.visa\.com\/oauth2/i.test(frameUrl)) continue;
+    if (!text && !/ThreeDSecure\/V2|\/CReq/i.test(frameUrl)) continue;
 
     const isSms = /enviar sms/i.test(text);
-    const is3dsUi = THREEDS_TEXT_RE.test(text) || /ThreeDSecure|CReq/i.test(frameUrl);
+    const is3dsUi = THREEDS_TEXT_RE.test(text) || /ThreeDSecure\/V2|\/CReq/i.test(frameUrl);
     if (!is3dsUi) continue;
 
     return {
@@ -122,17 +95,28 @@ async function scan3dsUiFrames(page) {
 }
 
 /**
- * Detecta 3DS: tela visível primeiro; API /3ds/challenge → para na hora.
+ * Detecta 3DS: tela visível primeiro; API /3ds/challenge só após threedsUiWaitMs
+ * (tempo curto para ver se abre VBV antes de tratar como frictionless).
  */
 export async function detect3dsChallenge(page, gateCapture = null, opts = {}) {
-  const fast = detect3dsFast(page, gateCapture);
-  if (fast) return fast;
-
   const uiHit = await scan3dsUiFrames(page);
   if (uiHit) return uiHit;
 
+  for (const cap of gateCapture?.captures ?? []) {
+    const u = cap.url || '';
+    if (/cardinalcommerce\.com/i.test(u) && /ThreeDSecure\/V2|\/CReq/i.test(u)) {
+      return { detected: true, source: 'network', url: u, kind: 'cardinal', uiVisible: true };
+    }
+  }
+
   const apiCap = get3dsChallengeApiCapture(gateCapture);
   if (!apiCap) return null;
+
+  const firstSeen = opts.challengeApiFirstSeen ?? apiCap.ts ?? Date.now();
+  const waitMs = opts.threedsUiWaitMs ?? config.threedsUiWaitMs ?? 8000;
+  const elapsedSinceApi = Date.now() - firstSeen;
+
+  if (elapsedSinceApi < waitMs) return null;
 
   return {
     detected: true,
@@ -140,14 +124,13 @@ export async function detect3dsChallenge(page, gateCapture = null, opts = {}) {
     url: apiCap.url,
     kind: 'challenge_api',
     uiVisible: false,
-    waitedForUiMs: 0,
+    waitedForUiMs: elapsedSinceApi,
   };
 }
 
-/** Encerra gate-wait cedo quando 3DS aparece (não espera 120s). */
+/** Encerra gate-wait quando 3DS exige ação ou frictionless expirou. */
 export async function build3dsRequiredResult(page, session, gateCapture, threeDs, waitedMs, opts = {}) {
   const browserOpen = opts.browserOpen === true;
-  const visualVbv = isVisualVbv(threeDs);
   const msg = describe3dsKind(threeDs.kind, threeDs.hint || '', { browserOpen });
   console.log(
     `[automation][3ds] detectado em ${Math.round(waitedMs / 1000)}s ` +
@@ -167,12 +150,12 @@ export async function build3dsRequiredResult(page, session, gateCapture, threeDs
 
   return {
     status: '3ds_required',
-    url: page.url(),
+    url: page?.url?.() ?? '',
     gateCode: '3DS',
     gateMessage: msg,
     message: msg,
     threeDs,
-    visualVbv,
+    visualVbv: isVisualVbv(threeDs),
     requiresImmediateAction: threedsRequiresImmediateAction(threeDs),
     pagamentoErro: false,
     debug: null,
