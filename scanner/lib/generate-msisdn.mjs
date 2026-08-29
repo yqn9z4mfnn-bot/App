@@ -1,5 +1,6 @@
 import { listDistinctDdds, pickRandomMsisdnByDdd } from './numbers-db.mjs';
 import { fetchClaroLoginLink, normalizeBrMobile } from './fetch-claro-link.mjs';
+import { getProxyUrl, proxyEnabled } from './proxy.mjs';
 
 /**
  * Gera MSISDN: DDD aleatório do banco + 6 dígitos (após DDD) de um número real + 3 aleatórios.
