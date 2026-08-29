@@ -43,7 +43,6 @@ function proxyParts(opts = {}) {
     try {
       const u = new URL(explicit);
       if (u.username) user = normalizeProxyUsername(decodeURIComponent(u.username));
-      user = applyStickySession(user, opts);
       if (u.password && !pass) {
         return {
           host: u.hostname,
@@ -63,17 +62,7 @@ function proxyParts(opts = {}) {
     }
   }
 
-  user = applyStickySession(user, opts);
   return { host, port, user, pass };
-}
-
-/** Mesmo IP no HTTP e no Edge quando PROXY_ROTATE=0 (Smartproxy session). */
-function applyStickySession(user, { rotateIp = false } = {}) {
-  if (!user) return user;
-  if (rotateIp || proxyRotateDefault()) return user;
-  if (/[-_]session[-_]/i.test(user)) return user;
-  const sid = (env('PROXY_SESSION') || 'linkclaro').replace(/[^a-zA-Z0-9]/g, '');
-  return sid ? `${user}-session-${sid}` : user;
 }
 
 /** Config de proxy para Playwright (sem credencial na URL / no argv). */
