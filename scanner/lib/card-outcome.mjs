@@ -1,8 +1,10 @@
 /** Classifica o que fazer com o cartão da fila TXT após a recarga. */
+
 export function classifyCardListAction({ outcome, error } = {}) {
   if (error) {
     const msg = String(error?.message ?? error);
-    if (/negad|denied|recusad|não autoriz|bloqueado|insuficiente/i.test(msg)) return 'consumed';
+    if (isAutomationFailureMessage(msg)) return 'return';
+    if (isGateDenialMessage(msg)) return 'consumed';
     return 'return';
   }
 
@@ -20,47 +22,48 @@ export function classifyCardListAction({ outcome, error } = {}) {
 
   if (status === '3DS_REQUIRED' || rawStatus === '3ds_required') return 'consumed';
 
-  if (status === 'DENIED' || gateCode === 'DENIED') return 'consumed';
-  if (/^DENIED$/i.test(String(result.status ?? ''))) return 'consumed';
+  const bodyDenied = paymentBodyIsDenied(raw.gateResponse?.body);
+  const explicitDenied =
+    status === 'DENIED' ||
+    status === 'REJECTED' ||
+    status === 'FAILURE' ||
+    gateCode === 'DENIED' ||
+    rawStatus === 'denied';
 
-  if (isGateDenialMessage(msg) || gateIndicatesDenial(raw)) return 'consumed';
-
-  if (status === 'TIMEOUT' || rawStatus === 'timeout') return 'return';
-  if (status === 'AUTOMATION_FAIL') return 'return';
-
-  if (rawStatus === 'error' || status === 'ERROR' || status === 'PENDING') {
-    if (isAutomationFailureMessage(msg)) return 'return';
-    if (raw.gateResponse?.body || raw.gateResponse?.httpStatus) return 'consumed';
-    if (isGateDenialMessage(msg)) return 'consumed';
-    return 'return';
-  }
-
-  // SSE/API direta
-  const sseStatus = String(result.status ?? '').toUpperCase();
-  if (sseStatus === 'DENIED' || sseStatus === 'REJECTED' || sseStatus === 'FAILURE') {
+  if (explicitDenied || bodyDenied || isGateDenialMessage(msg)) {
+    if (isAutomationFailureMessage(msg) && !bodyDenied && gateCode !== 'DENIED') {
+      return 'return';
+    }
     return 'consumed';
   }
+
+  if (status === 'TIMEOUT' || rawStatus === 'timeout') return 'return';
+  if (status === 'AUTOMATION_FAIL' || rawStatus === 'error_manual') return 'return';
+  if (isAutomationFailureMessage(msg)) return 'return';
 
   return 'return';
 }
 
-function isGateDenialMessage(msg) {
-  return /negad|denied|recusad|não autoriz|bloqueado|insuficiente|saldo insuficiente|cartão inválido|transação negada|operadora recusou/i.test(
+export function isGateDenialMessage(msg) {
+  return /negad|denied|recusad|n[aã]o autoriz|bloqueado|insuficiente|saldo insuficiente|cart[aã]o inv[aá]lido|transa[cç][aã]o negada|operadora recusou|fraud|fraude|suspeit|CREDIT_CARD\s*-\s*422/i.test(
     String(msg),
   );
 }
 
-function isAutomationFailureMessage(msg) {
-  return /não capturado|iframe|element|click|limite de \d+ telas|timeout no pagamento|automação http|paminfo|error_manual|sessão|manual|playwright|browser/i.test(
+export function isAutomationFailureMessage(msg) {
+  return /formul[aá]rio\s+pan|pan n[aã]o abriu|n[aã]o hidrat|n[aã]o capturado|iframe|element|locator|click|limite de \d+ telas|timeout|timed?\s*out|automa[cç][aã]o(\s+http)?|paminfo|error_manual|sess[aã]o|manual|playwright|browser|proxy|fetch failed|net::|econnreset|etimedout|navigation|target closed|page\.goto|page closed|hidrat|checkout pode estar/i.test(
     String(msg),
   );
 }
 
-function gateIndicatesDenial(raw) {
-  if (!raw?.gateResponse?.body) return false;
-  const b = raw.gateResponse.body;
-  const st = String(b.status ?? b.payments?.[0]?.status ?? b.tags?.transaction?.status ?? '').toUpperCase();
-  return st === 'DENIED' || st === 'REJECTED' || st === 'FAILURE';
+export function paymentBodyIsDenied(body) {
+  if (!body || typeof body !== 'object') return false;
+  const st = String(
+    body.status ?? body.payments?.[0]?.status ?? body.tags?.transaction?.status ?? '',
+  ).toUpperCase();
+  if (st === 'DENIED' || st === 'REJECTED' || st === 'FAILURE') return true;
+  if (Array.isArray(body) && body[0]?.status === 'nok') return true;
+  return false;
 }
 
 export function cardListActionLabel(action, { outcome } = {}) {
@@ -73,6 +76,6 @@ export function cardListActionLabel(action, { outcome } = {}) {
     }
     return '🚫 negado na gate → removido da fila';
   }
-  if (action === 'return') return '↩️ falha de automação → cartão mantido na fila';
+  if (action === 'return') return '↩️ falha (não foi a gate) → cartão voltou pra fila';
   return '';
 }

@@ -1,5 +1,10 @@
 import { cardToPam, centsToRechargeValue } from './card-to-pam.mjs';
 import { isVisualVbv } from '../automation/threeds.mjs';
+import {
+  isAutomationFailureMessage,
+  isGateDenialMessage,
+  paymentBodyIsDenied,
+} from './card-outcome.mjs';
 
 const DEFAULT_URL = process.env.AUTOMATION_API_URL || 'http://127.0.0.1:3000';
 
@@ -169,7 +174,7 @@ function normalizeTarget(n) {
   return String(n ?? '').replace(/\D/g, '');
 }
 
-function mapAutomationPaymentStatus(pr, data) {
+export function mapAutomationPaymentStatus(pr, data = {}) {
   const rawStatus = String(pr.status || data.status || 'UNKNOWN').toLowerCase();
   const msg = String(pr.gateMessage || pr.message || data.lastError || '');
   const gateCode = String(pr.gateCode ?? '').toUpperCase();
@@ -178,18 +183,11 @@ function mapAutomationPaymentStatus(pr, data) {
   if (rawStatus === '3ds_required') return '3DS_REQUIRED';
   if (rawStatus === 'timeout') return 'TIMEOUT';
 
-  if (rawStatus === 'error') {
-    if (gateCode === 'DENIED') return 'DENIED';
-    if (pr.gateResponse?.body) {
-      const b = pr.gateResponse.body;
-      const st = String(b.status ?? b.payments?.[0]?.status ?? '').toUpperCase();
-      if (st === 'DENIED' || st === 'REJECTED') return 'DENIED';
-    }
-    if (/negad|denied|recusad|não autoriz|bloqueado|insuficiente/i.test(msg)) return 'DENIED';
-    if (/não capturado|iframe|element|click|limite de \d+ telas|error_manual|manual/i.test(msg)) {
-      return 'AUTOMATION_FAIL';
-    }
-    return pr.pagamentoErro ? 'DENIED' : 'AUTOMATION_FAIL';
+  if (rawStatus === 'error' || rawStatus === 'error_manual') {
+    if (isAutomationFailureMessage(msg)) return 'AUTOMATION_FAIL';
+    if (gateCode === 'DENIED' || paymentBodyIsDenied(pr.gateResponse?.body)) return 'DENIED';
+    if (isGateDenialMessage(msg)) return 'DENIED';
+    return 'AUTOMATION_FAIL';
   }
 
   return 'PENDING';
