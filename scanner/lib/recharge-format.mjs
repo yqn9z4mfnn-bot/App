@@ -34,7 +34,13 @@ function shortReason(msg) {
   if (!t.trim()) return '';
   if (/fraud|fraude|suspeit/i.test(t)) return 'Fraude suspeita';
   if (/insuficiente|saldo/i.test(t)) return 'Saldo insuficiente';
-  if (isCheckoutErrorText(t)) return 'Não foi possível concluir o pagamento';
+  if (isCheckoutErrorText(t)) {
+    const code = t.match(/informe c[oó]digo\s*(\d+)/i) || t.match(/c[oó]digo\s+(\d+)/i);
+    if (code && /compra n[aã]o conclu[ií]da|informe c[oó]digo/i.test(t)) {
+      return `Compra não concluída (código ${code[1]})`;
+    }
+    return 'Não foi possível concluir o pagamento';
+  }
   if (/3ds|vbv|banco/i.test(t)) return 'Confirme no banco';
   if (/timeout|esgotad/i.test(t)) return 'Tempo esgotado';
   if (/proxy|fetch failed|rede/i.test(t)) return 'Falha de rede';
@@ -172,14 +178,17 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
     automation?.raw?.message ??
     '';
   const pageUrl = automation?.raw?.url || automation?.url || result?.pageUrl || '';
+  const threeDsHint = result?.threeDsHint || automation?.raw?.threeDs?.hint || '';
   if (
     status === '3DS_REQUIRED' &&
-    looksLikeCheckoutError({ url: pageUrl, message: reason })
+    looksLikeCheckoutError({ url: pageUrl, message: `${reason} ${threeDsHint}` })
   ) {
     status = 'DENIED';
-    if (!isCheckoutErrorText(reason)) {
-      reason = 'Não foi possível concluir o pagamento';
-    }
+    reason = isCheckoutErrorText(threeDsHint)
+      ? threeDsHint
+      : isCheckoutErrorText(reason)
+        ? reason
+        : 'Não foi possível concluir o pagamento';
   }
 
   const login = String(loginMsisdn ?? '').replace(/\D/g, '');

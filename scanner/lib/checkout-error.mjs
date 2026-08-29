@@ -4,7 +4,7 @@ export const CHECKOUT_ERROR_URL_RE =
   /\/bsc\/checkout\/error(?:\?|$|\/)|\/checkout\/error(?:\?|$|\/)|pagamento-erro/i;
 
 export const CHECKOUT_ERROR_TEXT_RE =
-  /n[aã]o foi poss[ií]vel concluir|n[aã]o foi poss[ií]vel processar|n[aã]o conseguimos (processar|realizar)|infelizmente n[aã]o conseguimos|pagamento recusad|transa[cç][aã]o negad|cart[aã]o recusad|algo deu errado/i;
+  /n[aã]o foi poss[ií]vel concluir|n[aã]o foi poss[ií]vel processar|n[aã]o conseguimos (processar|realizar)|infelizmente n[aã]o conseguimos|pagamento recusad|transa[cç][aã]o negad|cart[aã]o recusad|algo deu errado|compra n[aã]o conclu[ií]da|negada com informa[cç][aã]o|sua compra n[aã]o p[oô]de ser conclu[ií]da|informe c[oó]digo\s*\d+|ligue no n[uú]mero informado no verso/i;
 
 const DEFAULT_HINT = 'Não foi possível concluir o pagamento';
 
@@ -25,7 +25,10 @@ export function checkoutErrorHint(text, fallback = DEFAULT_HINT) {
     .replace(/\s+/g, ' ')
     .trim();
   if (!t) return fallback;
+  const code = t.match(/informe c[oó]digo\s*(\d+)/i);
+  if (code) return `Compra não concluída (código ${code[1]})`;
   const m =
+    t.match(/compra n[aã]o conclu[ií]da[^.!]*/i) ||
     t.match(/n[aã]o foi poss[ií]vel concluir[^.!]*/i) ||
     t.match(/infelizmente n[aã]o conseguimos[^.!]*/i) ||
     t.match(/n[aã]o conseguimos (processar|realizar)[^.!]*/i);

@@ -178,11 +178,15 @@ function normalizeTarget(n) {
 export function mapAutomationPaymentStatus(pr, data = {}) {
   const rawStatus = String(pr.status || data.status || 'UNKNOWN').toLowerCase();
   const msg = String(pr.gateMessage || pr.message || data.lastError || '');
+  const threeDsHint = String(pr.threeDs?.hint || '');
   const gateCode = String(pr.gateCode ?? '').toUpperCase();
   const pageUrl = pr.url || data.url || pr.debug?.pageUrl || '';
 
   if (rawStatus === 'success') return 'CONFIRMED';
-  if (rawStatus !== 'success' && looksLikeCheckoutError({ url: pageUrl, message: msg })) {
+  if (
+    rawStatus !== 'success' &&
+    looksLikeCheckoutError({ url: pageUrl, message: `${msg} ${threeDsHint}` })
+  ) {
     return 'DENIED';
   }
   if (rawStatus === '3ds_required') return '3DS_REQUIRED';

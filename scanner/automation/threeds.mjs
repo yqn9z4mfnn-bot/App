@@ -1,6 +1,10 @@
 import { config } from './config.mjs';
 import { saveStallDebug } from './debug.mjs';
-import { isCheckoutErrorUrl, overrideThreedsIfCheckoutError } from '../lib/checkout-error.mjs';
+import {
+  isCheckoutErrorText,
+  isCheckoutErrorUrl,
+  overrideThreedsIfCheckoutError,
+} from '../lib/checkout-error.mjs';
 
 /** URLs típicas de fluxo 3DS (Cardinal, Visa, Eldorado challenge). */
 const THREEDS_URL_RE =
@@ -41,6 +45,7 @@ export function get3dsChallengeApiCapture(gateCapture) {
 /** VBV/3DS com tela visível (iframe Cardinal, CReq, texto SMS, etc.). */
 export function isVisualVbv(threeDs) {
   if (!threeDs?.detected) return false;
+  if (isCheckoutErrorText(threeDs.hint)) return false;
   if (threeDs.uiVisible === true && threeDs.hint && THREEDS_TEXT_RE.test(threeDs.hint)) return true;
   if (threeDs.kind === 'sms') return true;
   const url = String(threeDs.url || '');
@@ -78,6 +83,7 @@ async function scan3dsUiFrames(page) {
     }
 
     if (!text && !/ThreeDSecure\/V2|\/CReq/i.test(frameUrl)) continue;
+    if (isCheckoutErrorText(text)) return null;
 
     const isSms = /enviar sms/i.test(text);
     const is3dsUi = THREEDS_TEXT_RE.test(text) || /ThreeDSecure\/V2|\/CReq/i.test(frameUrl);

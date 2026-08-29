@@ -139,6 +139,46 @@ const sse3ds = buildPaymentResultFromHttpSse(
 );
 check('http sse 3DS real', sse3ds.status === '3ds_required', sse3ds.status);
 
+const CODE60 =
+  'Negada com informação Compra não concluída Compra não concluída. Ligue no número informado no verso do cartão para maiores informações. Sua compra não pôde ser concluída, informe código 60 ao atendente via Central de Atendimento Sair';
+check('texto codigo 60', isCheckoutErrorText(CODE60));
+check('hint codigo 60', /código 60/i.test(checkoutErrorHint(CODE60)), checkoutErrorHint(CODE60));
+
+const bubble60 = formatRechargeResult({
+  result: {
+    status: '3DS_REQUIRED',
+    message: 'VBV/3DS visual — confirme manualmente no Edge',
+    visualVbv: true,
+    threeDsKind: 'cardinal',
+    threeDsHint: CODE60,
+  },
+  valueCents: 3000,
+  cardMask: '****6383',
+  loginMsisdn: '11992006176',
+  targetMsisdn: '61995063971',
+  automation: {
+    raw: {
+      url: 'https://eldorado.m4u.com.br/bsc/checkout?code=b00490cb-6689-46d9-89c4-f00d0ed6ca1d',
+      status: '3ds_required',
+      threeDs: { kind: 'cardinal', hint: CODE60, uiVisible: true },
+    },
+  },
+});
+check('bolha codigo 60 titulo', /Recarga negada/.test(bubble60), bubble60);
+check('bolha codigo 60 motivo', /Compra não concluída \(código 60\)/.test(bubble60), bubble60);
+check('bolha codigo 60 nao VBV', !/3DS visual|Confirme no banco/i.test(bubble60), bubble60);
+
+const mapped60 = mapAutomationPaymentStatus(
+  {
+    status: '3ds_required',
+    gateCode: '3DS',
+    gateMessage: CODE60,
+    url: 'https://eldorado.m4u.com.br/bsc/checkout?code=b00490cb-6689-46d9-89c4-f00d0ed6ca1d',
+  },
+  {},
+);
+check('map codigo 60 → DENIED', mapped60 === 'DENIED', mapped60);
+
 if (failed) {
   console.error(`${failed} falha(s)`);
   process.exit(1);
