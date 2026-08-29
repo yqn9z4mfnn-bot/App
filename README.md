@@ -33,7 +33,18 @@ Token fica só em `~/.local/share/linkclaro-bot/.env` (chmod 600):
 TELEGRAM_BOT_TOKEN=seu_token
 ```
 
-Proxy desligado por padrão. Para religar: `PROXY_ENABLED=1` no `.env`.
+Proxy desligado por padrão. Para gerador de link e API Claro via Smartproxy:
+
+```bash
+PROXY_ENABLED=1
+PROXY_SERVER=proxy.smartproxy.net
+PROXY_PORT=3120
+PROXY_USERNAME=seu_usuario_area-BR
+PROXY_PASSWORD=sua_senha
+CLARO_LINK_TIMEOUT_MS=15000
+```
+
+O gerador de link (`fetch-claro-link`) e a API Claro (`http.mjs`) usam o mesmo proxy quando `PROXY_ENABLED=1`.
 
 No Telegram:
 - envie um **`.txt`** (um número por linha) → gera JWT, lê valores e **salva** (1 por vez)

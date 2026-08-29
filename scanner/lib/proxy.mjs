@@ -8,6 +8,11 @@ function env(name) {
   return v == null || v === '' ? null : String(v);
 }
 
+function envInt(name, fallback) {
+  const n = Number.parseInt(process.env[name] ?? '', 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function getProxyUrl() {
   const enabled = (env('PROXY_ENABLED') || '').toLowerCase();
   if (enabled !== '1' && enabled !== 'true' && enabled !== 'yes') return null;
@@ -48,8 +53,10 @@ export function getProxyDispatcher() {
   if (!agent) {
     agent = new ProxyAgent({
       uri,
-      requestTls: { timeout: 20_000 },
-      connectTimeout: 15_000,
+      requestTls: { timeout: envInt('PROXY_REQUEST_TIMEOUT_MS', 15_000) },
+      connectTimeout: envInt('PROXY_CONNECT_TIMEOUT_MS', 10_000),
+      keepAliveTimeout: envInt('PROXY_KEEPALIVE_MS', 30_000),
+      keepAliveMaxTimeout: envInt('PROXY_KEEPALIVE_MAX_MS', 60_000),
     });
     if (!logged) {
       logged = true;

@@ -1,3 +1,5 @@
+import { proxiedFetch } from './proxy.mjs';
+
 const DEFAULT_LINK_API = 'https://sarcastic-pertinaciously-shawnda.ngrok-free.dev';
 
 export function normalizeBrMobile(raw) {
@@ -19,19 +21,21 @@ export function looksLikeMsisdn(text) {
   return Boolean(normalizeBrMobile(trimmed));
 }
 
-export async function fetchClaroLoginLink(msisdn, { timeoutMs = 20_000 } = {}) {
+export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
   const number = normalizeBrMobile(msisdn);
   if (!number) {
     throw new Error('Número inválido. Use DDD + 9 dígitos, ex: 38991121276');
   }
 
+  const defaultTimeout = Number(process.env.CLARO_LINK_TIMEOUT_MS) || 20_000;
+  const waitMs = timeoutMs ?? defaultTimeout;
   const base = String(process.env.CLARO_LINK_API ?? DEFAULT_LINK_API).replace(/\/+$/, '');
   const url = `${base}/claro/link/${number}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), waitMs);
 
   try {
-    const res = await fetch(url, {
+    const res = await proxiedFetch(url, {
       headers: {
         accept: 'application/json',
         'ngrok-skip-browser-warning': 'true',
@@ -44,6 +48,9 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs = 20_000 } = {}) {
       body = text ? JSON.parse(text) : {};
     } catch {
       throw new Error(`Gerador de link retornou HTML/texto (${res.status})`);
+    }
+    if (res.status === 429) {
+      throw new Error(body.error || body.message || 'Rate limit (429) ao gerar link Claro');
     }
     if (!res.ok) {
       throw new Error(body.error || body.message || `Gerador de link HTTP ${res.status}`);
