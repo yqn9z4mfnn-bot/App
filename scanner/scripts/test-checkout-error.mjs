@@ -213,6 +213,37 @@ const mapped60 = mapAutomationPaymentStatus(
 );
 check('map codigo 60 → DENIED', mapped60 === 'DENIED', mapped60);
 
+const SUCCESS_INCIDENT_URL =
+  'https://eldorado.m4u.com.br/bsc/checkout/success?code=452efbfd-378d-4893-b50d-fdca3b9bf7db';
+const successIncidentOutcome = {
+  result: {
+    status: '3DS_REQUIRED',
+    message: '3DS frictionless — aguardando confirmação automática',
+    visualVbv: false,
+    threeDsKind: 'challenge_api',
+  },
+  valueCents: 3000,
+  cardMask: '****1864',
+  loginMsisdn: '11992006644',
+  targetMsisdn: '61995063971',
+  automation: {
+    raw: {
+      status: '3ds_required',
+      url: SUCCESS_INCIDENT_URL,
+      gateCode: '3DS',
+      gateMessage: '3DS frictionless — aguardando confirmação automática',
+    },
+  },
+};
+const bubbleApproved = formatRechargeResult(successIncidentOutcome, { footer: 'Aprovado · fila 0' });
+check('incidente 1864 titulo aprovada', /Recarga aprovada/.test(bubbleApproved), bubbleApproved);
+check('incidente 1864 nao 3DS', !/Validação 3DS|Confirme no app/i.test(bubbleApproved), bubbleApproved);
+check(
+  'incidente 1864 classifica aprovado',
+  classifyCardListAction({ outcome: successIncidentOutcome }) === 'approved',
+  classifyCardListAction({ outcome: successIncidentOutcome }),
+);
+
 if (failed) {
   console.error(`${failed} falha(s)`);
   process.exit(1);

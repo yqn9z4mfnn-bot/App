@@ -11,6 +11,7 @@ import { absorbCheckoutCtxFromCapture, createCheckoutCtx } from './card-cleanup.
 import { waitPaymentResult as waitHttpPaymentSse } from '../lib/recharge.mjs';
 import {
   CHECKOUT_ERROR_TEXT_RE,
+  CHECKOUT_SUCCESS_TEXT_RE,
   checkoutErrorHint,
   isCheckoutErrorUrl,
   isCheckoutSuccessUrl,
@@ -252,6 +253,9 @@ const scanPageForPaymentOutcome = async (page) => {
     try {
       const text = await frame.evaluate(() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim());
       if (!text) continue;
+      if (CHECKOUT_SUCCESS_TEXT_RE.test(text)) {
+        return { status: 'success', hint: text.slice(0, 500), frameUrl: frame.url() };
+      }
       if (CHECKOUT_ERROR_TEXT_RE.test(text)) {
         return { status: 'error', hint: text.slice(0, 500), frameUrl: frame.url() };
       }
@@ -261,6 +265,7 @@ const scanPageForPaymentOutcome = async (page) => {
   }
   try {
     const text = (await page.locator('body').innerText({ timeout: 400 })).replace(/\s+/g, ' ').trim();
+    if (CHECKOUT_SUCCESS_TEXT_RE.test(text)) return { status: 'success', hint: text.slice(0, 500), frameUrl: page.url() };
     if (CHECKOUT_ERROR_TEXT_RE.test(text)) return { status: 'error', hint: text.slice(0, 500), frameUrl: page.url() };
   } catch {
     // ignore
@@ -419,20 +424,28 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
         }
         const continueWait = config.threedsContinueGateWait !== false;
         if (!continueWait || stopNow) {
+          const pageUrl = page.url();
+          if (isCheckoutSuccessUrl(pageUrl)) {
+            return buildPaymentResult(page, 'success', pageUrl, gateCapture, 'Pagamento confirmado');
+          }
           const errNow = await takeCheckoutErrorResult(page, gateCapture);
           if (errNow) return errNow;
           return overrideThreedsIfCheckoutError(
             await build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, { browserOpen: stopNow }),
-            { url: page.url() },
+            { url: pageUrl },
           );
         }
         const extraMs = config.threedsExtraWaitMs ?? 12000;
         if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
+          const pageUrl = page.url();
+          if (isCheckoutSuccessUrl(pageUrl)) {
+            return buildPaymentResult(page, 'success', pageUrl, gateCapture, 'Pagamento confirmado');
+          }
           const errNow = await takeCheckoutErrorResult(page, gateCapture);
           if (errNow) return errNow;
           return overrideThreedsIfCheckoutError(
             await build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed),
-            { url: page.url() },
+            { url: pageUrl },
           );
         }
       }
@@ -444,6 +457,9 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
         ...gateCapture,
         best: () => takeConfirmed(),
       });
+    }
+    if (visible?.status === 'success' || isCheckoutSuccessUrl(page.url())) {
+      return buildPaymentResult(page, 'success', page.url(), gateCapture, 'Pagamento confirmado');
     }
     if (visible?.status === 'error' && !/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
       return buildPaymentResult(page, 'error', url, gateCapture, checkoutErrorHint(visible.hint));
@@ -457,6 +473,14 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
   }
 
   const elapsed = Date.now() - start;
+  try {
+    const finalUrl = page.url();
+    if (isCheckoutSuccessUrl(finalUrl)) {
+      return buildPaymentResult(page, 'success', finalUrl, gateCapture, 'Pagamento confirmado');
+    }
+  } catch {
+    // page fechada
+  }
   const timeoutError = await takeCheckoutErrorResult(page, gateCapture);
   if (timeoutError) return timeoutError;
   if (session?.threeDsSeen) {

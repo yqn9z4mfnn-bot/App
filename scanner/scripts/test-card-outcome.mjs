@@ -98,6 +98,22 @@ const cases = [
     expected: 'consumed',
   },
   {
+    name: '3DS + checkout/success é aprovado',
+    input: {
+      outcome: {
+        result: { status: '3DS_REQUIRED', message: '3DS frictionless — aguardando confirmação automática' },
+        automation: {
+          raw: {
+            status: '3ds_required',
+            url: 'https://eldorado.m4u.com.br/bsc/checkout/success?code=452efbfd-378d-4893-b50d-fdca3b9bf7db',
+            gateMessage: '3DS frictionless — aguardando confirmação automática',
+          },
+        },
+      },
+    },
+    expected: 'approved',
+  },
+  {
     name: 'aprovado',
     input: { outcome: outcome('CONFIRMED', { rawStatus: 'success' }) },
     expected: 'approved',

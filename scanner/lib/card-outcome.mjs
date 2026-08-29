@@ -1,3 +1,5 @@
+import { looksLikeCheckoutSuccess } from './checkout-error.mjs';
+
 /** Classifica o que fazer com o cartão da fila TXT após a recarga. */
 
 export function classifyCardListAction({ outcome, error } = {}) {
@@ -19,6 +21,14 @@ export function classifyCardListAction({ outcome, error } = {}) {
 
   if (status === 'CONFIRMED' || status === 'SUCCESS') return 'approved';
   if (rawStatus === 'success') return 'approved';
+  if (
+    looksLikeCheckoutSuccess({
+      url: raw.url,
+      message: `${msg} ${raw.threeDs?.hint || ''}`,
+    })
+  ) {
+    return 'approved';
+  }
 
   if (status === '3DS_REQUIRED' || rawStatus === '3ds_required') return 'consumed';
 
