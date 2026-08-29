@@ -29,43 +29,62 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
 
   const defaultTimeout = Number(process.env.CLARO_LINK_TIMEOUT_MS) || 20_000;
   const waitMs = timeoutMs ?? defaultTimeout;
+  const maxRetries = Number(process.env.CLARO_LINK_429_RETRIES) || 3;
   const base = String(process.env.CLARO_LINK_API ?? DEFAULT_LINK_API).replace(/\/+$/, '');
   const url = `${base}/claro/link/${number}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), waitMs);
 
-  try {
-    const res = await proxiedFetch(url, {
-      headers: {
-        accept: 'application/json',
-        'ngrok-skip-browser-warning': 'true',
-      },
-      signal: controller.signal,
-    });
-    const text = await res.text();
-    let body;
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), waitMs);
     try {
-      body = text ? JSON.parse(text) : {};
-    } catch {
-      throw new Error(`Gerador de link retornou HTML/texto (${res.status})`);
+      const res = await proxiedFetch(url, {
+        rotateIp: true,
+        headers: {
+          accept: 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        signal: controller.signal,
+      });
+      const text = await res.text();
+      let body;
+      try {
+        body = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`Gerador de link retornou HTML/texto (${res.status})`);
+      }
+      if (res.status === 429) {
+        lastErr = new Error(body.error || body.message || 'Rate limit (429) ao gerar link Claro');
+        if (attempt < maxRetries) {
+          const delay = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 800;
+          await new Promise((r) => setTimeout(r, delay * attempt));
+          continue;
+        }
+        throw lastErr;
+      }
+      if (!res.ok) {
+        throw new Error(body.error || body.message || `Gerador de link HTTP ${res.status}`);
+      }
+      const link = body.link || body.url || body.loginUrl;
+      if (!link || (!/[?&]t=/.test(String(link)) && !/^eyJ/.test(String(link)))) {
+        throw new Error('Gerador de link não devolveu JWT');
+      }
+      return { msisdn: number, link: String(link) };
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error('Timeout ao gerar o link Claro');
+      }
+      lastErr = err;
+      if (attempt < maxRetries && /429|Too Many|rate limit/i.test(String(err.message))) {
+        const delay = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 800;
+        await new Promise((r) => setTimeout(r, delay * attempt));
+        continue;
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-    if (res.status === 429) {
-      throw new Error(body.error || body.message || 'Rate limit (429) ao gerar link Claro');
-    }
-    if (!res.ok) {
-      throw new Error(body.error || body.message || `Gerador de link HTTP ${res.status}`);
-    }
-    const link = body.link || body.url || body.loginUrl;
-    if (!link || (!/[?&]t=/.test(String(link)) && !/^eyJ/.test(String(link)))) {
-      throw new Error('Gerador de link não devolveu JWT');
-    }
-    return { msisdn: number, link: String(link) };
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error('Timeout ao gerar o link Claro');
-    }
-    throw err;
-  } finally {
-    clearTimeout(timer);
   }
+
+  throw lastErr || new Error('Falha ao gerar link Claro');
 }
