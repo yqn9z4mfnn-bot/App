@@ -111,6 +111,33 @@ export const hasSmartCheckoutApiCall = (gateCapture, sinceTs = 0) =>
 export const attachGateCapture = (context) => {
   const captures = [];
   const checkoutCtx = createCheckoutCtx();
+  const waiters = new Set();
+  const state = { confirmed: null, denied: null };
+
+  const wakeWaiters = () => {
+    for (const fn of waiters) {
+      try {
+        fn();
+      } catch {
+        // ignore
+      }
+    }
+    waiters.clear();
+  };
+
+  const waitSignal = (ms) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        waiters.delete(onWake);
+        resolve('timeout');
+      }, Math.max(20, ms));
+      const onWake = () => {
+        clearTimeout(timer);
+        resolve('signal');
+      };
+      waiters.add(onWake);
+    });
+
   const onResponse = async (response) => {
     try {
       const url = response.url();
@@ -138,6 +165,13 @@ export const attachGateCapture = (context) => {
       captures.push(cap);
       if (captures.length > 80) captures.splice(0, captures.length - 80);
       logGateCapture(cap);
+      if (gateIndicatesSuccess(cap)) {
+        state.confirmed = cap;
+        wakeWaiters();
+      } else if (gateIndicatesError(cap)) {
+        state.denied = cap;
+        wakeWaiters();
+      }
     } catch {
       // ignore
     }
@@ -146,12 +180,20 @@ export const attachGateCapture = (context) => {
   return {
     captures,
     checkoutCtx,
+    get confirmed() {
+      return state.confirmed;
+    },
+    get denied() {
+      return state.denied;
+    },
+    waitSignal,
     detach: () => {
       try {
         context.off('response', onResponse);
       } catch {
         // ignore
       }
+      wakeWaiters();
     },
     best: () => {
       if (!captures.length) return null;
@@ -214,7 +256,7 @@ const scanPageForPaymentOutcome = async (page) => {
     }
   }
   try {
-    const text = (await page.locator('body').innerText({ timeout: 1500 })).replace(/\s+/g, ' ').trim();
+    const text = (await page.locator('body').innerText({ timeout: 400 })).replace(/\s+/g, ' ').trim();
     if (PAYMENT_ERROR_TEXT_RE.test(text)) return { status: 'error', hint: text.slice(0, 500), frameUrl: page.url() };
   } catch {
     // ignore
@@ -262,10 +304,17 @@ const logGateWaitHeartbeat = (elapsedMs, page, gateCapture, lastPending) => {
 export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture = null, session = null, opts = {}) => {
   const start = Date.now();
   let lastHeartbeat = 0;
+  let lastUiScan = 0;
   let challengeApiFirstSeen = null;
   let threedsWaitLogged = false;
   const lastPending = { value: false };
   const pollMs = opts.pollMs ?? config.pollIntervalMs;
+
+  const takeConfirmed = () =>
+    gateCapture?.confirmed || findConfirmedPaymentCapture(gateCapture);
+  const takeDenied = () =>
+    gateCapture?.denied ||
+    ((gateCapture?.best?.() && gateIndicatesError(gateCapture.best())) ? gateCapture.best() : null);
 
   while (Date.now() - start < timeoutMs) {
     const elapsed = Date.now() - start;
@@ -275,13 +324,14 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
     }
 
     const url = page.url();
-    const confirmed = findConfirmedPaymentCapture(gateCapture);
+    const confirmed = takeConfirmed();
     if (confirmed) {
+      console.log('[automation][gate] CONFIRMED na captura — respondendo agora');
       return buildPaymentResult(page, 'success', url, { ...gateCapture, best: () => confirmed });
     }
 
-    const best = gateCapture?.best?.() || null;
-    if (best && gateIndicatesError(best)) {
+    const denied = takeDenied();
+    if (denied) {
       return buildPaymentResult(page, 'error', url, gateCapture);
     }
 
@@ -300,39 +350,66 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       );
     }
 
-    const threeDs = await detect3dsChallenge(page, gateCapture, {
-      challengeApiFirstSeen,
-      threedsUiWaitMs: config.threedsUiWaitMs,
-    });
-    if (threeDs?.detected) {
-      const stopNow = threedsRequiresImmediateAction(threeDs);
-      if (session && !session.threeDsSeen) {
-        session.threeDsSeen = threeDs;
-        session.threeDsSeenAt = Date.now();
-        if (stopNow) {
-          console.log('[automation][3ds] VBV visual — parando na hora');
-        } else {
-          console.log(
-            `[automation][3ds] frictionless — aguardando CONFIRMED até ${Math.round((config.threedsExtraWaitMs || 12000) / 1000)}s…`,
-          );
+    const now = Date.now();
+    const shouldScanUi = now - lastUiScan >= 400;
+    if (shouldScanUi) {
+      lastUiScan = now;
+      const threeDs = await detect3dsChallenge(page, gateCapture, {
+        challengeApiFirstSeen,
+        threedsUiWaitMs: config.threedsUiWaitMs,
+      });
+      if (takeConfirmed()) {
+        console.log('[automation][gate] CONFIRMED durante scan 3DS — respondendo agora');
+        return buildPaymentResult(page, 'success', page.url(), {
+          ...gateCapture,
+          best: () => takeConfirmed(),
+        });
+      }
+      if (threeDs?.detected) {
+        const stopNow = threedsRequiresImmediateAction(threeDs);
+        if (session && !session.threeDsSeen) {
+          session.threeDsSeen = threeDs;
+          session.threeDsSeenAt = Date.now();
+          if (stopNow) {
+            console.log('[automation][3ds] VBV visual — parando na hora');
+          } else {
+            console.log(
+              `[automation][3ds] frictionless — aguardando CONFIRMED até ${Math.round((config.threedsExtraWaitMs || 12000) / 1000)}s…`,
+            );
+          }
+        }
+        const continueWait = config.threedsContinueGateWait !== false;
+        if (!continueWait || stopNow) {
+          return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, { browserOpen: stopNow });
+        }
+        const extraMs = config.threedsExtraWaitMs ?? 12000;
+        if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
+          return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
         }
       }
-      const continueWait = config.threedsContinueGateWait !== false;
-      if (!continueWait || stopNow) {
-        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, { browserOpen: stopNow });
+    }
+
+    const hasPaymentCapture = (gateCapture?.captures ?? []).some((c) =>
+      /\/payments/i.test(c.url || ''),
+    );
+    if (!hasPaymentCapture) {
+      const visible = await scanPageForPaymentOutcome(page);
+      if (takeConfirmed()) {
+        return buildPaymentResult(page, 'success', page.url(), {
+          ...gateCapture,
+          best: () => takeConfirmed(),
+        });
       }
-      const extraMs = config.threedsExtraWaitMs ?? 12000;
-      if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
-        return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+      if (visible?.status === 'error' && !/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
+        return buildPaymentResult(page, 'error', url, gateCapture, visible.hint);
       }
     }
 
-    const visible = await scanPageForPaymentOutcome(page);
-    if (visible?.status === 'error' && !/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
-      return buildPaymentResult(page, 'error', url, gateCapture, visible.hint);
+    if (typeof gateCapture?.waitSignal === 'function') {
+      await gateCapture.waitSignal(pollMs);
+    } else {
+      await sleep(pollMs);
     }
-
-    await sleep(pollMs);
   }
 
   const elapsed = Date.now() - start;

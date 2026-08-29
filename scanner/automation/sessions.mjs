@@ -299,11 +299,6 @@ const scheduleFinishPaymentSession = async (sessionId, session, paymentResult, o
     });
     return;
   }
-  const mustAwait = config.removeCardAfterRecharge && !fast && gateMode === 'browser';
-  if (mustAwait) {
-    await finishPaymentSession(sessionId, session, paymentResult, { gateMode });
-    return;
-  }
   void finishPaymentSession(sessionId, session, paymentResult, { gateMode }).catch((err) => {
     console.log(`[automation] finish async: ${String(err?.message || err).slice(0, 100)}`);
   });
