@@ -1,5 +1,5 @@
+import './load-env.mjs';
 import { fetch as undiciFetch, ProxyAgent } from 'undici';
-import { randomBytes } from 'node:crypto';
 
 let sharedAgent;
 let logged = false;
@@ -14,7 +14,7 @@ function envInt(name, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function proxyEnabled() {
+export function proxyEnabled() {
   const enabled = (env('PROXY_ENABLED') || '').toLowerCase();
   return enabled === '1' || enabled === 'true' || enabled === 'yes';
 }
@@ -25,26 +25,52 @@ function proxyRotateDefault() {
   return ['1', 'true', 'yes'].includes(raw.toLowerCase());
 }
 
-/** Monta username Smartproxy — sem session = IP novo por conexão. */
-function buildProxyUsername(baseUser, { rotateIp = false } = {}) {
-  const user = String(baseUser ?? '').trim();
-  if (!user || !rotateIp) return user;
-  if (/-session-/i.test(user)) return user;
-  const token = randomBytes(4).toString('hex');
-  return `${user}-session-${token}`;
+/** Remove session sticky do username — rotação = IP novo por conexão. */
+export function normalizeProxyUsername(baseUser) {
+  return String(baseUser ?? '')
+    .trim()
+    .replace(/[-_](session|sessionduration)[-_a-z0-9]*/gi, '');
+}
+
+function proxyParts(opts = {}) {
+  const host = env('PROXY_SERVER') || env('PROXY_HOST');
+  const port = env('PROXY_PORT');
+  const pass = env('PROXY_PASSWORD') || env('PROXY_PASS');
+  let user = normalizeProxyUsername(env('PROXY_USERNAME') || env('PROXY_USER'));
+
+  const explicit = env('PROXY_URL');
+  if (explicit) {
+    try {
+      const u = new URL(explicit);
+      if (u.username) user = normalizeProxyUsername(decodeURIComponent(u.username));
+      if (u.password && !pass) {
+        return {
+          host: u.hostname,
+          port: u.port || port,
+          user,
+          pass: decodeURIComponent(u.password),
+        };
+      }
+      return {
+        host: u.hostname || host,
+        port: u.port || port,
+        user,
+        pass: pass || (u.password ? decodeURIComponent(u.password) : null),
+      };
+    } catch {
+      // fall through
+    }
+  }
+
+  return { host, port, user, pass };
 }
 
 export function getProxyUrl(opts = {}) {
   if (!proxyEnabled()) return null;
-  const explicit = env('PROXY_URL');
-  if (explicit) return explicit;
 
-  const host = env('PROXY_SERVER') || env('PROXY_HOST');
-  const port = env('PROXY_PORT');
+  const { host, port, user, pass } = proxyParts(opts);
   if (!host || !port) return null;
 
-  const user = buildProxyUsername(env('PROXY_USERNAME') || env('PROXY_USER'), opts);
-  const pass = env('PROXY_PASSWORD') || env('PROXY_PASS');
   if (user && pass) {
     return `http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}`;
   }
@@ -53,19 +79,10 @@ export function getProxyUrl(opts = {}) {
 
 export function describeProxy() {
   if (!getProxyUrl()) return null;
-  const host = env('PROXY_SERVER') || env('PROXY_HOST');
-  const port = env('PROXY_PORT');
+  const { host, port } = proxyParts();
   const rotate = proxyRotateDefault() ? ' rotate' : '';
-  if (env('PROXY_URL')) {
-    try {
-      const u = new URL(env('PROXY_URL'));
-      return `${u.hostname}:${u.port || '3120'}${rotate}`;
-    } catch {
-      return `PROXY_URL${rotate}`;
-    }
-  }
   if (host && port) return `${host}:${port}${rotate}`;
-  return null;
+  return `proxy${rotate}`;
 }
 
 function createProxyAgent(uri, { rotateIp = false } = {}) {
@@ -73,7 +90,8 @@ function createProxyAgent(uri, { rotateIp = false } = {}) {
     uri,
     requestTls: { timeout: envInt('PROXY_REQUEST_TIMEOUT_MS', 15_000) },
     connectTimeout: envInt('PROXY_CONNECT_TIMEOUT_MS', 10_000),
-    pipelining: rotateIp ? 0 : 1,
+    pipelining: 0,
+    connections: 1,
     keepAliveTimeout: rotateIp ? 1000 : envInt('PROXY_KEEPALIVE_MS', 30_000),
     keepAliveMaxTimeout: rotateIp ? 1000 : envInt('PROXY_KEEPALIVE_MAX_MS', 60_000),
   });
@@ -91,9 +109,7 @@ export function getProxyDispatcher({ rotateIp = false } = {}) {
     sharedAgent = createProxyAgent(uri, { rotateIp: false });
     if (!logged) {
       logged = true;
-      console.log(
-        `[proxy] ativo ${describeProxy()?.replace(' rotate', '')}${proxyRotateDefault() ? ' (rotate por req no link)' : ''}`,
-      );
+      console.log(`[proxy] ativo ${describeProxy()}`);
     }
   }
   return sharedAgent;
@@ -113,13 +129,31 @@ export async function fetchProxyEgressIp({ rotateIp = true } = {}) {
   }
 }
 
+function assertProxyWhenRequired() {
+  const required = ['1', 'true', 'yes'].includes(String(env('PROXY_REQUIRED') || '').toLowerCase());
+  if (required && !getProxyUrl()) {
+    throw new Error('PROXY_REQUIRED=1 mas PROXY_ENABLED/dados do proxy não estão configurados no .env');
+  }
+}
+
 /** fetch via Smartproxy quando PROXY_* está definido; senão fetch normal. */
 export async function proxiedFetch(url, options = {}) {
   const { rotateIp = false, ...fetchOpts } = options;
-  const shouldRotate = rotateIp || proxyRotateDefault();
-  const dispatcher = getProxyDispatcher({ rotateIp: shouldRotate });
+  const shouldRotate =
+    rotateIp === true || (rotateIp !== false && proxyRotateDefault());
 
-  if (!dispatcher) return fetch(url, fetchOpts);
+  assertProxyWhenRequired();
+
+  const dispatcher = shouldRotate
+    ? getProxyDispatcher({ rotateIp: true })
+    : getProxyDispatcher({ rotateIp: false });
+
+  if (!dispatcher) {
+    if (rotateIp && proxyEnabled()) {
+      throw new Error('Proxy habilitado mas URL inválida — verifique PROXY_SERVER/PORT/USER/PASS no .env');
+    }
+    return fetch(url, fetchOpts);
+  }
 
   if (shouldRotate) {
     try {

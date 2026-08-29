@@ -1,4 +1,5 @@
-import { proxiedFetch } from './proxy.mjs';
+import './load-env.mjs';
+import { proxiedFetch, describeProxy, proxyEnabled, fetchProxyEgressIp, getProxyUrl } from './proxy.mjs';
 
 const DEFAULT_LINK_API = 'https://sarcastic-pertinaciously-shawnda.ngrok-free.dev';
 
@@ -21,15 +22,30 @@ export function looksLikeMsisdn(text) {
   return Boolean(normalizeBrMobile(trimmed));
 }
 
+async function logLinkProxyContext(label, attempt) {
+  if (!proxyEnabled()) {
+    console.warn(`[link] ${label} attempt=${attempt} — proxy OFF (IP da VPS)`);
+    return null;
+  }
+  if (String(process.env.PROXY_LOG_IP || '1') === '0') return null;
+  const ip = await fetchProxyEgressIp({ rotateIp: true }).catch(() => null);
+  console.log(`[link] ${label} attempt=${attempt} proxy=${describeProxy()} ip=${ip || '?'}`);
+  return ip;
+}
+
 export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
   const number = normalizeBrMobile(msisdn);
   if (!number) {
     throw new Error('Número inválido. Use DDD + 9 dígitos, ex: 38991121276');
   }
 
+  if (proxyEnabled() && !getProxyUrl()) {
+    throw new Error('PROXY_ENABLED=1 mas PROXY_SERVER/PORT/USER/PASS incompletos no .env');
+  }
+
   const defaultTimeout = Number(process.env.CLARO_LINK_TIMEOUT_MS) || 20_000;
   const waitMs = timeoutMs ?? defaultTimeout;
-  const maxRetries = Number(process.env.CLARO_LINK_429_RETRIES) || 3;
+  const maxRetries = Number(process.env.CLARO_LINK_429_RETRIES) || 5;
   const base = String(process.env.CLARO_LINK_API ?? DEFAULT_LINK_API).replace(/\/+$/, '');
   const url = `${base}/claro/link/${number}`;
 
@@ -38,6 +54,8 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), waitMs);
     try {
+      await logLinkProxyContext(`msisdn=${number}`, attempt);
+
       const res = await proxiedFetch(url, {
         rotateIp: true,
         headers: {
@@ -56,7 +74,8 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
       if (res.status === 429) {
         lastErr = new Error(body.error || body.message || 'Rate limit (429) ao gerar link Claro');
         if (attempt < maxRetries) {
-          const delay = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 800;
+          const delay = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 1500;
+          console.warn(`[link] 429 — nova IP em ${delay * attempt}ms (tentativa ${attempt}/${maxRetries})`);
           await new Promise((r) => setTimeout(r, delay * attempt));
           continue;
         }
@@ -76,7 +95,7 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
       }
       lastErr = err;
       if (attempt < maxRetries && /429|Too Many|rate limit/i.test(String(err.message))) {
-        const delay = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 800;
+        const delay = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 1500;
         await new Promise((r) => setTimeout(r, delay * attempt));
         continue;
       }

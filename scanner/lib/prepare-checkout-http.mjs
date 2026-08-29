@@ -2,6 +2,7 @@ import { parseLink } from './parse-link.mjs';
 import { createSession, fetchRechargeProducts } from './claro.mjs';
 import { openWalletSession } from './eldorado.mjs';
 import { normalizeBrMobile } from './fetch-claro-link.mjs';
+import { describeProxy, proxyEnabled } from './proxy.mjs';
 
 /**
  * Abre SmartCheckout via HTTP (sem browser) e devolve URL direta do Eldorado.
@@ -21,6 +22,10 @@ export async function prepareCheckoutViaHttp({ loginUrl, msisdn, targetMsisdn = 
   if (parsed.kind !== 'jwt') {
     throw new Error('loginUrl deve ser select-login?t=JWT ou JWT puro');
   }
+
+  console.log(
+    `[checkout-http] abrindo JWT via API Claro proxy=${describeProxy() || (proxyEnabled() ? 'incompleto' : 'OFF')}`,
+  );
 
   const session = await createSession(parsed.jwt);
   const productMsisdn = accessNumber;

@@ -2,12 +2,17 @@ import { claroGet, claroPost, claroDelete } from './http.mjs';
 import { normalizeBrMobile } from './fetch-claro-link.mjs';
 
 export async function createSession(jwt) {
-  const res = await claroPost('/sessions/', null, {
-    data: jwt,
-    type: 'encrypted',
-    channel: ['minhaclaro_web', 'MINHA_CLARO_WEB'],
-    origin: 'login',
-  });
+  const res = await claroPost(
+    '/sessions/',
+    null,
+    {
+      data: jwt,
+      type: 'encrypted',
+      channel: ['minhaclaro_web', 'MINHA_CLARO_WEB'],
+      origin: 'login',
+    },
+    { logLabel: 'POST /sessions/' },
+  );
 
   if (res.status !== 200 && res.status !== 201) {
     const msg = typeof res.body === 'object' ? JSON.stringify(res.body) : res.body;
@@ -42,12 +47,18 @@ export async function fetchRechargeProducts(sessionId, msisdn) {
 export async function createSmartCheckout(sessionId, msisdn, productId, opts = {}) {
   const recipient = normalizeBrMobile(opts.recipient ?? msisdn) ?? msisdn;
   const payer = normalizeBrMobile(opts.payerMsisdn ?? msisdn) ?? msisdn;
-  return claroPost(`/customers/${msisdn}/smartcheckout/v2/url`, sessionId, {
-    msisdn: payer,
-    channel: 'MINHA_CLARO_WEB',
-    recipient,
-    productId,
-  });
+  const { logLabel, ...rest } = opts;
+  return claroPost(
+    `/customers/${msisdn}/smartcheckout/v2/url`,
+    sessionId,
+    {
+      msisdn: payer,
+      channel: 'MINHA_CLARO_WEB',
+      recipient,
+      productId,
+    },
+    { logLabel, ...rest },
+  );
 }
 
 export async function deleteClaroPaymentMethod(sessionId, msisdn, cardToken, type = 'credit') {

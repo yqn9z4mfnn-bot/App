@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import './lib/load-env.mjs';
 import { runScan } from './lib/run-scan.mjs';
 import {
   fetchWalletCards,

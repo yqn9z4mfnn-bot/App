@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import express from 'express';
 import { config } from './config.mjs';
+import { describeProxy, proxyEnabled } from '../lib/proxy.mjs';
 import {
   closeSession,
   getConcurrencyPublic,
@@ -64,4 +65,6 @@ app.listen(config.port, () => {
   console.log(`[automation] API online em http://127.0.0.1:${config.port}`);
   console.log(`[automation] browser=${normalizeBrowserName(config.defaultBrowser)} headless=${config.headless}`);
   console.log('[automation] 3DS: encerra gate-wait na hora (sem espera frictionless)');
+  const p = describeProxy();
+  console.log(`[automation] proxy=${p || (proxyEnabled() ? 'config incompleta' : 'OFF')}`);
 });

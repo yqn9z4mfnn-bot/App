@@ -1,6 +1,10 @@
 import { request } from './http.mjs';
 import { createSmartCheckout, deleteClaroPaymentMethod } from './claro.mjs';
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function bemobiSessionBase(checkoutUrl) {
   if (checkoutUrl.includes('smart-checkout-dev.bemobi.com')) {
     return 'https://smart-checkout-dev.bemobi.com';
@@ -30,10 +34,26 @@ export async function fetchWalletCards(bemobiToken, checkoutCode) {
 }
 
 export async function openWalletSession(sessionId, msisdn, productId, opts = {}) {
-  const checkoutRes = await createSmartCheckout(sessionId, msisdn, productId, {
-    recipient: opts.recipient ?? msisdn,
-    payerMsisdn: opts.payerMsisdn ?? msisdn,
-  });
+  const maxRetries = Number(process.env.CLARO_API_429_RETRIES) || 4;
+  const backoffMs = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 1500;
+
+  let checkoutRes = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    checkoutRes = await createSmartCheckout(sessionId, msisdn, productId, {
+      recipient: opts.recipient ?? msisdn,
+      payerMsisdn: opts.payerMsisdn ?? msisdn,
+      logLabel: attempt === 1 ? `smartcheckout msisdn=${msisdn}` : `smartcheckout retry ${attempt}`,
+    });
+
+    if (checkoutRes.status !== 429) break;
+
+    if (attempt < maxRetries) {
+      console.warn(
+        `[claro-api] POST /smartcheckout/v2/url 429 — tentativa ${attempt}/${maxRetries}, IP novo em ${backoffMs * attempt}ms`,
+      );
+      await sleep(backoffMs * attempt);
+    }
+  }
 
   if (checkoutRes.status === 429) {
     return {
