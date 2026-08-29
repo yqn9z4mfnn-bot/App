@@ -58,7 +58,7 @@ export const config = {
   checkoutLinkFast: String(process.env.CHECKOUT_LINK_FAST ?? '1').toLowerCase() !== '0',
   checkoutLinkPollMs: toInt(process.env.CHECKOUT_LINK_POLL_MS, 50),
   checkoutLinkCardSettleMs: toInt(process.env.CHECKOUT_LINK_CARD_SETTLE_MS, 60),
-  checkoutLinkPanTimeoutMs: toInt(process.env.CHECKOUT_LINK_PAN_TIMEOUT_MS, 8000),
+  checkoutLinkPanTimeoutMs: toInt(process.env.CHECKOUT_LINK_PAN_TIMEOUT_MS, 25000),
   checkoutLinkGatePollMs: toInt(process.env.CHECKOUT_LINK_GATE_POLL_MS, 80),
   /** Após clicar pagar: fecha Edge e espera SSE via HTTP (experimental). */
   checkoutLinkHttpGate: String(process.env.CHECKOUT_LINK_HTTP_GATE ?? '0').toLowerCase() !== '0',

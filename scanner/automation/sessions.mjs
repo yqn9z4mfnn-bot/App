@@ -20,6 +20,7 @@ import { runWebLinkCheckoutPay } from './checkout.mjs';
 import { waitForCheckoutAntifraud } from './antifraud-browser.mjs';
 import { waitForPaymentResult, waitForPaymentResultViaHttp, waitForPaymentIdFromGate } from './gate.mjs';
 import { prepareCheckoutViaHttp } from '../lib/prepare-checkout-http.mjs';
+import { proxyEnabled } from '../lib/proxy.mjs';
 import {
   fetchWalletCards,
   deleteAllWalletCards,
@@ -683,7 +684,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
     console.log(`[automation] goto checkout ${prep.checkoutUrl.slice(0, 90)}…`);
     const navStarted = Date.now();
     await page.goto(prep.checkoutUrl, {
-      waitUntil: fast ? 'commit' : 'domcontentloaded',
+      waitUntil: fast && !proxyEnabled() ? 'commit' : 'domcontentloaded',
       timeout: 45000,
     });
     timings.navMs = Date.now() - navStarted;

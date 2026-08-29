@@ -100,13 +100,79 @@ export const isPanFormReady = async (page) => {
   return false;
 };
 
+const clickCreditPaymentMethod = async (page) => {
+  for (const frame of page.frames()) {
+    const hit = await frame
+      .evaluate(() => {
+        const skip = /pix|apple\s*pay|nupay|click\s*to\s*pay|google\s*pay/i;
+        const want = /cart[aã]o/i;
+        const credit = /cr[eé]dito/i;
+        const hits = [];
+        for (const el of document.querySelectorAll(
+          'button, [role="button"], a, li, [class*="method" i], [class*="option" i], div, label, span',
+        )) {
+          const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!t || t.length > 48 || skip.test(t) || !want.test(t) || !credit.test(t)) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 40 || r.height < 20) continue;
+          hits.push({ el, t, area: r.width * r.height, y: r.top });
+        }
+        hits.sort((a, b) => a.y - b.y || b.area - a.area);
+        const pick = hits[0];
+        if (!pick) return null;
+        pick.el.click();
+        return pick.t;
+      })
+      .catch(() => null);
+    if (hit) {
+      console.log(`[automation] clicou método: "${hit}"`);
+      return hit;
+    }
+  }
+  return null;
+};
+
+const checkoutHasUi = async (page) => {
+  if (await isPanFormReady(page)) return 'pan';
+  for (const frame of page.frames()) {
+    const kind = await frame
+      .evaluate(() => {
+        const t = (document.body?.innerText || '').replace(/\s+/g, ' ').trim();
+        if (!t) return null;
+        if (/n[uú]mero do cart[aã]o/i.test(t)) return 'pan-label';
+        if (/escolha como pagar/i.test(t)) return 'methods';
+        if (/cart[aã]o/i.test(t) && /cr[eé]dito/i.test(t) && /total a pagar/i.test(t)) return 'methods';
+        if (/total a pagar/i.test(t) && t.length > 20) return 'shell';
+        return null;
+      })
+      .catch(() => null);
+    if (kind) return kind;
+  }
+  return null;
+};
+
+const waitForCheckoutShell = async (page, timeoutMs) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const kind = await checkoutHasUi(page);
+    if (kind) return kind;
+    await sleep(Math.max(config.pollIntervalMs || 180, 120));
+  }
+  return checkoutHasUi(page);
+};
+
 const ensureCreditCardSectionOpen = async (page) => {
   if (await isPanFormReady(page)) return true;
-  const labels = ['Cartão', 'Crédito', 'Cartão Crédito', 'Cartão de crédito'];
+  const hit = await clickCreditPaymentMethod(page);
+  if (hit) {
+    await sleep(config.cardFormSettleMs || 450);
+    if (await isPanFormReady(page)) return true;
+  }
+  const labels = ['Cartão (Crédito)', 'Cartão Crédito', 'Cartão de crédito', 'Cartão'];
   for (const label of labels) {
-    const hit = await page
+    const clicked = await page
       .evaluate((text) => {
-        for (const el of document.querySelectorAll('button, [role="button"], div, label, span')) {
+        for (const el of document.querySelectorAll('button, [role="button"], div, label, span, li')) {
           const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
           if (t !== text && !new RegExp(`^${text}$`, 'i').test(t)) continue;
           const r = el.getBoundingClientRect();
@@ -117,7 +183,7 @@ const ensureCreditCardSectionOpen = async (page) => {
         return null;
       }, label)
       .catch(() => null);
-    if (hit) {
+    if (clicked) {
       await sleep(config.cardFormSettleMs || 450);
       if (await isPanFormReady(page)) return true;
     }
@@ -424,8 +490,14 @@ export const detectPixOnlyCheckout = async (page) => {
 };
 
 export const ensureCheckoutLinkPanReady = async (page) => {
-  const poll = config.checkoutLinkPollMs ?? 50;
-  const deadline = Date.now() + (config.checkoutLinkPanTimeoutMs ?? 8000);
+  const poll = Math.max(config.checkoutLinkPollMs ?? 50, 80);
+  const timeoutMs = config.checkoutLinkPanTimeoutMs ?? 22000;
+  const deadline = Date.now() + timeoutMs;
+  const shell = await waitForCheckoutShell(page, Math.min(18000, Math.max(0, deadline - Date.now())));
+  if (shell) console.log(`[automation] checkout UI: ${shell}`);
+  if (shell && shell !== 'pan') {
+    await ensureCreditCardSectionOpen(page);
+  }
   while (Date.now() < deadline) {
     try {
       if (await isPanFormReady(page)) return true;
