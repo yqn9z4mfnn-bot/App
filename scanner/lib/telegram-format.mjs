@@ -130,30 +130,11 @@ export function buildRechargeModeKeyboard() {
   return {
     inline_keyboard: [
       [{ text: '📱 Mesmo número', callback_data: 'rcgmode:same' }],
-      [{ text: '🔀 Outro número (login aleatório)', callback_data: 'rcgmode:other' }],
+      [{ text: '🔀 Outro número', callback_data: 'rcgmode:other' }],
     ],
   };
 }
 
-export const WELCOME = `<b>📱 Link Claro — Recarga</b>
+export const WELCOME = `<b>📱 Link Claro</b>
 
-Escolha como quer recarregar 👇
-
-<b>📱 Mesmo número</b>
-Login e recarga no número que você enviar
-
-<b>🔀 Outro número</b>
-Geramos login aleatório — você informa quem recebe
-
-<i>━━━━━━━━━━━━━━</i>
-<b>📄 .txt</b> → salva números no banco
-<b>💳 Cartões</b> — cole a lista no chat ou envie <b>.txt</b>
-<code>NUMERO|MM|AAAA|CVV</code> (um por linha) → fila 🤖 Automático
-<b>💰 /valores</b> ou <code>20</code> → link por valor
-<b>⚡ Atalho cruzado + fila</b>
-<code>13991019331|Claro|30</code>
-→ recarga de outro login no destino, R$ 30, cartão automático
-
-<b>🔧 /recarga_para</b> <code>LOGIN DESTINO</code> → cruzada manual
-
-/start · /valores · /lista · /recarga`;
+Escolha o modo:`;
