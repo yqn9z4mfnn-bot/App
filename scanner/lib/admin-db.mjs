@@ -263,6 +263,15 @@ export function countRechargeEvents() {
   return withBusyRetry(() => getDb().prepare('SELECT COUNT(*) AS n FROM recharge_events').get().n);
 }
 
+export function countRechargeEventsByStatus() {
+  return withBusyRetry(() => {
+    const rows = getDb()
+      .prepare('SELECT status, COUNT(*) AS n FROM recharge_events GROUP BY status')
+      .all();
+    return Object.fromEntries(rows.map((r) => [r.status || 'unknown', r.n]));
+  });
+}
+
 export function rechargeStatsSince(sinceMs) {
   return withBusyRetry(() => {
   const rows = getDb()

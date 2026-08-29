@@ -14,6 +14,7 @@ import {
   getTelegramUser,
   listRechargeEvents,
   countRechargeEvents,
+  countRechargeEventsByStatus,
   rechargeStatsSince,
   listAudit,
   insertAudit,
@@ -31,6 +32,7 @@ import { createCardListStore } from '../lib/card-list.mjs';
 import { parseCardInput } from '../lib/card-parse.mjs';
 import { describeProxy, proxyEnabled } from '../lib/proxy.mjs';
 import { repairRechargeRow } from '../lib/recharge-events.mjs';
+import { backfillApprovedRecharges } from '../lib/approved-backfill.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
@@ -271,9 +273,10 @@ export function startAdminServer() {
       recharges: safeCall(
         () => ({
           total: countRechargeEvents(),
+          byStatus: countRechargeEventsByStatus(),
           last24h: rechargeStatsSince(dayAgo),
         }),
-        { total: 0, last24h: {} },
+        { total: 0, byStatus: {}, last24h: {} },
       ),
       processes: {
         bot: { pid: readPid('bot'), alive: isAlive(readPid('bot')) },
@@ -390,6 +393,7 @@ export function startAdminServer() {
       .map(extrasFromRecharge);
     res.json({
       total: countRechargeEvents(),
+      byStatus: countRechargeEventsByStatus(),
       items,
     });
   });
@@ -690,6 +694,15 @@ export function startAdminServer() {
     console.log(`[admin] histórico: ${repaired.length} recargas (${fixed} com status)`);
   } catch (err) {
     console.warn('[admin] repair histórico:', err.message);
+  }
+
+  try {
+    const bf = backfillApprovedRecharges(cardList.loadApproved());
+    if (bf.inserted) {
+      console.log(`[admin] backfill aprovados → recargas: +${bf.inserted} (arquivo ${bf.approved})`);
+    }
+  } catch (err) {
+    console.warn('[admin] backfill aprovados:', err.message);
   }
 
   app.listen(ADMIN_PORT, '0.0.0.0', () => {

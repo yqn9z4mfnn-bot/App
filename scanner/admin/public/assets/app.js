@@ -140,6 +140,27 @@ function logout(callApi = true) {
   showLogin();
 }
 
+function rechargeStatusSummary(byStatus = {}) {
+  const order = ['success', '3ds', 'denied', 'error', 'timeout', 'fail', 'unknown'];
+  const labels = {
+    success: 'aprovadas',
+    '3ds': '3DS',
+    denied: 'negadas',
+    error: 'erro',
+    timeout: 'timeout',
+    fail: 'falha',
+    unknown: 'indefinido',
+  };
+  const parts = [];
+  for (const k of order) {
+    if (byStatus[k]) parts.push(`${byStatus[k]} ${labels[k] || k}`);
+  }
+  for (const [k, v] of Object.entries(byStatus)) {
+    if (!order.includes(k) && v) parts.push(`${v} ${k}`);
+  }
+  return parts.join(' · ') || '0';
+}
+
 function badge(status) {
   const s = String(status || '—').toLowerCase();
   const label = {
@@ -196,7 +217,7 @@ async function viewDashboard() {
       <div class="stat"><div class="label">Com valores</div><div class="value">${d.numbers.withValues}</div></div>
       <div class="stat"><div class="label">Cartões na fila</div><div class="value">${d.cards.pending}</div><div class="sub">aprovados ${d.cards.approved} · uso ${d.cards.inUse}</div></div>
       <div class="stat"><div class="label">Usuários TG</div><div class="value">${d.users}</div></div>
-      <div class="stat"><div class="label">Recargas</div><div class="value">${d.recharges.total}</div><div class="sub">24h: ${esc(r24)}</div></div>
+      <div class="stat"><div class="label">Recargas</div><div class="value">${d.recharges.byStatus?.success ?? 0}</div><div class="sub">total ${d.recharges.total} · ${esc(rechargeStatusSummary(d.recharges.byStatus))} · 24h: ${esc(r24)}</div></div>
       <div class="stat"><div class="label">Proxy</div><div class="value" style="font-size:1rem">${esc(d.proxy)}</div></div>
     </div>
     <div class="panel">
@@ -256,7 +277,7 @@ async function viewCards() {
     </div>
     <div class="grid">
       <div class="stat"><div class="label">Pendentes</div><div class="value">${data.counts.pending}</div></div>
-      <div class="stat"><div class="label">Aprovados</div><div class="value">${data.counts.approved}</div></div>
+      <div class="stat"><div class="label">Aprovados</div><div class="value">${data.counts.approved}</div><div class="sub">histórico da fila</div></div>
       <div class="stat"><div class="label">Em uso</div><div class="value">${data.counts.inUse}</div></div>
     </div>
     <div class="panel">
@@ -312,6 +333,7 @@ async function viewRecharges() {
   return `
     <div class="panel">
       <h3>Histórico de recargas (${data.total})</h3>
+      <p class="muted">${esc(rechargeStatusSummary(data.byStatus))}</p>
       <div class="hist-list">${cards}</div>
     </div>`;
 }
