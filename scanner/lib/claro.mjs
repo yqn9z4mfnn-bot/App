@@ -1,18 +1,39 @@
 import { claroGet, claroPost, claroDelete } from './http.mjs';
 import { normalizeBrMobile } from './fetch-claro-link.mjs';
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function createSession(jwt) {
-  const res = await claroPost(
-    '/sessions/',
-    null,
-    {
-      data: jwt,
-      type: 'encrypted',
-      channel: ['minhaclaro_web', 'MINHA_CLARO_WEB'],
-      origin: 'login',
-    },
-    { logLabel: 'POST /sessions/' },
-  );
+  const maxRetries = Number(process.env.CLARO_API_429_RETRIES) || 4;
+  const backoffMs = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 1500;
+
+  let res = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    res = await claroPost(
+      '/sessions/',
+      null,
+      {
+        data: jwt,
+        type: 'encrypted',
+        channel: ['minhaclaro_web', 'MINHA_CLARO_WEB'],
+        origin: 'login',
+      },
+      {
+        logLabel: attempt === 1 ? 'POST /sessions/' : `POST /sessions/ retry ${attempt}`,
+      },
+    );
+
+    if (res.status !== 429) break;
+
+    if (attempt < maxRetries) {
+      console.warn(
+        `[claro-api] POST /sessions/ 429 — tentativa ${attempt}/${maxRetries}, IP novo em ${backoffMs * attempt}ms`,
+      );
+      await sleep(backoffMs * attempt);
+    }
+  }
 
   if (res.status !== 200 && res.status !== 201) {
     const msg = typeof res.body === 'object' ? JSON.stringify(res.body) : res.body;
