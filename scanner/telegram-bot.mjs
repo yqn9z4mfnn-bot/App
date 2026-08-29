@@ -2177,6 +2177,10 @@ async function handleMessage(msg) {
   if (!chatId) return;
 
   try {
+    if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@') || text === '/status' || text.startsWith('/status@')) {
+      preemptChatWork(chatId);
+    }
+
     if (msg.from) {
       upsertTelegramUser(msg.from);
       if (!isTelegramUserAllowed(chatId)) {
@@ -2381,6 +2385,7 @@ async function handleMessage(msg) {
 
 async function poll() {
   console.log('[bot] polling (+ recarga)…');
+  let lastBeat = 0;
   while (true) {
     try {
       const updates = await tg(
@@ -2390,11 +2395,20 @@ async function poll() {
           timeout: 20,
           allowed_updates: ['message', 'callback_query'],
         },
-        { timeoutMs: 28_000, retries: 1 },
+        { timeoutMs: 45_000, retries: 1 },
       );
+
+      const now = Date.now();
+      if (now - lastBeat >= 30_000) {
+        lastBeat = now;
+        console.log(`[bot] poll ok · updates=${updates.length} · uptime=${Math.floor(process.uptime())}s`);
+      }
 
       for (const update of updates) {
         offset = update.update_id + 1;
+        const from = update.message?.from?.username || update.callback_query?.from?.username || '';
+        const kind = update.message ? 'msg' : 'cb';
+        console.log(`[bot] update ${kind} @${from} id=${update.update_id}`);
         if (update.message) {
           handleMessage(update.message).catch((e) => console.error('[msg]', e.message));
         }
