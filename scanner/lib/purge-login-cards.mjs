@@ -5,7 +5,7 @@ import {
   unifySavedCards,
   fetchWalletCards,
 } from './eldorado.mjs';
-import { claroGet } from './claro.mjs';
+import { claroGet } from './http.mjs';
 
 function strictPurgeEnabled() {
   return ['1', 'true', 'yes'].includes(String(process.env.PURGE_LOGIN_STRICT || '').toLowerCase());
