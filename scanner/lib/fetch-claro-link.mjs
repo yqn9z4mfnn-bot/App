@@ -1,5 +1,6 @@
 import './load-env.mjs';
-import { proxiedFetch, describeProxy, proxyEnabled, getProxyUrl } from './proxy.mjs';
+import { proxiedFetch, describeProxy, proxyEnabled, getProxyUrl, resetProxyAgent } from './proxy.mjs';
+import { formatFetchError, isTransientFetchError, sleep } from './transient-fetch.mjs';
 
 const DEFAULT_LINK_API = 'https://sarcastic-pertinaciously-shawnda.ngrok-free.dev';
 
@@ -90,15 +91,24 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
       return { msisdn: number, link: String(link) };
     } catch (err) {
       if (err.name === 'AbortError') {
-        throw new Error('Timeout ao gerar o link Claro');
+        lastErr = new Error('Timeout ao gerar o link Claro');
+      } else {
+        lastErr = err;
       }
-      lastErr = err;
-      if (attempt < maxRetries && /429|Too Many|rate limit/i.test(String(err.message))) {
+      const retryable =
+        isTransientFetchError(err) ||
+        /429|Too Many|rate limit|Timeout/i.test(String(lastErr.message));
+      if (attempt < maxRetries && retryable) {
         const delay = Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 1500;
-        await new Promise((r) => setTimeout(r, delay * attempt));
+        console.warn(
+          `[link] ${formatFetchError(lastErr)} — retry ${attempt}/${maxRetries} em ${delay * attempt}ms`,
+        );
+        resetProxyAgent();
+        await sleep(delay * attempt);
         continue;
       }
-      throw err;
+      if (err.name === 'AbortError') throw lastErr;
+      throw new Error(formatFetchError(err));
     } finally {
       clearTimeout(timer);
     }

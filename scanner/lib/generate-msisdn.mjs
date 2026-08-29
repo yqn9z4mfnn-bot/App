@@ -1,6 +1,7 @@
 import { listDistinctDdds, pickRandomMsisdnByDdd } from './numbers-db.mjs';
 import { fetchClaroLoginLink, normalizeBrMobile } from './fetch-claro-link.mjs';
 import { getProxyUrl, proxyEnabled } from './proxy.mjs';
+import { isTransientFetchError, sleep } from './transient-fetch.mjs';
 
 /**
  * Gera MSISDN: DDD aleatório do banco + 6 dígitos (após DDD) de um número real + 3 aleatórios.
@@ -42,8 +43,8 @@ export async function generateLoginMsisdn({ maxAttempts = 8, timeoutMs = 10_000 
       return { msisdn, link, attempt };
     } catch (err) {
       lastErr = err;
-      if (/429|Too Many|rate limit/i.test(String(err.message)) && attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 800));
+      if (attempt < maxAttempts && isTransientFetchError(err)) {
+        await sleep(Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 800);
       }
     }
   }

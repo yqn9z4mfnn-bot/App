@@ -32,7 +32,8 @@ import { createCardListStore, looksLikeCardsTxt, extractCardLinesFromText } from
 import { classifyCardListAction, cardListActionLabel } from './lib/card-outcome.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
-import { describeProxy } from './lib/proxy.mjs';
+import { describeProxy, resetProxyAgent } from './lib/proxy.mjs';
+import { formatFetchError, isTransientFetchError, sleep } from './lib/transient-fetch.mjs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -117,16 +118,29 @@ function toLoginUrl(linkOrJwt) {
 }
 
 async function tg(method, body = {}) {
-  const res = await fetch(`${API}/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    throw new Error(data.description || `Telegram ${method} failed`);
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(`${API}/${method}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        throw new Error(data.description || `Telegram ${method} failed`);
+      }
+      return data.result;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 3 && isTransientFetchError(err)) {
+        await sleep(400 * attempt);
+        continue;
+      }
+      throw err;
+    }
   }
-  return data.result;
+  throw lastErr;
 }
 
 async function send(chatId, text, extra = {}) {
@@ -442,110 +456,128 @@ async function executeAutoRecharge(chatId) {
 
 /** Nova sessão para retry: novo login (modo other), mesmo destino/valor. */
 async function prepareRetryRecharge(chatId, retry, statusMsg) {
-  let access = retry.loginMsisdn;
-  let prefetchedLink = null;
-  if (retry.mode === 'other') {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: '🎲 Gerando <b>novo login</b> para nova tentativa…',
-      parse_mode: 'HTML',
-    });
-    const generated = await generateLoginMsisdn();
-    access = generated.msisdn;
-    prefetchedLink = generated.link;
-  } else {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: `🔄 Nova tentativa — login <code>${access}</code>…`,
-      parse_mode: 'HTML',
-    });
-  }
-
-  const target = normalizeBrMobile(retry.targetMsisdn) || access;
-  const cross = Boolean(target && access && target !== access);
-
   if (busy.has(chatId)) return null;
   busy.add(chatId);
 
+  const maxPrep = 3;
   try {
-    let link;
-    const row = getNumber(access);
-    if (prefetchedLink) {
-      link = toLoginUrl(prefetchedLink);
-    } else if (row?.link) {
-      link = toLoginUrl(row.link);
-    } else {
-      const generated = await fetchClaroLoginLink(access);
-      link = generated.link;
-    }
-
-    const session = await createSession(parseLink(link).jwt);
-    const refreshed = await refreshMsisdnProducts(access, {
-      link,
-      sessionId: session.id,
-      identifier: session.identifier,
-    });
-    const valores = refreshed.valores ?? [];
-    const msisdnResolved = session.identifier || access;
-
-    const product =
-      valores.find((v) => v.id === retry.productId) ??
-      valores.find((v) => v.value === retry.productValue);
-
-    if (!product) {
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: statusMsg.message_id,
-        text: `❌ Valor <b>${retry.productName}</b> indisponível no login <code>${msisdnResolved}</code>.`,
-        parse_mode: 'HTML',
-      });
-      return null;
-    }
-
-    let walletAuth = null;
-    if (retry.mode === 'other') {
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: statusMsg.message_id,
-        text: `🧹 Limpando cartões do login <code>${msisdnResolved}</code>…`,
-        parse_mode: 'HTML',
-      });
+    for (let attempt = 1; attempt <= maxPrep; attempt++) {
       try {
-        const purge = await purgeAllLoginCardsStrict({
+        let access = retry.loginMsisdn;
+        let prefetchedLink = null;
+        if (retry.mode === 'other') {
+          await tg('editMessageText', {
+            chat_id: chatId,
+            message_id: statusMsg.message_id,
+            text:
+              attempt === 1
+                ? '🎲 Gerando <b>novo login</b> para nova tentativa…'
+                : `🎲 Rede falhou — gerando login de novo (${attempt}/${maxPrep})…`,
+            parse_mode: 'HTML',
+          });
+          const generated = await generateLoginMsisdn();
+          access = generated.msisdn;
+          prefetchedLink = generated.link;
+        } else {
+          await tg('editMessageText', {
+            chat_id: chatId,
+            message_id: statusMsg.message_id,
+            text:
+              attempt === 1
+                ? `🔄 Nova tentativa — login <code>${access}</code>…`
+                : `🔄 Rede falhou — nova tentativa (${attempt}/${maxPrep})…`,
+            parse_mode: 'HTML',
+          });
+        }
+
+        const target = normalizeBrMobile(retry.targetMsisdn) || access;
+        const cross = Boolean(target && access && target !== access);
+
+        let link;
+        const row = getNumber(access);
+        if (prefetchedLink) {
+          link = toLoginUrl(prefetchedLink);
+        } else if (row?.link) {
+          link = toLoginUrl(row.link);
+        } else {
+          const generated = await fetchClaroLoginLink(access);
+          link = generated.link;
+        }
+
+        const session = await createSession(parseLink(link).jwt);
+        const refreshed = await refreshMsisdnProducts(access, {
+          link,
+          sessionId: session.id,
+          identifier: session.identifier,
+        });
+        const valores = refreshed.valores ?? [];
+        const msisdnResolved = session.identifier || access;
+
+        const product =
+          valores.find((v) => v.id === retry.productId) ??
+          valores.find((v) => v.value === retry.productValue);
+
+        if (!product) {
+          await tg('editMessageText', {
+            chat_id: chatId,
+            message_id: statusMsg.message_id,
+            text: `❌ Valor <b>${retry.productName}</b> indisponível no login <code>${msisdnResolved}</code>.`,
+            parse_mode: 'HTML',
+          });
+          return null;
+        }
+
+        let walletAuth = null;
+        if (retry.mode === 'other') {
+          await tg('editMessageText', {
+            chat_id: chatId,
+            message_id: statusMsg.message_id,
+            text: `🧹 Limpando cartões do login <code>${msisdnResolved}</code>…`,
+            parse_mode: 'HTML',
+          });
+          try {
+            const purge = await purgeAllLoginCardsStrict({
+              sessionId: session.id,
+              msisdn: msisdnResolved,
+              productId: product.id,
+            });
+            walletAuth = purge.walletAuth;
+          } catch (err) {
+            console.error('[bot][retry][purge]', err.message);
+          }
+        }
+
+        setCache(chatId, {
+          link,
+          walletAuth,
+          cards: [],
           sessionId: session.id,
           msisdn: msisdnResolved,
-          productId: product.id,
+          rechargeTargetNumber: cross ? target : undefined,
+          valores,
+          rechargeMode: retry.mode,
+          awaitTargetMsisdn: false,
         });
-        walletAuth = purge.walletAuth;
+
+        chatRechargeMode.set(chatId, retry.mode);
+
+        return { product, access: msisdnResolved, target };
       } catch (err) {
-        console.error('[bot][retry][purge]', err.message);
+        if (attempt < maxPrep && isTransientFetchError(err)) {
+          console.warn(`[bot][retry][prep] ${err.message} (${attempt}/${maxPrep})`);
+          resetProxyAgent();
+          await sleep(700 * attempt);
+          continue;
+        }
+        await tg('editMessageText', {
+          chat_id: chatId,
+          message_id: statusMsg.message_id,
+          text: `❌ <b>Erro ao preparar retry:</b> ${formatFetchError(err).replace(/</g, '&lt;')}`,
+          parse_mode: 'HTML',
+        });
+        return null;
       }
     }
-
-    setCache(chatId, {
-      link,
-      walletAuth,
-      cards: [],
-      sessionId: session.id,
-      msisdn: msisdnResolved,
-      rechargeTargetNumber: cross ? target : undefined,
-      valores,
-      rechargeMode: retry.mode,
-      awaitTargetMsisdn: false,
-    });
-
-    chatRechargeMode.set(chatId, retry.mode);
-
-    return { product, access: msisdnResolved, target };
-  } catch (err) {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: `❌ <b>Erro ao preparar retry:</b> ${err.message.replace(/</g, '&lt;')}`,
-      parse_mode: 'HTML',
-    });
     return null;
   } finally {
     busy.delete(chatId);

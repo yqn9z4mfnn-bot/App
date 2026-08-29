@@ -110,6 +110,12 @@ function createProxyAgent(uri, { rotateIp = false } = {}) {
   });
 }
 
+export function resetProxyAgent() {
+  const prev = sharedAgent;
+  sharedAgent = null;
+  if (prev) prev.close().catch(() => {});
+}
+
 export function getProxyDispatcher({ rotateIp = false } = {}) {
   const uri = getProxyUrl({ rotateIp });
   if (!uri) return undefined;

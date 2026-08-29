@@ -1,5 +1,6 @@
 import { claroGet, claroPost, claroDelete } from './http.mjs';
 import { normalizeBrMobile } from './fetch-claro-link.mjs';
+import { isTransientFetchError } from './transient-fetch.mjs';
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -11,20 +12,31 @@ export async function createSession(jwt) {
 
   let res = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    res = await claroPost(
-      '/sessions/',
-      null,
-      {
-        data: jwt,
-        type: 'encrypted',
-        channel: ['minhaclaro_web', 'MINHA_CLARO_WEB'],
-        origin: 'login',
-      },
-      {
-        logLabel: attempt === 1 && process.env.PROXY_LOG_IP ? 'POST /sessions/' : undefined,
-        rotateIp: attempt > 1,
-      },
-    );
+    try {
+      res = await claroPost(
+        '/sessions/',
+        null,
+        {
+          data: jwt,
+          type: 'encrypted',
+          channel: ['minhaclaro_web', 'MINHA_CLARO_WEB'],
+          origin: 'login',
+        },
+        {
+          logLabel: attempt === 1 && process.env.PROXY_LOG_IP ? 'POST /sessions/' : undefined,
+          rotateIp: attempt > 1,
+        },
+      );
+    } catch (err) {
+      if (attempt < maxRetries && isTransientFetchError(err)) {
+        console.warn(
+          `[claro-api] POST /sessions/ rede — tentativa ${attempt}/${maxRetries}: ${err.message}`,
+        );
+        await sleep(backoffMs * attempt);
+        continue;
+      }
+      throw err;
+    }
 
     if (res.status !== 429) break;
 
