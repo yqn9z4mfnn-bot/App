@@ -9,12 +9,15 @@ import {
 } from './threeds.mjs';
 import { absorbCheckoutCtxFromCapture, createCheckoutCtx } from './card-cleanup.mjs';
 import { waitPaymentResult as waitHttpPaymentSse } from '../lib/recharge.mjs';
+import {
+  CHECKOUT_ERROR_TEXT_RE,
+  checkoutErrorHint,
+  isCheckoutErrorUrl,
+  overrideThreedsIfCheckoutError,
+} from '../lib/checkout-error.mjs';
 
 const GATE_URL_RE =
   /eldorado\.m4u|claro-recarga-api|bemobi\.com|smart-checkout|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|\/tokenizer\/|wallet|card/i;
-
-const PAYMENT_ERROR_TEXT_RE =
-  /n[aã]o conseguimos processar|n[aã]o foi poss[ií]vel processar|pagamento recusad|transa[cç][aã]o negad|cart[aã]o recusad|algo deu errado/i;
 
 const parseSseJson = (text) => {
   const line = String(text || '')
@@ -248,7 +251,7 @@ const scanPageForPaymentOutcome = async (page) => {
     try {
       const text = await frame.evaluate(() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim());
       if (!text) continue;
-      if (PAYMENT_ERROR_TEXT_RE.test(text)) {
+      if (CHECKOUT_ERROR_TEXT_RE.test(text)) {
         return { status: 'error', hint: text.slice(0, 500), frameUrl: frame.url() };
       }
     } catch {
@@ -257,11 +260,40 @@ const scanPageForPaymentOutcome = async (page) => {
   }
   try {
     const text = (await page.locator('body').innerText({ timeout: 400 })).replace(/\s+/g, ' ').trim();
-    if (PAYMENT_ERROR_TEXT_RE.test(text)) return { status: 'error', hint: text.slice(0, 500), frameUrl: page.url() };
+    if (CHECKOUT_ERROR_TEXT_RE.test(text)) return { status: 'error', hint: text.slice(0, 500), frameUrl: page.url() };
   } catch {
     // ignore
   }
   return null;
+};
+
+const takeCheckoutErrorResult = async (page, gateCapture, url = '') => {
+  const pageUrl = url || (() => {
+    try {
+      return page?.url?.() ?? '';
+    } catch {
+      return '';
+    }
+  })();
+  if (!isCheckoutErrorUrl(pageUrl)) {
+    const visible = await scanPageForPaymentOutcome(page);
+    if (visible?.status !== 'error') return null;
+    return buildPaymentResult(
+      page,
+      'error',
+      visible.frameUrl || pageUrl,
+      gateCapture,
+      checkoutErrorHint(visible.hint),
+    );
+  }
+  const visible = await scanPageForPaymentOutcome(page);
+  return buildPaymentResult(
+    page,
+    'error',
+    pageUrl,
+    gateCapture,
+    checkoutErrorHint(visible?.hint, 'Não foi possível concluir o pagamento'),
+  );
 };
 
 const buildPaymentResult = (page, status, url, gateCapture, hint = '', debugInfo = null) => {
@@ -335,8 +367,10 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
       return buildPaymentResult(page, 'error', url, gateCapture);
     }
 
-    if (/pagamento-erro/i.test(url)) {
-      return buildPaymentResult(page, 'error', url, gateCapture);
+    const checkoutError = await takeCheckoutErrorResult(page, gateCapture, url);
+    if (checkoutError) {
+      console.log(`[automation][gate] checkout/error — ${String(checkoutError.gateMessage || '').slice(0, 80)}`);
+      return checkoutError;
     }
 
     const apiCap = get3dsChallengeApiCapture(gateCapture);
@@ -380,29 +414,34 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
         }
         const continueWait = config.threedsContinueGateWait !== false;
         if (!continueWait || stopNow) {
-          return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, { browserOpen: stopNow });
+          const errNow = await takeCheckoutErrorResult(page, gateCapture);
+          if (errNow) return errNow;
+          return overrideThreedsIfCheckoutError(
+            await build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, { browserOpen: stopNow }),
+            { url: page.url() },
+          );
         }
         const extraMs = config.threedsExtraWaitMs ?? 12000;
         if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
-          return build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed);
+          const errNow = await takeCheckoutErrorResult(page, gateCapture);
+          if (errNow) return errNow;
+          return overrideThreedsIfCheckoutError(
+            await build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed),
+            { url: page.url() },
+          );
         }
       }
     }
 
-    const hasPaymentCapture = (gateCapture?.captures ?? []).some((c) =>
-      /\/payments/i.test(c.url || ''),
-    );
-    if (!hasPaymentCapture) {
-      const visible = await scanPageForPaymentOutcome(page);
-      if (takeConfirmed()) {
-        return buildPaymentResult(page, 'success', page.url(), {
-          ...gateCapture,
-          best: () => takeConfirmed(),
-        });
-      }
-      if (visible?.status === 'error' && !/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
-        return buildPaymentResult(page, 'error', url, gateCapture, visible.hint);
-      }
+    const visible = await scanPageForPaymentOutcome(page);
+    if (takeConfirmed()) {
+      return buildPaymentResult(page, 'success', page.url(), {
+        ...gateCapture,
+        best: () => takeConfirmed(),
+      });
+    }
+    if (visible?.status === 'error' && !/pagamento-sucesso|confirmacao-beneficio/i.test(url)) {
+      return buildPaymentResult(page, 'error', url, gateCapture, checkoutErrorHint(visible.hint));
     }
 
     if (typeof gateCapture?.waitSignal === 'function') {
@@ -413,8 +452,13 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
   }
 
   const elapsed = Date.now() - start;
+  const timeoutError = await takeCheckoutErrorResult(page, gateCapture);
+  if (timeoutError) return timeoutError;
   if (session?.threeDsSeen) {
-    return build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed);
+    return overrideThreedsIfCheckoutError(
+      await build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed),
+      { url: page.url() },
+    );
   }
 
   const debugInfo = session
@@ -497,7 +541,31 @@ export function buildPaymentResultFromHttpSse(sse, url, paymentId, opts = {}) {
       pagamentoErro: true,
     };
   }
+  if (isCheckoutErrorUrl(url)) {
+    const hint = checkoutErrorHint(sse?.message || sse?.negativeReason, 'Não foi possível concluir o pagamento');
+    return {
+      ...base,
+      status: 'error',
+      gateCode: st || 'ERROR',
+      gateMessage: hint,
+      message: hint,
+      pagamentoErro: true,
+    };
+  }
   if (opts.had3ds && (!st || st === 'PENDING' || st === 'PROCESSING' || st === 'TIMEOUT')) {
+    const pageUrl = opts.pageUrl || url;
+    if (isCheckoutErrorUrl(pageUrl)) {
+      const hint = checkoutErrorHint(opts.pageText || sse?.message, 'Não foi possível concluir o pagamento');
+      return {
+        ...base,
+        url: pageUrl,
+        status: 'error',
+        gateCode: 'ERROR',
+        gateMessage: hint,
+        message: hint,
+        pagamentoErro: true,
+      };
+    }
     return {
       ...base,
       status: '3ds_required',

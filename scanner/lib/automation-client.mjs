@@ -5,6 +5,7 @@ import {
   isGateDenialMessage,
   paymentBodyIsDenied,
 } from './card-outcome.mjs';
+import { looksLikeCheckoutError } from './checkout-error.mjs';
 
 const DEFAULT_URL = process.env.AUTOMATION_API_URL || 'http://127.0.0.1:3000';
 
@@ -178,8 +179,12 @@ export function mapAutomationPaymentStatus(pr, data = {}) {
   const rawStatus = String(pr.status || data.status || 'UNKNOWN').toLowerCase();
   const msg = String(pr.gateMessage || pr.message || data.lastError || '');
   const gateCode = String(pr.gateCode ?? '').toUpperCase();
+  const pageUrl = pr.url || data.url || pr.debug?.pageUrl || '';
 
   if (rawStatus === 'success') return 'CONFIRMED';
+  if (rawStatus !== 'success' && looksLikeCheckoutError({ url: pageUrl, message: msg })) {
+    return 'DENIED';
+  }
   if (rawStatus === '3ds_required') return '3DS_REQUIRED';
   if (rawStatus === 'timeout') return 'TIMEOUT';
 

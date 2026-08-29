@@ -1,5 +1,6 @@
 import { config } from './config.mjs';
 import { saveStallDebug } from './debug.mjs';
+import { isCheckoutErrorUrl, overrideThreedsIfCheckoutError } from '../lib/checkout-error.mjs';
 
 /** URLs típicas de fluxo 3DS (Cardinal, Visa, Eldorado challenge). */
 const THREEDS_URL_RE =
@@ -99,6 +100,12 @@ async function scan3dsUiFrames(page) {
  * (tempo curto para ver se abre VBV antes de tratar como frictionless).
  */
 export async function detect3dsChallenge(page, gateCapture = null, opts = {}) {
+  try {
+    if (isCheckoutErrorUrl(page?.url?.())) return null;
+  } catch {
+    // page já fechada
+  }
+
   const uiHit = await scan3dsUiFrames(page);
   if (uiHit) return uiHit;
 
@@ -148,16 +155,20 @@ export async function build3dsRequiredResult(page, session, gateCapture, threeDs
     }).catch(() => {});
   }
 
-  return {
-    status: '3ds_required',
-    url: page?.url?.() ?? '',
-    gateCode: '3DS',
-    gateMessage: msg,
-    message: msg,
-    threeDs,
-    visualVbv: isVisualVbv(threeDs),
-    requiresImmediateAction: threedsRequiresImmediateAction(threeDs),
-    pagamentoErro: false,
-    debug: null,
-  };
+  const pageUrl = page?.url?.() ?? '';
+  return overrideThreedsIfCheckoutError(
+    {
+      status: '3ds_required',
+      url: pageUrl,
+      gateCode: '3DS',
+      gateMessage: msg,
+      message: msg,
+      threeDs,
+      visualVbv: isVisualVbv(threeDs),
+      requiresImmediateAction: threedsRequiresImmediateAction(threeDs),
+      pagamentoErro: false,
+      debug: null,
+    },
+    { url: pageUrl, text: threeDs.hint },
+  );
 }

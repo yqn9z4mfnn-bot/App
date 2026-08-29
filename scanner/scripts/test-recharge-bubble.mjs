@@ -113,6 +113,37 @@ if (!/Recarga negada/.test(denied46)) {
   console.error('FAIL titulo 46', denied46);
 }
 
+const checkoutErrorBubble = formatRechargeResult({
+  result: {
+    status: '3DS_REQUIRED',
+    message: '3DS frictionless — aguardando confirmação automática',
+    visualVbv: false,
+    threeDsKind: 'challenge_api',
+  },
+  valueCents: 3000,
+  cardMask: '****1861',
+  loginMsisdn: '11992007057',
+  targetMsisdn: '61995063971',
+  automation: {
+    raw: {
+      url: 'https://eldorado.m4u.com.br/bsc/checkout/error?code=b4dcbde2-16fc-48f2-904c-19a386b72a1f',
+      status: '3ds_required',
+    },
+  },
+});
+if (!/Recarga negada/.test(checkoutErrorBubble)) {
+  failed += 1;
+  console.error('FAIL checkout/error titulo', checkoutErrorBubble);
+}
+if (/Validação 3DS|3DS visual|Confirme no banco/i.test(checkoutErrorBubble)) {
+  failed += 1;
+  console.error('FAIL checkout/error ainda parece VBV', checkoutErrorBubble);
+}
+if (!/Não foi possível concluir o pagamento/.test(checkoutErrorBubble)) {
+  failed += 1;
+  console.error('FAIL checkout/error motivo', checkoutErrorBubble);
+}
+
 for (const [i, text] of samples.entries()) {
   if (text.length > 900) {
     failed += 1;

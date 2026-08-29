@@ -149,6 +149,16 @@ const mapCases = [
     expected: 'DENIED',
   },
   {
+    name: 'map checkout/error não é 3DS',
+    pr: {
+      status: '3ds_required',
+      gateCode: '3DS',
+      gateMessage: '3DS frictionless — aguardando confirmação automática',
+      url: 'https://eldorado.m4u.com.br/bsc/checkout/error?code=abc',
+    },
+    expected: 'DENIED',
+  },
+  {
     name: 'map timeout',
     pr: { status: 'timeout', gateMessage: 'Timeout aguardando SSE HTTP', pagamentoErro: true },
     expected: 'TIMEOUT',

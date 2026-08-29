@@ -45,7 +45,7 @@ export function classifyCardListAction({ outcome, error } = {}) {
 }
 
 export function isGateDenialMessage(msg) {
-  return /negad|denied|recusad|n[aã]o autoriz|bloqueado|insuficiente|saldo insuficiente|cart[aã]o inv[aá]lido|transa[cç][aã]o negada|operadora recusou|fraud|fraude|suspeit|CREDIT_CARD\s*-\s*422/i.test(
+  return /negad|denied|recusad|n[aã]o autoriz|bloqueado|insuficiente|saldo insuficiente|cart[aã]o inv[aá]lido|transa[cç][aã]o negada|operadora recusou|fraud|fraude|suspeit|CREDIT_CARD\s*-\s*422|n[aã]o foi poss[ií]vel concluir|n[aã]o conseguimos (processar|realizar)/i.test(
     String(msg),
   );
 }

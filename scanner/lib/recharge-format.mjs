@@ -1,3 +1,5 @@
+import { isCheckoutErrorText, looksLikeCheckoutError } from './checkout-error.mjs';
+
 function esc(text) {
   return String(text ?? '')
     .replace(/&/g, '&amp;')
@@ -32,6 +34,7 @@ function shortReason(msg) {
   if (!t.trim()) return '';
   if (/fraud|fraude|suspeit/i.test(t)) return 'Fraude suspeita';
   if (/insuficiente|saldo/i.test(t)) return 'Saldo insuficiente';
+  if (isCheckoutErrorText(t)) return 'Não foi possível concluir o pagamento';
   if (/3ds|vbv|banco/i.test(t)) return 'Confirme no banco';
   if (/timeout|esgotad/i.test(t)) return 'Tempo esgotado';
   if (/proxy|fetch failed|rede/i.test(t)) return 'Falha de rede';
@@ -158,16 +161,26 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
     automation,
   } = outcome ?? {};
 
-  const status = normalizeStatus(result?.status);
+  let status = normalizeStatus(result?.status);
   const visualVbv = Boolean(result?.visualVbv);
   const threeDsKind = result?.threeDsKind ?? null;
-  const reason =
+  let reason =
     result?.negativeReason ??
     result?.extra?.postMessage?.transaction?.reason ??
     result?.message ??
     automation?.raw?.gateMessage ??
     automation?.raw?.message ??
     '';
+  const pageUrl = automation?.raw?.url || automation?.url || result?.pageUrl || '';
+  if (
+    status === '3DS_REQUIRED' &&
+    looksLikeCheckoutError({ url: pageUrl, message: reason })
+  ) {
+    status = 'DENIED';
+    if (!isCheckoutErrorText(reason)) {
+      reason = 'Não foi possível concluir o pagamento';
+    }
+  }
 
   const login = String(loginMsisdn ?? '').replace(/\D/g, '');
   const target = String(targetMsisdn ?? login).replace(/\D/g, '');
