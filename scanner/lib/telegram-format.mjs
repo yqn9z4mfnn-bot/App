@@ -137,4 +137,6 @@ export function buildRechargeModeKeyboard() {
 
 export const WELCOME = `<b>📱 Link Claro</b>
 
+Recarga automática com fila de cartões.
+
 Escolha o modo:`;

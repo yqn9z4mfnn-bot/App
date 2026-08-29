@@ -268,13 +268,12 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
 
   busy.add(chatId);
   const bubbleFields = {
-    title: 'Recarga',
-    valueLabel: title && /R\$/.test(String(title)) ? String(title) : '—',
-    cardMask: '—',
+    title: 'Preparando',
+    valueLabel: '',
+    cardMask: '',
     login: access,
-    target: target || access,
-    status: '🔗 Gerando login…',
-    footer: '—',
+    target: cross ? target : resolvedMode === 'other' ? '' : access,
+    hint: 'Gerando login…',
   };
   let msg = await editBubble(chatId, statusMsg, bubbleFields);
 
@@ -305,7 +304,7 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
       await editBubble(chatId, msg, {
         ...bubbleFields,
         login: msisdnResolved,
-        status: '🧹 Limpando cartões…',
+        hint: 'Limpando cartões do login…',
       });
       try {
         const purge = await purgeAllLoginCardsStrict({
@@ -336,8 +335,8 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
       await editBubble(chatId, msg, {
         ...bubbleFields,
         login: msisdnResolved,
-        status: '❌ Sem valores',
-        footer: access,
+        title: 'Sem valores',
+        hint: 'Este login não tem recarga disponível',
       });
       return false;
     }
@@ -346,9 +345,13 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
     const readyFields = {
       ...bubbleFields,
       login: msisdnResolved,
-      target: target || (resolvedMode === 'other' ? '—' : msisdnResolved),
-      status: skipValuePrompt ? '✅ Login pronto' : '👇 Escolha o valor',
-      footer: cardsPurged > 0 ? `${cardsPurged} cartão(ões) limpos` : '—',
+      target: target || (resolvedMode === 'other' ? '' : msisdnResolved),
+      title: skipValuePrompt ? 'Login pronto' : 'Escolha o valor',
+      hint: skipValuePrompt
+        ? 'Iniciando recarga…'
+        : cardsPurged > 0
+          ? `${cardsPurged} cartão(ões) removido(s) do login`
+          : 'Toque no valor abaixo',
     };
 
     if (skipValuePrompt) {
@@ -361,8 +364,8 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   } catch (err) {
     await editBubble(chatId, msg, {
       ...bubbleFields,
-      status: '❌ Erro',
-      footer: formatFetchError(err),
+      title: 'Erro',
+      hint: formatFetchError(err),
     });
     return false;
   } finally {
@@ -384,24 +387,16 @@ async function startOtherNumberRecharge(chatId) {
 
   busy.add(chatId);
   const statusMsg = await editBubble(chatId, null, {
-    title: 'Recarga',
-    valueLabel: '—',
-    cardMask: '—',
-    login: '—',
-    target: '—',
-    status: '🎲 Gerando login…',
-    footer: '—',
+    title: 'Preparando',
+    login: '',
+    hint: 'Gerando login aleatório…',
   });
   try {
     const { msisdn, link } = await generateLoginMsisdn();
     await editBubble(chatId, statusMsg, {
-      title: 'Recarga',
-      valueLabel: '—',
-      cardMask: '—',
+      title: 'Preparando',
       login: msisdn,
-      target: '—',
-      status: '🔗 Buscando valores…',
-      footer: '—',
+      hint: 'Buscando valores…',
     });
     busy.delete(chatId);
     await prepareRechargeSession(chatId, msisdn, {
@@ -411,9 +406,8 @@ async function startOtherNumberRecharge(chatId) {
     });
   } catch (err) {
     await editBubble(chatId, statusMsg, {
-      title: 'Recarga',
-      status: '❌ Falha ao gerar',
-      footer: formatFetchError(err),
+      title: 'Erro',
+      hint: formatFetchError(err),
     });
   } finally {
     busy.delete(chatId);
@@ -422,8 +416,8 @@ async function startOtherNumberRecharge(chatId) {
 
 async function promptCardLine(chatId) {
   await editBubble(chatId, null, {
-    status: '💳 Envie o cartão',
-    footer: 'NUMERO|MM|AAAA|CVV',
+    title: 'Cartão manual',
+    hint: 'Envie NUMERO|MM|AAAA|CVV',
   });
 }
 
@@ -468,13 +462,12 @@ async function executeAutoRecharge(chatId, { statusMsg = null } = {}) {
 
   const entry = getCache(chatId);
   const msg = await editBubble(chatId, statusMsg, {
-    title: 'Recarga',
-    valueLabel: flow?.productName ?? '—',
+    title: 'Cartão',
+    valueLabel: flow?.productName ?? '',
     cardMask: cardMaskFrom(picked.card),
-    login: entry?.msisdn || flow?.loginMsisdn || '—',
-    target: flow?.rechargeTargetNumber || entry?.rechargeTargetNumber || entry?.msisdn || '—',
-    status: '🤖 Cartão da fila',
-    footer: '—',
+    login: entry?.msisdn || flow?.loginMsisdn || '',
+    target: flow?.rechargeTargetNumber || entry?.rechargeTargetNumber || entry?.msisdn || '',
+    hint: 'Cartão da fila · processando…',
   });
   await executeRecharge(chatId, picked.card, { cardListLine: picked.line, statusMsg: msg });
 }
@@ -486,13 +479,12 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
 
   const maxPrep = 3;
   const retryBubble = {
-    title: 'Recarga',
-    valueLabel: retry.productName ?? '—',
-    cardMask: '—',
-    login: retry.loginMsisdn || '—',
-    target: retry.targetMsisdn || retry.loginMsisdn || '—',
-    status: '🔄 Retry',
-    footer: '—',
+    valueLabel: retry.productName ?? '',
+    cardMask: '',
+    login: retry.loginMsisdn || '',
+    target: retry.targetMsisdn || '',
+    title: 'Nova tentativa',
+    hint: 'Preparando…',
   };
   try {
     for (let attempt = 1; attempt <= maxPrep; attempt++) {
@@ -502,7 +494,8 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
         if (retry.mode === 'other') {
           await editBubble(chatId, statusMsg, {
             ...retryBubble,
-            status: attempt === 1 ? '🎲 Novo login…' : `🎲 Rede · login ${attempt}/${maxPrep}`,
+            title: 'Nova tentativa',
+            hint: attempt === 1 ? 'Gerando novo login…' : `Rede instável · tentativa ${attempt}/${maxPrep}`,
           });
           const generated = await generateLoginMsisdn();
           access = generated.msisdn;
@@ -511,7 +504,8 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
         } else {
           await editBubble(chatId, statusMsg, {
             ...retryBubble,
-            status: attempt === 1 ? '🔄 Nova tentativa…' : `🔄 Rede · retry ${attempt}/${maxPrep}`,
+            title: 'Nova tentativa',
+            hint: attempt === 1 ? 'Reabrindo sessão…' : `Rede instável · tentativa ${attempt}/${maxPrep}`,
           });
         }
 
@@ -546,8 +540,8 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
           await editBubble(chatId, statusMsg, {
             ...retryBubble,
             login: msisdnResolved,
-            status: '❌ Valor indisponível',
-            footer: msisdnResolved,
+            title: 'Valor indisponível',
+            hint: `${retry.productName} sumiu neste login`,
           });
           return null;
         }
@@ -557,7 +551,7 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
           await editBubble(chatId, statusMsg, {
             ...retryBubble,
             login: msisdnResolved,
-            status: '🧹 Limpando cartões…',
+            hint: 'Limpando cartões do login…',
           });
           try {
             const purge = await purgeAllLoginCardsStrict({
@@ -595,8 +589,8 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
         }
         await editBubble(chatId, statusMsg, {
           ...retryBubble,
-          status: '❌ Erro no retry',
-          footer: formatFetchError(err),
+          title: 'Erro no retry',
+          hint: formatFetchError(err),
         });
         return null;
       }
@@ -621,13 +615,11 @@ async function runRechargeRetry(chatId, messageId) {
 
   const statusMsg = { message_id: messageId, chat: { id: chatId } };
   await editBubble(chatId, statusMsg, {
-    title: 'Recarga',
-    valueLabel: retry.productName ?? '—',
-    cardMask: '—',
-    login: retry.loginMsisdn || '—',
-    target: retry.targetMsisdn || '—',
-    status: '🔄 Tentando novamente…',
-    footer: 'próximo cartão',
+    title: 'Nova tentativa',
+    valueLabel: retry.productName ?? '',
+    login: retry.loginMsisdn || '',
+    target: retry.targetMsisdn || '',
+    hint: 'Mesmo valor e destino · próximo cartão',
   });
 
   const prep = await prepareRetryRecharge(chatId, retry, statusMsg);
@@ -645,13 +637,11 @@ async function runRechargeRetry(chatId, messageId) {
   const pending = cardList.countPending();
   if (pending > 0 || retry.useAuto !== false) {
     await editBubble(chatId, statusMsg, {
-      title: 'Recarga',
+      title: 'Nova tentativa',
       valueLabel: prep.product.name,
-      cardMask: '—',
       login: prep.access,
       target: prep.target,
-      status: '🤖 Próximo cartão…',
-      footer: '—',
+      hint: 'Pegando próximo cartão da fila…',
     });
     await executeAutoRecharge(chatId, { statusMsg });
     return;
@@ -661,13 +651,11 @@ async function runRechargeRetry(chatId, messageId) {
     chatId,
     statusMsg,
     {
-      title: 'Recarga',
+      title: 'Fila vazia',
       valueLabel: prep.product.name,
-      cardMask: '—',
       login: prep.access,
       target: prep.target,
-      status: '❌ Fila vazia',
-      footer: 'envie cartões ou manual',
+      hint: 'Envie cartões ou escolha manual',
     },
     { reply_markup: payMethodKeyboard([]) },
   );
@@ -699,13 +687,10 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
   }
 
   const statusMsg = await editBubble(chatId, null, {
-    title: 'Recarga',
+    title: 'Recarga automática',
     valueLabel: formatBRL(cents),
-    cardMask: '—',
-    login: '—',
     target,
-    status: '🔑 Procurando login…',
-    footer: '—',
+    hint: 'Procurando login com esse valor…',
   });
 
   const used = new Set([target]);
@@ -720,13 +705,11 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
     used.add(picked.msisdn);
 
     await editBubble(chatId, statusMsg, {
-      title: 'Recarga',
+      title: 'Recarga automática',
       valueLabel: formatBRL(cents),
-      cardMask: '—',
       login: picked.msisdn,
       target,
-      status: '🔗 Abrindo sessão…',
-      footer: `${attempt}ª tentativa`,
+      hint: `Abrindo sessão · tentativa ${attempt}`,
     }).catch(() => {});
 
     const ok = await prepareRechargeSession(chatId, picked.msisdn, {
@@ -760,13 +743,11 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
     });
 
     await editBubble(chatId, statusMsg, {
-      title: 'Recarga',
+      title: 'Recarga automática',
       valueLabel: product.name,
-      cardMask: '—',
       login: entry.msisdn,
       target,
-      status: '🤖 Pegando cartão…',
-      footer: '—',
+      hint: 'Pegando cartão da fila…',
     }).catch(() => {});
 
     await executeAutoRecharge(chatId, { statusMsg });
@@ -774,13 +755,10 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
   }
 
   await editBubble(chatId, statusMsg, {
-    title: 'Recarga',
+    title: 'Não iniciou',
     valueLabel: formatBRL(cents),
-    cardMask: '—',
-    login: '—',
     target,
-    status: '❌ Não iniciou',
-    footer: lastErr?.message || 'sem login',
+    hint: lastErr?.message || 'sem login disponível',
   }).catch(() => {});
 }
 
@@ -804,11 +782,10 @@ async function startRechargePicker(chatId) {
     chatId,
     null,
     {
-      valueLabel: '—',
+      title: 'Escolha o valor',
       login: entry.msisdn,
       target: entry.rechargeTargetNumber || entry.msisdn,
-      status: '👇 Escolha o valor',
-      footer: 'toque abaixo',
+      hint: 'Toque no valor abaixo',
     },
     { reply_markup: buildValueKeyboard(entry.valores) },
   );
@@ -845,11 +822,10 @@ async function onValueSelected(chatId, messageId, productId) {
   const flow = rechargeFlow.get(chatId);
   if (flow.step === 'target_msisdn') {
     await editBubble(chatId, { message_id: messageId }, {
+      title: 'Quem recebe?',
       valueLabel: product.name,
       login: entry.msisdn,
-      target: '',
-      status: '📱 Quem recebe?',
-      footer: 'envie o número destino',
+      hint: 'Envie o número destino (11 dígitos)',
     });
     return;
   }
@@ -860,11 +836,11 @@ async function onValueSelected(chatId, messageId, productId) {
     chatId,
     { message_id: messageId },
     {
+      title: 'Forma de pagamento',
       valueLabel: product.name,
       login: entry.msisdn,
       target: flow.rechargeTargetNumber || entry.msisdn,
-      status: '💳 Pagamento',
-      footer: 'automatico ou manual',
+      hint: 'Automático ou cartão manual',
     },
     { reply_markup: payMethodKeyboard(entry.cards) },
   );
@@ -931,13 +907,12 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
 
   const useHybrid = useBrowser && isHybridRechargeEnabled();
   const runBubble = {
-    title: 'Recarga',
-    valueLabel: flow.productName ?? '—',
+    title: 'Processando',
+    valueLabel: flow.productName ?? '',
     cardMask: cardMaskFrom(card),
     login: entry.msisdn,
     target: targetMsisdn || entry.msisdn,
-    status: '⏳ Processando…',
-    footer: '—',
+    hint: 'Aguardando checkout…',
   };
   const statusMsg = await editBubble(chatId, incomingStatus, runBubble);
 
@@ -1042,7 +1017,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     await editBubble(
       chatId,
       statusMsg,
-      { ...runBubble, status: '❌ Erro', footer: formatFetchError(err) },
+      { ...runBubble, title: 'Erro na recarga', hint: formatFetchError(err) },
       { reply_markup: retryKb },
     );
 
@@ -1067,8 +1042,8 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
         statusMsg,
         {
           ...runBubble,
-          status: '❌ Erro',
-          footer: formatQueueFooter(action, applied.pendingLeft),
+          title: 'Erro na recarga',
+          hint: formatQueueFooter(action, applied.pendingLeft),
         },
         { reply_markup: retryKb },
       ).catch(() => {});
@@ -1107,11 +1082,11 @@ async function handleRechargeInput(chatId, text) {
       chatId,
       null,
       {
+        title: 'Forma de pagamento',
         valueLabel: flow.productName,
         login: entry.msisdn,
         target,
-        status: '💳 Pagamento',
-        footer: hasCards || pendingCards > 0 ? 'automatico ou manual' : 'envie o cartão',
+        hint: hasCards || pendingCards > 0 ? 'Automático ou cartão manual' : 'Envie os dados do cartão',
       },
       hasCards || pendingCards > 0 ? { reply_markup: payMethodKeyboard(entry.cards) } : undefined,
     );
@@ -1493,12 +1468,12 @@ async function handleCallback(query) {
   if (data === 'rcgmode:same') {
     chatRechargeMode.set(chatId, 'same');
     await editBubble(chatId, { message_id: messageId }, {
-      status: '📱 Envie o número',
-      footer: 'login e recarga nele',
+      title: 'Mesmo número',
+      hint: 'Envie o número (login e recarga nele)',
     }).catch(() =>
       editBubble(chatId, null, {
-        status: '📱 Envie o número',
-        footer: 'login e recarga nele',
+        title: 'Mesmo número',
+        hint: 'Envie o número (login e recarga nele)',
       }),
     );
     return;
@@ -1512,8 +1487,8 @@ async function handleCallback(query) {
   if (data === 'rcg:cancel') {
     clearRecharge(chatId);
     await editBubble(chatId, { message_id: messageId }, {
-      status: '↩️ Cancelada',
-      footer: '/start para recomeçar',
+      title: 'Cancelada',
+      hint: 'Use /start para recomeçar',
     });
     return;
   }
