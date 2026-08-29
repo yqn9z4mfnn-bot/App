@@ -30,20 +30,35 @@ export function generateMsisdnFromDb() {
 }
 
 /** Gera número e valida tentando obter link JWT na API Claro. */
-export async function generateLoginMsisdn({ maxAttempts = 8, timeoutMs = 10_000 } = {}) {
+export async function generateLoginMsisdn({
+  maxAttempts = 8,
+  timeoutMs = 10_000,
+  shouldAbort = null,
+} = {}) {
   if (proxyEnabled() && !getProxyUrl()) {
     throw new Error('PROXY_ENABLED=1 mas proxy incompleto no .env');
   }
 
+  const attempts = proxyEnabled() ? maxAttempts : Math.min(maxAttempts, 3);
   let lastErr = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (shouldAbort?.()) {
+      const err = new Error('cancelled');
+      err.cancelled = true;
+      throw err;
+    }
     const msisdn = generateMsisdnFromDb();
     try {
       const { link } = await fetchClaroLoginLink(msisdn, { timeoutMs });
       return { msisdn, link, attempt };
     } catch (err) {
+      if (err?.cancelled || shouldAbort?.()) {
+        const cancel = new Error('cancelled');
+        cancel.cancelled = true;
+        throw cancel;
+      }
       lastErr = err;
-      if (attempt < maxAttempts && isTransientFetchError(err)) {
+      if (attempt < attempts && isTransientFetchError(err)) {
         await sleep(Number(process.env.CLARO_LINK_429_BACKOFF_MS) || 800);
       }
     }

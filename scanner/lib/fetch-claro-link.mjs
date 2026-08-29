@@ -45,7 +45,8 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
 
   const defaultTimeout = Number(process.env.CLARO_LINK_TIMEOUT_MS) || 20_000;
   const waitMs = timeoutMs ?? defaultTimeout;
-  const maxRetries = Number(process.env.CLARO_LINK_429_RETRIES) || 5;
+  const configuredRetries = Number(process.env.CLARO_LINK_429_RETRIES) || 5;
+  const maxRetries = proxyEnabled() ? configuredRetries : Math.min(configuredRetries, 2);
   const base = String(process.env.CLARO_LINK_API ?? DEFAULT_LINK_API).replace(/\/+$/, '');
   const url = `${base}/claro/link/${number}`;
 

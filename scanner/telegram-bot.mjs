@@ -82,12 +82,39 @@ process.on('uncaughtException', (err) => {
 const API = `https://api.telegram.org/bot${TOKEN}`;
 let offset = 0;
 const busy = new Set();
+/** Invalida trabalho longo (gerar login) quando o usuário manda outro comando. */
+const workEpoch = new Map();
 const cache = new Map();
 const rechargeFlow = new Map();
 /** @type {Map<number, 'same'|'other'>} */
 const chatRechargeMode = new Map();
 /** @type {Map<number, object>} última recarga falha — para botão "Tentar novamente" */
 const rechargeRetry = new Map();
+
+function bumpWork(chatId) {
+  const n = (workEpoch.get(chatId) || 0) + 1;
+  workEpoch.set(chatId, n);
+  return n;
+}
+
+function isWorkStale(chatId, epoch) {
+  return workEpoch.get(chatId) !== epoch;
+}
+
+/** /start, atalho de recarga e /recarga cancelam o "Aguarde…" de um /start preso. */
+function preemptChatWork(chatId) {
+  const epoch = bumpWork(chatId);
+  busy.delete(chatId);
+  return epoch;
+}
+
+function isPriorityRechargeText(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return false;
+  if (/^\/(start|help|recarga|status|cancelar|cancel)(@|\s|$)/i.test(t)) return true;
+  if (parseQuickCrossRecharge(t)) return true;
+  return false;
+}
 const CACHE_TTL = 10 * 60 * 1000;
 const BULK_CONCURRENCY = Math.max(1, Number(process.env.BULK_CONCURRENCY || 1));
 
@@ -390,11 +417,7 @@ async function startSameNumberRecharge(chatId, msisdn) {
 
 async function startOtherNumberRecharge(chatId) {
   chatRechargeMode.set(chatId, 'other');
-  if (busy.has(chatId)) {
-    await send(chatId, '⏳ Aguarde…');
-    return;
-  }
-
+  const epoch = bumpWork(chatId);
   busy.add(chatId);
   const statusMsg = await editBubble(chatId, null, {
     title: 'Preparando',
@@ -402,7 +425,10 @@ async function startOtherNumberRecharge(chatId) {
     hint: 'Gerando login aleatório…',
   });
   try {
-    const { msisdn, link } = await generateLoginMsisdn();
+    const { msisdn, link } = await generateLoginMsisdn({
+      shouldAbort: () => isWorkStale(chatId, epoch),
+    });
+    if (isWorkStale(chatId, epoch)) return;
     await editBubble(chatId, statusMsg, {
       title: 'Preparando',
       login: msisdn,
@@ -415,6 +441,7 @@ async function startOtherNumberRecharge(chatId) {
       loginLink: link,
     });
   } catch (err) {
+    if (err?.cancelled || isWorkStale(chatId, epoch)) return;
     await editBubble(chatId, statusMsg, {
       title: 'Erro',
       hint: formatFetchError(err),
@@ -669,10 +696,7 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
     return;
   }
 
-  if (busy.has(chatId)) {
-    await send(chatId, '⏳ Aguarde a recarga anterior…');
-    return;
-  }
+  preemptChatWork(chatId);
 
   if (cardList.countPending() === 0) {
     const inUse = cardList.countInUse();
@@ -2144,6 +2168,10 @@ async function handleMessage(msg) {
       return;
     }
 
+    if (isPriorityRechargeText(text)) {
+      preemptChatWork(chatId);
+    }
+
     if (text && !text.startsWith('/')) {
       const ingested = await tryIngestCardListFromMessage(chatId, text);
       if (ingested) return;
@@ -2162,6 +2190,11 @@ async function handleMessage(msg) {
 
     if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@')) {
       await promptRechargeMode(chatId);
+      return;
+    }
+
+    if (/^\/(cancelar|cancel)(@|\s|$)/i.test(text)) {
+      await send(chatId, '↩️ Fluxo cancelado. Envie a recarga ou /start.');
       return;
     }
 
