@@ -171,14 +171,17 @@ function toLoginUrl(linkOrJwt) {
   return s;
 }
 
-async function tg(method, body = {}) {
+async function tg(method, body = {}, opts = {}) {
+  const maxAttempts = opts.retries ?? 3;
+  const timeoutMs = opts.timeoutMs;
   let lastErr = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const res = await fetch(`${API}/${method}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
+        signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
       });
       const data = await res.json();
       if (!data.ok) {
@@ -187,7 +190,7 @@ async function tg(method, body = {}) {
       return data.result;
     } catch (err) {
       lastErr = err;
-      if (attempt < 3 && isTransientFetchError(err)) {
+      if (attempt < maxAttempts && isTransientFetchError(err)) {
         await sleep(400 * attempt);
         continue;
       }
@@ -2380,11 +2383,15 @@ async function poll() {
   console.log('[bot] polling (+ recarga)…');
   while (true) {
     try {
-      const updates = await tg('getUpdates', {
-        offset,
-        timeout: 25,
-        allowed_updates: ['message', 'callback_query'],
-      });
+      const updates = await tg(
+        'getUpdates',
+        {
+          offset,
+          timeout: 20,
+          allowed_updates: ['message', 'callback_query'],
+        },
+        { timeoutMs: 28_000, retries: 1 },
+      );
 
       for (const update of updates) {
         offset = update.update_id + 1;
@@ -2396,8 +2403,9 @@ async function poll() {
         }
       }
     } catch (err) {
-      console.error('[bot] poll:', err.message);
-      await new Promise((r) => setTimeout(r, 2000));
+      const msg = String(err?.message || err);
+      console.error('[bot] poll:', msg);
+      await sleep(/409|conflict/i.test(msg) ? 1200 : 2000);
     }
   }
 }
