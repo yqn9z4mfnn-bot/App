@@ -70,7 +70,7 @@ const denied = formatRechargeResult({
   loginMsisdn: '11',
   targetMsisdn: '11',
 });
-if (!denied.includes('fraude suspeita')) {
+if (!/fraude suspeita/.test(denied)) {
   failed += 1;
   console.error('FAIL short reason', denied);
 }

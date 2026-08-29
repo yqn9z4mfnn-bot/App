@@ -15,24 +15,25 @@ function formatSeconds(ms) {
   return s >= 10 ? `${Math.round(s)}s` : `${s.toFixed(1).replace('.', ',')}s`;
 }
 
-export const BUBBLE_LINES = 8;
-const FIELD_MAX = 28;
+export const BUBBLE_LINES = 4;
+const FIELD_MAX = 34;
 
 function digits(value) {
-  return String(value ?? '').replace(/\D/g, '') || '—';
+  const d = String(value ?? '').replace(/\D/g, '');
+  return d || '';
 }
 
 function clip(text, max = FIELD_MAX) {
   const t = String(text ?? '')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!t) return '—';
+  if (!t) return '';
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
 }
 
 function shortReason(msg) {
   const t = String(msg ?? '');
-  if (!t.trim()) return '—';
+  if (!t.trim()) return '';
   if (/fraud|fraude|suspeit/i.test(t)) return 'fraude suspeita';
   if (/insuficiente|saldo/i.test(t)) return 'saldo insuficiente';
   if (/3ds|vbv|banco/i.test(t)) return 'confirme no banco';
@@ -42,27 +43,62 @@ function shortReason(msg) {
   return clip(t.replace(/CREDIT_CARD\s*-\s*/i, ''), FIELD_MAX);
 }
 
-/** Bolha fixa (sempre 8 linhas) — não cresce quando o bot edita. */
+function toneFromStatus(status) {
+  const s = String(status ?? '');
+  if (/aprov|sucesso|🎉/i.test(s)) return ['🟢', 'Aprovada'];
+  if (/negad|recus|😔/i.test(s)) return ['🔴', 'Negada'];
+  if (/3ds|vbv|🔐|📲/i.test(s)) return ['🟡', '3DS'];
+  if (/timeout|esgot|⏰/i.test(s)) return ['🟠', 'Timeout'];
+  if (/erro|falha|❌|🔧/i.test(s)) return ['🟠', 'Erro'];
+  if (/cancel/i.test(s)) return ['⚪', 'Cancelada'];
+  if (/retry|tentando|🔄/i.test(s)) return ['🟣', 'Retry'];
+  if (/login|gerando|valores|🎲|🔗|prepar/i.test(s)) return ['🟣', 'Preparando'];
+  if (/limpando|🧹/i.test(s)) return ['🟣', 'Limpando'];
+  if (/cartão|fila|🤖/i.test(s)) return ['🔵', 'Cartão'];
+  if (/escolha|valor|👇/i.test(s)) return ['🔵', 'Valor'];
+  if (/pagamento|paga/i.test(s)) return ['🔵', 'Pagamento'];
+  if (/recebe|destino|número/i.test(s)) return ['🔵', 'Destino'];
+  if (/process/i.test(s)) return ['🔵', 'Processando'];
+  return ['🔵', clip(s.replace(/^[^\p{L}\p{N}]+/u, '') || 'Recarga', 14)];
+}
+
+function prettyVal(valueLabel) {
+  const v = String(valueLabel ?? '').trim();
+  if (!v || v === '—') return 'R$ …';
+  return clip(v, 14);
+}
+
+function prettyCard(cardMask) {
+  const c = String(cardMask ?? '').trim();
+  if (!c || c === '—') return 'cartão';
+  return clip(c, 12);
+}
+
+function prettyPath(login, target) {
+  const a = digits(login);
+  const b = digits(target);
+  if (a && b && a !== b) return `${a} → ${b}`;
+  if (a) return a;
+  if (b) return b;
+  return 'aguardando número';
+}
+
+/** Cartão compacto com faixa colorida — sempre 4 linhas, sem campo vazio. */
 export function formatStatusBubble({
-  title = 'Recarga',
-  valueLabel = '—',
-  cardMask = '—',
-  login = '—',
-  target = '—',
-  status = '…',
-  footer = '—',
+  valueLabel = '',
+  cardMask = '',
+  login = '',
+  target = '',
+  status = '',
+  footer = '',
 } = {}) {
-  const loginD = digits(login);
-  const targetD = digits(target);
+  const [dot, label] = toneFromStatus(status);
+  const note = clip(footer && footer !== '—' ? footer : status.replace(/^[^\p{L}\p{N}]+/u, '') || label, FIELD_MAX);
   return [
-    `<b>${esc(clip(title, 22))}</b>`,
-    `💰 ${esc(clip(valueLabel, 20))}`,
-    `💳 ${esc(clip(cardMask, 16))}`,
-    `🔑 <code>${esc(loginD)}</code>`,
-    `📱 <code>${esc(targetD)}</code>`,
-    '',
-    esc(clip(status, FIELD_MAX)),
-    `<i>${esc(clip(footer, FIELD_MAX))}</i>`,
+    `<blockquote><b>${dot}  ${esc(label)}</b>`,
+    `${esc(prettyVal(valueLabel))}   ·   ${esc(prettyCard(cardMask))}`,
+    `<code>${esc(prettyPath(login, target))}</code>`,
+    `<i>${esc(note || '…')}</i></blockquote>`,
   ].join('\n');
 }
 
@@ -127,7 +163,7 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
     title = 'Erro';
   }
 
-  let footer = extraFooter ?? '—';
+  let footer = extraFooter || '';
   if (!extraFooter) {
     if (status === 'SUCCESS') footer = formatSeconds(latencyMs) ? `⏱ ${formatSeconds(latencyMs)}` : 'ok';
     else if (status === '3DS_REQUIRED') footer = 'confirme no banco';

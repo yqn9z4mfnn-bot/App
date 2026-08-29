@@ -17,7 +17,6 @@ import {
   buildConfirmKeyboard,
   buildRechargeModeKeyboard,
   WELCOME,
-  rechargeStep,
 } from './lib/telegram-format.mjs';
 import {
   formatRechargeResult,
@@ -422,7 +421,10 @@ async function startOtherNumberRecharge(chatId) {
 }
 
 async function promptCardLine(chatId) {
-  await send(chatId, CARD_INPUT_HINT);
+  await editBubble(chatId, null, {
+    status: '💳 Envie o cartão',
+    footer: 'NUMERO|MM|AAAA|CVV',
+  });
 }
 
 function payMethodKeyboard(cards) {
@@ -798,9 +800,18 @@ async function startRechargePicker(chatId) {
   }
 
   clearRecharge(chatId);
-  await send(chatId, `${rechargeStep(2, 4, 'Escolha o valor')}\n📱 <code>${entry.msisdn}</code>`, {
-    reply_markup: buildValueKeyboard(entry.valores),
-  });
+  await editBubble(
+    chatId,
+    null,
+    {
+      valueLabel: '—',
+      login: entry.msisdn,
+      target: entry.rechargeTargetNumber || entry.msisdn,
+      status: '👇 Escolha o valor',
+      footer: 'toque abaixo',
+    },
+    { reply_markup: buildValueKeyboard(entry.valores) },
+  );
 }
 
 async function onValueSelected(chatId, messageId, productId) {
@@ -833,28 +844,30 @@ async function onValueSelected(chatId, messageId, productId) {
 
   const flow = rechargeFlow.get(chatId);
   if (flow.step === 'target_msisdn') {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        `${rechargeStep(3, 4, 'Quem recebe?')}\n\n` +
-        `💰 <b>${product.name}</b> selecionado\n` +
-        `🔑 Login: <code>${entry.msisdn}</code>\n\n` +
-        '📱 Envie o <b>número que vai receber</b> (11 dígitos):',
-      parse_mode: 'HTML',
+    await editBubble(chatId, { message_id: messageId }, {
+      valueLabel: product.name,
+      login: entry.msisdn,
+      target: '',
+      status: '📱 Quem recebe?',
+      footer: 'envie o número destino',
     });
     return;
   }
 
   const hasCards = entry.cards?.length > 0;
   const pendingCards = cardList.countPending();
-  await tg('editMessageText', {
-    chat_id: chatId,
-    message_id: messageId,
-    text: `${rechargeStep(3, 4, 'Forma de pagamento')}\n\n💰 <b>${product.name}</b> selecionado\n\nComo deseja pagar? 👇`,
-    parse_mode: 'HTML',
-    reply_markup: payMethodKeyboard(entry.cards),
-  });
+  await editBubble(
+    chatId,
+    { message_id: messageId },
+    {
+      valueLabel: product.name,
+      login: entry.msisdn,
+      target: flow.rechargeTargetNumber || entry.msisdn,
+      status: '💳 Pagamento',
+      footer: 'automatico ou manual',
+    },
+    { reply_markup: payMethodKeyboard(entry.cards) },
+  );
 
   if (!hasCards && pendingCards === 0) {
     rechargeFlow.set(chatId, {
@@ -1090,14 +1103,17 @@ async function handleRechargeInput(chatId, text) {
 
     const hasCards = entry.cards?.length > 0;
     const pendingCards = cardList.countPending();
-    await send(
+    await editBubble(
       chatId,
-      `${rechargeStep(3, 4, 'Forma de pagamento')}\n\n` +
-        `💰 <b>${flow.productName}</b> → <code>${target}</code>\n\n` +
-        (hasCards || pendingCards > 0 ? 'Como deseja pagar? 👇' : '💳 Envie os dados do cartão:'),
-      hasCards || pendingCards > 0
-        ? { reply_markup: payMethodKeyboard(entry.cards) }
-        : undefined,
+      null,
+      {
+        valueLabel: flow.productName,
+        login: entry.msisdn,
+        target,
+        status: '💳 Pagamento',
+        footer: hasCards || pendingCards > 0 ? 'automatico ou manual' : 'envie o cartão',
+      },
+      hasCards || pendingCards > 0 ? { reply_markup: payMethodKeyboard(entry.cards) } : undefined,
     );
     if (!hasCards && pendingCards === 0) {
       flow.step = 'card_line';
@@ -1476,13 +1492,14 @@ async function handleCallback(query) {
 
   if (data === 'rcgmode:same') {
     chatRechargeMode.set(chatId, 'same');
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: messageId,
-      text: `${rechargeStep(1, 4, 'Mesmo número')}\n\n📱 Envie o número (login e recarga nele):`,
-      parse_mode: 'HTML',
+    await editBubble(chatId, { message_id: messageId }, {
+      status: '📱 Envie o número',
+      footer: 'login e recarga nele',
     }).catch(() =>
-      send(chatId, `${rechargeStep(1, 4, 'Mesmo número')}\n\n📱 Envie o número (login e recarga nele):`),
+      editBubble(chatId, null, {
+        status: '📱 Envie o número',
+        footer: 'login e recarga nele',
+      }),
     );
     return;
   }
@@ -1494,11 +1511,9 @@ async function handleCallback(query) {
 
   if (data === 'rcg:cancel') {
     clearRecharge(chatId);
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: messageId,
-      text: '↩️ Recarga cancelada.\n\nUse /start para começar de novo.',
-      parse_mode: 'HTML',
+    await editBubble(chatId, { message_id: messageId }, {
+      status: '↩️ Cancelada',
+      footer: '/start para recomeçar',
     });
     return;
   }
