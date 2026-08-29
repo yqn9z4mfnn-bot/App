@@ -241,6 +241,25 @@ async function promptRechargeMode(chatId) {
   await send(chatId, WELCOME, { reply_markup: buildRechargeModeKeyboard() });
 }
 
+async function purgeLoginCards(chatId, statusMsg, bubble, { sessionId, msisdn, productId }) {
+  if (!sessionId || !msisdn || !productId) return { removed: 0, walletAuth: null };
+  await editBubble(chatId, statusMsg, {
+    ...bubble,
+    login: msisdn,
+    hint: 'Limpando cartões do login…',
+  }).catch(() => {});
+  try {
+    const purge = await purgeAllLoginCardsStrict({ sessionId, msisdn, productId });
+    if (purge.removed) {
+      console.log(`[bot][purge] ${msisdn}: ${purge.removed} removido(s)`);
+    }
+    return purge;
+  } catch (err) {
+    console.error('[bot][purge-login]', err.message);
+    return { removed: 0, walletAuth: null };
+  }
+}
+
 /** Prepara sessão Claro + teclado de valores para recarga. */
 async function prepareRechargeSession(chatId, accessMsisdn, {
   targetMsisdn = null,
@@ -249,7 +268,6 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   mode = null,
   loginLink = null,
   skipValuePrompt = false,
-  skipPurge = false,
 } = {}) {
   const access = normalizeBrMobile(accessMsisdn);
   if (!access) {
@@ -301,23 +319,14 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
 
     let walletAuth = null;
     let cardsPurged = 0;
-    if (resolvedMode === 'other' && valores.length && !skipPurge) {
-      await editBubble(chatId, msg, {
-        ...bubbleFields,
-        login: msisdnResolved,
-        hint: 'Limpando cartões do login…',
+    if (resolvedMode === 'other' && valores.length) {
+      const purge = await purgeLoginCards(chatId, msg, bubbleFields, {
+        sessionId: session.id,
+        msisdn: msisdnResolved,
+        productId: valores[0].id,
       });
-      try {
-        const purge = await purgeAllLoginCardsStrict({
-          sessionId: session.id,
-          msisdn: msisdnResolved,
-          productId: valores[0].id,
-        });
-        walletAuth = purge.walletAuth;
-        cardsPurged = purge.removed;
-      } catch (err) {
-        console.error('[bot][purge-login]', err.message);
-      }
+      walletAuth = purge.walletAuth;
+      cardsPurged = purge.removed ?? 0;
     }
 
     setCache(chatId, {
@@ -404,7 +413,6 @@ async function startOtherNumberRecharge(chatId) {
       statusMsg,
       mode: 'other',
       loginLink: link,
-      skipPurge: true,
     });
   } catch (err) {
     await editBubble(chatId, statusMsg, {
@@ -549,7 +557,12 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
         }
 
         let walletAuth = null;
-        // Login recém-gerado não tem cartão salvo — purge só atrasava/travava o retry.
+        const purge = await purgeLoginCards(chatId, statusMsg, retryBubble, {
+          sessionId: session.id,
+          msisdn: msisdnResolved,
+          productId: product.id,
+        });
+        walletAuth = purge.walletAuth;
 
         setCache(chatId, {
           link,
@@ -905,6 +918,19 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
   const statusMsg = await editBubble(chatId, incomingStatus, runBubble);
 
   try {
+    if (flow.mode === 'other' || entry.rechargeMode === 'other') {
+      const purge = await purgeLoginCards(chatId, statusMsg, runBubble, {
+        sessionId: entry.sessionId,
+        msisdn: entry.msisdn,
+        productId: flow.productId,
+      });
+      if (purge.walletAuth) {
+        entry.walletAuth = purge.walletAuth;
+        setCache(chatId, entry);
+      }
+      await editBubble(chatId, statusMsg, { ...runBubble, hint: 'Aguardando checkout…' }).catch(() => {});
+    }
+
     const outcome = useBrowser
       ? useHybrid
         ? await runHybridRecharge({

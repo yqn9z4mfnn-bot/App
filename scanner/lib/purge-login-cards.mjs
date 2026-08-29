@@ -7,8 +7,8 @@ import {
 } from './eldorado.mjs';
 import { claroGet } from './http.mjs';
 
-const PURGE_TIMEOUT_MS = Number(process.env.PURGE_LOGIN_TIMEOUT_MS || 12_000);
-const PURGE_HTTP = { timeoutMs: 8_000, retries: 1 };
+const PURGE_TIMEOUT_MS = Number(process.env.PURGE_LOGIN_TIMEOUT_MS || 20_000);
+const PURGE_HTTP = { timeoutMs: 10_000, retries: 1 };
 
 function strictPurgeEnabled() {
   return ['1', 'true', 'yes'].includes(String(process.env.PURGE_LOGIN_STRICT || '').toLowerCase());
