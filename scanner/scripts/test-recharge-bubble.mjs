@@ -61,6 +61,26 @@ if (!destino.includes('<code>83993681996</code>')) {
   console.error('FAIL msisdn destino');
 }
 
+const deniedQueue = formatRechargeResult(
+  {
+    result: { status: 'DENIED', message: 'CREDIT_CARD - 422 - suspected fraud', negativeReason: 'CREDIT_CARD - 422 - suspected fraud' },
+    valueCents: 3500,
+    cardMask: '****8803',
+    loginMsisdn: '11991001732',
+    targetMsisdn: '62994111018',
+  },
+  { footer: formatQueueFooter('consumed', 257) },
+);
+
+if (!/Fraude suspeita/i.test(deniedQueue)) {
+  failed += 1;
+  console.error('FAIL motivo negada', deniedQueue);
+}
+if (!/Removido da fila · restam 257/.test(deniedQueue)) {
+  failed += 1;
+  console.error('FAIL fila negada', deniedQueue);
+}
+
 const denied = formatRechargeResult({
   result: { status: 'DENIED', message: 'CREDIT_CARD - 422 - suspected fraud' },
   valueCents: 3500,

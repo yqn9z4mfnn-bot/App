@@ -80,6 +80,14 @@ function formatMsisdnLine(login, target) {
   return '';
 }
 
+function formatGateReason(msg) {
+  const t = String(msg ?? '').trim();
+  if (!t) return '';
+  const short = shortReason(t);
+  if (short) return short;
+  return clip(t.replace(/CREDIT_CARD\s*-\s*/i, ''), 56);
+}
+
 /** Mensagem do fluxo — texto normal, sem blockquote. */
 export function formatStatusBubble({
   title = '',
@@ -90,11 +98,13 @@ export function formatStatusBubble({
   status = '',
   footer = '',
   hint = '',
+  subhint = '',
 } = {}) {
   const head = esc(clip(title || inferTitle(status, footer, hint), 28));
   const val = String(valueLabel ?? '').trim();
   const card = String(cardMask ?? '').trim();
-  const note = inferHint(status, footer, hint);
+  const note = hint || inferHint(status, footer, hint);
+  const extra = subhint || '';
 
   const lines = [`<b>${head}</b>`, ''];
 
@@ -109,9 +119,8 @@ export function formatStatusBubble({
     lines.push(`💳 <code>${esc(card)}</code>`);
   }
 
-  if (note) {
-    lines.push('', `<i>${esc(note)}</i>`);
-  }
+  if (note) lines.push('', `<i>${esc(note)}</i>`);
+  if (extra && extra !== note) lines.push(`<i>${esc(extra)}</i>`);
 
   return lines.join('\n');
 }
@@ -140,6 +149,7 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
     latencyMs,
     loginMsisdn,
     targetMsisdn,
+    automation,
   } = outcome ?? {};
 
   const status = normalizeStatus(result?.status);
@@ -149,6 +159,8 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
     result?.negativeReason ??
     result?.extra?.postMessage?.transaction?.reason ??
     result?.message ??
+    automation?.raw?.gateMessage ??
+    automation?.raw?.message ??
     '';
 
   const login = String(loginMsisdn ?? '').replace(/\D/g, '');
@@ -163,15 +175,13 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
   else if (status === 'TIMEOUT') title = 'Tempo esgotado';
   else if (status === 'ERROR') title = 'Erro na recarga';
 
-  let hint = extraFooter || '';
-  if (!extraFooter) {
-    if (status === 'SUCCESS') {
-      hint = formatSeconds(latencyMs) ? `${formatSeconds(latencyMs)}` : '';
-    } else if (status === '3DS_REQUIRED') {
-      hint = 'Confirme no app ou SMS do banco';
-    } else {
-      hint = shortReason(reason);
-    }
+  let hint = '';
+  if (status === 'SUCCESS') {
+    hint = formatSeconds(latencyMs) ? `${formatSeconds(latencyMs)}` : '';
+  } else if (status === '3DS_REQUIRED') {
+    hint = 'Confirme no app ou SMS do banco';
+  } else {
+    hint = formatGateReason(reason) || (status === 'DENIED' ? 'Negada pela operadora' : '');
   }
 
   return formatStatusBubble({
@@ -181,6 +191,7 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
     login,
     target,
     hint,
+    subhint: extraFooter || '',
   });
 }
 

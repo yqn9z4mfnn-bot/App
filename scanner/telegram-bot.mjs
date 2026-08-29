@@ -1043,7 +1043,8 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
         {
           ...runBubble,
           title: 'Erro na recarga',
-          hint: formatQueueFooter(action, applied.pendingLeft),
+          hint: formatFetchError(err),
+          subhint: formatQueueFooter(action, applied.pendingLeft),
         },
         { reply_markup: retryKb },
       ).catch(() => {});
