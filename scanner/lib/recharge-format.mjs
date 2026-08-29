@@ -91,10 +91,10 @@ export function formatRechargeResult(outcome) {
     lines.push(`📱 <b>Número:</b> <code>${esc(target)}</code>`);
   }
 
-  if (status === '3DS_REQUIRED' && (visualVbv || threeDsKind === 'cardinal' || threeDsKind === 'sms')) {
+  if (status === '3DS_REQUIRED') {
     lines.push(
       '',
-      '💡 <i>O Edge foi fechado. Confirme no app do banco, SMS ou token — a recarga conclui sozinha após aprovar.</i>',
+      '💡 <i>Edge fechado. Confirme no app/SMS do banco — a recarga conclui após aprovar.</i>',
     );
   }
 

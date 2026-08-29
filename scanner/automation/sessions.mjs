@@ -168,9 +168,7 @@ const scheduleSessionClose = (sessionId, delayMs) => {
 const sessionCloseDelayMs = () => Math.max(400, (config.keepBrowserOpenSeconds || 0) * 1000);
 
 const shouldKeepBrowserOpen = (paymentResult) => {
-  if (paymentResult?.status === '3ds_required' && config.keepBrowserOpen3dsSeconds > 0) {
-    return Math.max(400, config.keepBrowserOpen3dsSeconds * 1000);
-  }
+  if (paymentResult?.status === '3ds_required') return 0;
   if (config.keepBrowserOpenSeconds > 0) {
     return sessionCloseDelayMs();
   }
@@ -223,6 +221,23 @@ const cleanupUsedCard = async (session, paymentResult) => {
   await removeUsedCardAfterRecharge(session, paymentResult).catch((err) => {
     console.log(`[automation][card] cleanup: ${String(err?.message || err).slice(0, 120)}`);
   });
+};
+
+const finishPaymentSession = async (sessionId, session, paymentResult, { gateMode = 'browser' } = {}) => {
+  const is3ds = paymentResult?.status === '3ds_required';
+  if (is3ds && gateMode === 'browser') {
+    console.log('[automation][3ds] fechando Edge na hora — cleanup do cartão em background');
+    await finalizeSessionClose(sessionId, paymentResult);
+    void cleanupUsedCard(session, paymentResult).catch((err) => {
+      console.log(`[automation][3ds] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
+    });
+    return;
+  }
+
+  await cleanupUsedCard(session, paymentResult);
+  if (gateMode === 'browser') {
+    await finalizeSessionClose(sessionId, paymentResult);
+  }
 };
 
 const buildPamPayload = (payload) => {
@@ -349,8 +364,7 @@ export const startSessionFromWebLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    await cleanupUsedCard(session, paymentResult);
-    await finalizeSessionClose(sessionId, paymentResult);
+    await finishPaymentSession(sessionId, session, paymentResult);
 
     return {
       sessionId,
@@ -609,22 +623,18 @@ export const startSessionFromCheckoutLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    const finish = async () => {
-      await cleanupUsedCard(session, paymentResult);
-      if (gateMode === 'browser') {
-        await finalizeSessionClose(sessionId, paymentResult);
-      }
-    };
-    const mustAwaitClose =
-      config.removeCardAfterRecharge ||
-      (paymentResult?.status === '3ds_required' &&
-        (paymentResult?.visualVbv || paymentResult?.requiresImmediateAction));
-    if ((fast || gateMode === 'http-sse') && !mustAwaitClose) {
-      void finish().catch((err) => {
-        console.log(`[automation] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
-      });
+    const is3ds = paymentResult?.status === '3ds_required';
+    if (is3ds && gateMode === 'browser') {
+      await finishPaymentSession(sessionId, session, paymentResult, { gateMode });
     } else {
-      await finish();
+      const mustAwaitClose = config.removeCardAfterRecharge;
+      if ((fast || gateMode === 'http-sse') && !mustAwaitClose) {
+        void finishPaymentSession(sessionId, session, paymentResult, { gateMode }).catch((err) => {
+          console.log(`[automation] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
+        });
+      } else {
+        await finishPaymentSession(sessionId, session, paymentResult, { gateMode });
+      }
     }
 
     return {
