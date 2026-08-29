@@ -35,8 +35,14 @@ function shortReason(msg) {
   if (/3ds|vbv|banco/i.test(t)) return 'Confirme no banco';
   if (/timeout|esgotad/i.test(t)) return 'Tempo esgotado';
   if (/proxy|fetch failed|rede/i.test(t)) return 'Falha de rede';
-  if (/negad|denied|recus/i.test(t)) return 'Negada pela operadora';
-  return clip(t.replace(/CREDIT_CARD\s*-\s*/i, ''), 48);
+  const cleaned = t
+    .replace(/CREDIT_CARD\s*-\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (/^422\b/.test(cleaned) && /negad|denied|recus/i.test(cleaned)) {
+    return 'Negada pela operadora';
+  }
+  return clip(cleaned, 56);
 }
 
 function inferTitle(status, footer, hint) {
@@ -181,7 +187,19 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
   } else if (status === '3DS_REQUIRED') {
     hint = 'Confirme no app ou SMS do banco';
   } else {
-    hint = formatGateReason(reason) || (status === 'DENIED' ? 'Negada pela operadora' : '');
+    hint =
+      formatGateReason(reason) ||
+      (status === 'DENIED'
+        ? 'Negada pela operadora'
+        : status === 'TIMEOUT'
+          ? 'Tempo esgotado'
+          : status === 'AUTOMATION_FAIL'
+            ? 'Falha na automação'
+            : status === 'ERROR'
+              ? 'Erro na recarga'
+              : reason
+                ? clip(String(reason), 56)
+                : 'Sem detalhe da gate');
   }
 
   return formatStatusBubble({

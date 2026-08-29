@@ -128,14 +128,20 @@ async function editBubble(chatId, statusMsg, fields, extra = {}) {
   if (!statusMsg?.message_id) {
     return send(chatId, text, extra);
   }
-  await tg('editMessageText', {
-    chat_id: chatId,
-    message_id: statusMsg.message_id,
-    text,
-    parse_mode: 'HTML',
-    ...extra,
-  });
-  return statusMsg;
+  try {
+    await tg('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      text,
+      parse_mode: 'HTML',
+      ...extra,
+    });
+    return statusMsg;
+  } catch (err) {
+    if (/message is not modified/i.test(String(err?.message))) return statusMsg;
+    console.warn('[bot] editBubble falhou, enviando nova:', err.message);
+    return send(chatId, text, extra);
+  }
 }
 
 function formatBRL(cents) {
@@ -1003,13 +1009,18 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     const retryKb = offerRetry
       ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
       : undefined;
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: report,
-      parse_mode: 'HTML',
-      reply_markup: retryKb,
-    });
+    try {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsg.message_id,
+        text: report,
+        parse_mode: 'HTML',
+        reply_markup: retryKb,
+      });
+    } catch (err) {
+      console.warn('[bot] resultado: edit falhou, enviando nova:', err.message);
+      await send(chatId, report, { reply_markup: retryKb });
+    }
 
     logRechargeEvent({
       chatId,

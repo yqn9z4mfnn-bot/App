@@ -97,6 +97,22 @@ if (/Edge fechado|Motivo:|Ref:/.test(denied)) {
   console.error('FAIL texto extra', denied);
 }
 
+const denied46 = formatRechargeResult({
+  result: { status: 'DENIED', message: 'CREDIT_CARD - 46 - Autorizacao negada', negativeReason: 'CREDIT_CARD - 46 - Autorizacao negada' },
+  valueCents: 2000,
+  cardMask: '****8441',
+  loginMsisdn: '11991005953',
+  targetMsisdn: '94984325302',
+});
+if (!/46 - Autorizacao negada/i.test(denied46)) {
+  failed += 1;
+  console.error('FAIL motivo 46', denied46);
+}
+if (!/Recarga negada/.test(denied46)) {
+  failed += 1;
+  console.error('FAIL titulo 46', denied46);
+}
+
 for (const [i, text] of samples.entries()) {
   if (text.length > 900) {
     failed += 1;
