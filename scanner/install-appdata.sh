@@ -47,6 +47,8 @@ grep -q '^CLARO_LINK_TIMEOUT_MS=' "$DATA_DIR/.env" 2>/dev/null || echo 'CLARO_LI
 grep -q '^THREEDS_CONTINUE_GATE_WAIT=' "$DATA_DIR/.env" 2>/dev/null || echo 'THREEDS_CONTINUE_GATE_WAIT=0' >> "$DATA_DIR/.env"
 grep -q '^THREEDS_UI_WAIT_MS=' "$DATA_DIR/.env" 2>/dev/null || echo 'THREEDS_UI_WAIT_MS=0' >> "$DATA_DIR/.env"
 grep -q '^KEEP_BROWSER_OPEN_3DS_SECONDS=' "$DATA_DIR/.env" 2>/dev/null || echo 'KEEP_BROWSER_OPEN_3DS_SECONDS=0' >> "$DATA_DIR/.env"
+grep -q '^THREEDS_UI_WAIT_MS=' "$DATA_DIR/.env" 2>/dev/null || echo 'THREEDS_UI_WAIT_MS=0' >> "$DATA_DIR/.env"
+grep -q '^VNC_ON_3DS=' "$DATA_DIR/.env" 2>/dev/null || echo 'VNC_ON_3DS=0' >> "$DATA_DIR/.env"
 
 chmod 600 "$DATA_DIR/.env"
 

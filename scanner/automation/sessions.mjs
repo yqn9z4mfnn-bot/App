@@ -240,6 +240,25 @@ const finishPaymentSession = async (sessionId, session, paymentResult, { gateMod
   }
 };
 
+/** 3DS/VBV: responde API na hora; demais casos fecham em background no modo fast. */
+const scheduleFinishPaymentSession = async (sessionId, session, paymentResult, opts = {}) => {
+  const { gateMode = 'browser', fast = false } = opts;
+  if (paymentResult?.status === '3ds_required') {
+    void finishPaymentSession(sessionId, session, paymentResult, { gateMode }).catch((err) => {
+      console.log(`[automation][3ds] finish async: ${String(err?.message || err).slice(0, 100)}`);
+    });
+    return;
+  }
+  const mustAwait = config.removeCardAfterRecharge && !fast && gateMode === 'browser';
+  if (mustAwait) {
+    await finishPaymentSession(sessionId, session, paymentResult, { gateMode });
+    return;
+  }
+  void finishPaymentSession(sessionId, session, paymentResult, { gateMode }).catch((err) => {
+    console.log(`[automation] finish async: ${String(err?.message || err).slice(0, 100)}`);
+  });
+};
+
 const buildPamPayload = (payload) => {
   const pamRaw = String(payload?.pamInfo ?? '').trim();
   if (!pamRaw) throw new Error('pamInfo é obrigatório (PAN|MES|ANO|CVV).');
@@ -364,7 +383,7 @@ export const startSessionFromWebLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    await finishPaymentSession(sessionId, session, paymentResult);
+    await scheduleFinishPaymentSession(sessionId, session, paymentResult);
 
     return {
       sessionId,
@@ -623,19 +642,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
       session.status = 'error_manual';
     }
 
-    const is3ds = paymentResult?.status === '3ds_required';
-    if (is3ds && gateMode === 'browser') {
-      await finishPaymentSession(sessionId, session, paymentResult, { gateMode });
-    } else {
-      const mustAwaitClose = config.removeCardAfterRecharge;
-      if ((fast || gateMode === 'http-sse') && !mustAwaitClose) {
-        void finishPaymentSession(sessionId, session, paymentResult, { gateMode }).catch((err) => {
-          console.log(`[automation] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
-        });
-      } else {
-        await finishPaymentSession(sessionId, session, paymentResult, { gateMode });
-      }
-    }
+    await scheduleFinishPaymentSession(sessionId, session, paymentResult, { gateMode, fast });
 
     return {
       sessionId,

@@ -1,4 +1,3 @@
-import { config } from './config.mjs';
 import { saveStallDebug } from './debug.mjs';
 
 /** URLs típicas de fluxo 3DS (Cardinal, Visa, Eldorado challenge). */
@@ -60,6 +59,34 @@ export function threedsRequiresImmediateAction(threeDs) {
   return true;
 }
 
+/** Detecção síncrona — rede + URL de iframe (sem evaluate lento). */
+export function detect3dsFast(page, gateCapture = null) {
+  for (const cap of gateCapture?.captures ?? []) {
+    const u = cap.url || '';
+    if (/cardinalcommerce\.com/i.test(u) && /ThreeDSecure|CReq|centinelapi/i.test(u)) {
+      return { detected: true, source: 'network', url: u, kind: 'cardinal', uiVisible: true };
+    }
+    if (/auth\.visa\.com|secure\.checkout\.visa\.com/i.test(u) && /ThreeDSecure|CReq|oauth2/i.test(u)) {
+      return { detected: true, source: 'network', url: u, kind: 'cardinal', uiVisible: true };
+    }
+    if (/\/3ds\/challenge/i.test(u)) {
+      return { detected: true, source: 'api', url: u, kind: 'challenge_api', uiVisible: false };
+    }
+  }
+
+  if (page) {
+    for (const frame of page.frames()) {
+      const u = frame.url() || '';
+      if (!THREEDS_URL_RE.test(u)) continue;
+      if (/ThreeDSecure|CReq|3ds\/challenge|auth\.visa\.com\/oauth2|cardinalcommerce/i.test(u)) {
+        return { detected: true, source: 'frame_url', url: u, kind: 'cardinal', uiVisible: true };
+      }
+    }
+  }
+
+  return null;
+}
+
 /** Procura iframe/tela 3DS visível (prioridade sobre API). */
 async function scan3dsUiFrames(page) {
   for (const frame of page.frames()) {
@@ -98,24 +125,14 @@ async function scan3dsUiFrames(page) {
  * Detecta 3DS: tela visível primeiro; API /3ds/challenge → para na hora.
  */
 export async function detect3dsChallenge(page, gateCapture = null, opts = {}) {
+  const fast = detect3dsFast(page, gateCapture);
+  if (fast) return fast;
+
   const uiHit = await scan3dsUiFrames(page);
   if (uiHit) return uiHit;
 
-  for (const cap of gateCapture?.captures ?? []) {
-    const u = cap.url || '';
-    if (/cardinalcommerce\.com/i.test(u) && /ThreeDSecure|CReq/i.test(u)) {
-      return { detected: true, source: 'network', url: u, kind: 'cardinal', uiVisible: true };
-    }
-  }
-
   const apiCap = get3dsChallengeApiCapture(gateCapture);
   if (!apiCap) return null;
-
-  const firstSeen = opts.challengeApiFirstSeen ?? apiCap.ts ?? Date.now();
-  const waitMs = opts.threedsUiWaitMs ?? config.threedsUiWaitMs ?? 0;
-  const elapsedSinceApi = Date.now() - firstSeen;
-
-  if (waitMs > 0 && elapsedSinceApi < waitMs) return null;
 
   return {
     detected: true,
@@ -123,7 +140,7 @@ export async function detect3dsChallenge(page, gateCapture = null, opts = {}) {
     url: apiCap.url,
     kind: 'challenge_api',
     uiVisible: false,
-    waitedForUiMs: elapsedSinceApi,
+    waitedForUiMs: 0,
   };
 }
 
