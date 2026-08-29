@@ -831,27 +831,6 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
       }).catch(() => {});
     }
   } catch (err) {
-    logRechargeEvent({
-      chatId,
-      username: telegramUser?.username ?? null,
-      loginMsisdn: entry.msisdn,
-      targetMsisdn,
-      productName: flow.productName,
-      productValueCents: flow.productValue,
-      card,
-      error: err,
-      mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
-      startedAt,
-    });
-
-    let listNote = '';
-    if (listLine) {
-      const action = classifyCardListAction({ outcome: null, error: err });
-      const applied = await cardList.applyOutcome(listLine, action, '', chatId);
-      listNote = `\n\n🗂 ${cardListActionLabel(action, { error: err })} · fila: <b>${applied.pendingLeft}</b>`;
-      if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
-    }
-
     saveRetryContext(chatId, {
       mode: flow.mode,
       productId: flow.productId,
@@ -865,10 +844,37 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
-      text: `❌ <b>Erro na recarga:</b> ${err.message.replace(/</g, '&lt;')}${listNote}`,
+      text: `❌ <b>Erro na recarga:</b> ${err.message.replace(/</g, '&lt;')}`,
       parse_mode: 'HTML',
       reply_markup: buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 }),
     });
+
+    logRechargeEvent({
+      chatId,
+      username: telegramUser?.username ?? null,
+      loginMsisdn: entry.msisdn,
+      targetMsisdn,
+      productName: flow.productName,
+      productValueCents: flow.productValue,
+      card,
+      error: err,
+      mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
+      startedAt,
+    });
+
+    if (listLine) {
+      const action = classifyCardListAction({ outcome: null, error: err });
+      const applied = await cardList.applyOutcome(listLine, action, '', chatId);
+      let listNote = `\n\n🗂 ${cardListActionLabel(action, { error: err })} · fila: <b>${applied.pendingLeft}</b>`;
+      if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsg.message_id,
+        text: `❌ <b>Erro na recarga:</b> ${err.message.replace(/</g, '&lt;')}${listNote}`,
+        parse_mode: 'HTML',
+        reply_markup: buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 }),
+      }).catch(() => {});
+    }
   } finally {
     busy.delete(chatId);
     clearRecharge(chatId);

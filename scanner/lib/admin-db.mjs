@@ -12,10 +12,42 @@ function dbPath() {
   return process.env.ADMIN_DB || join(getDataDir(), 'admin.db');
 }
 
+function isSqliteBusy(err) {
+  return (
+    err?.errcode === 5 ||
+    /database is locked|SQLITE_BUSY|SQLITE_LOCKED/i.test(String(err?.message || err))
+  );
+}
+
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export function withBusyRetry(fn, tries = 8) {
+  let last;
+  for (let i = 0; i < tries; i += 1) {
+    try {
+      return fn();
+    } catch (err) {
+      last = err;
+      if (!isSqliteBusy(err) || i === tries - 1) throw err;
+      sleepMs(40 * (i + 1));
+    }
+  }
+  throw last;
+}
+
 export function openAdminDb() {
   const path = dbPath();
   mkdirSync(dirname(path), { recursive: true });
   const database = new DatabaseSync(path);
+  try {
+    database.exec('PRAGMA journal_mode = WAL;');
+    database.exec('PRAGMA busy_timeout = 8000;');
+    database.exec('PRAGMA synchronous = NORMAL;');
+  } catch {
+    // ignore
+  }
   database.exec(`
     CREATE TABLE IF NOT EXISTS admin_sessions (
       token TEXT PRIMARY KEY,
@@ -73,21 +105,25 @@ function getDb() {
 export function createAdminSession() {
   const token = randomBytes(32).toString('hex');
   const now = Date.now();
-  getDb()
-    .prepare('INSERT INTO admin_sessions (token, created_at, expires_at) VALUES (?, ?, ?)')
-    .run(token, now, now + SESSION_TTL_MS);
-  return { token, expiresAt: now + SESSION_TTL_MS };
+  return withBusyRetry(() => {
+    getDb()
+      .prepare('INSERT INTO admin_sessions (token, created_at, expires_at) VALUES (?, ?, ?)')
+      .run(token, now, now + SESSION_TTL_MS);
+    return { token, expiresAt: now + SESSION_TTL_MS };
+  });
 }
 
 export function validateAdminSession(token) {
   if (!token) return false;
-  const row = getDb().prepare('SELECT expires_at FROM admin_sessions WHERE token = ?').get(token);
-  if (!row) return false;
-  if (row.expires_at < Date.now()) {
-    getDb().prepare('DELETE FROM admin_sessions WHERE token = ?').run(token);
-    return false;
-  }
-  return true;
+  return withBusyRetry(() => {
+    const row = getDb().prepare('SELECT expires_at FROM admin_sessions WHERE token = ?').get(token);
+    if (!row) return false;
+    if (row.expires_at < Date.now()) {
+      getDb().prepare('DELETE FROM admin_sessions WHERE token = ?').run(token);
+      return false;
+    }
+    return true;
+  });
 }
 
 export function revokeAdminSession(token) {
@@ -99,6 +135,7 @@ export function upsertTelegramUser(from, { incrementMessages = 1 } = {}) {
   if (!from?.id) return null;
   const chatId = String(from.id);
   const now = Date.now();
+  return withBusyRetry(() => {
   const existing = getDb().prepare('SELECT * FROM telegram_users WHERE chat_id = ?').get(chatId);
   if (existing) {
     getDb()
@@ -134,6 +171,7 @@ export function upsertTelegramUser(from, { incrementMessages = 1 } = {}) {
       );
   }
   return getTelegramUser(chatId);
+  });
 }
 
 export function getTelegramUser(chatId) {
@@ -163,6 +201,7 @@ export function setTelegramUserAllowed(chatId, allowed) {
 }
 
 export function insertRechargeEvent(event) {
+  return withBusyRetry(() => {
   const r = getDb()
     .prepare(
       `INSERT INTO recharge_events
@@ -187,9 +226,11 @@ export function insertRechargeEvent(event) {
       event.rawJson ? JSON.stringify(event.rawJson) : null,
     );
   return r.lastInsertRowid;
+  });
 }
 
 export function backfillRechargeEvent(id, { status, gateCode, gateMessage, cardLast4 }) {
+  return withBusyRetry(() => {
   getDb()
     .prepare(
       `UPDATE recharge_events
@@ -200,26 +241,30 @@ export function backfillRechargeEvent(id, { status, gateCode, gateMessage, cardL
        WHERE id = ?`,
     )
     .run(status ?? null, gateCode ?? null, gateMessage ?? null, cardLast4 ?? null, id);
+  });
 }
 
 export function listRechargeEvents({ limit = 50, offset = 0, chatId = null } = {}) {
-  if (chatId) {
+  return withBusyRetry(() => {
+    if (chatId) {
+      return getDb()
+        .prepare(
+          'SELECT * FROM recharge_events WHERE chat_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+        )
+        .all(String(chatId), limit, offset);
+    }
     return getDb()
-      .prepare(
-        'SELECT * FROM recharge_events WHERE chat_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
-      )
-      .all(String(chatId), limit, offset);
-  }
-  return getDb()
-    .prepare('SELECT * FROM recharge_events ORDER BY created_at DESC LIMIT ? OFFSET ?')
-    .all(limit, offset);
+      .prepare('SELECT * FROM recharge_events ORDER BY created_at DESC LIMIT ? OFFSET ?')
+      .all(limit, offset);
+  });
 }
 
 export function countRechargeEvents() {
-  return getDb().prepare('SELECT COUNT(*) AS n FROM recharge_events').get().n;
+  return withBusyRetry(() => getDb().prepare('SELECT COUNT(*) AS n FROM recharge_events').get().n);
 }
 
 export function rechargeStatsSince(sinceMs) {
+  return withBusyRetry(() => {
   const rows = getDb()
     .prepare(
       `SELECT status, COUNT(*) AS n FROM recharge_events
@@ -227,6 +272,7 @@ export function rechargeStatsSince(sinceMs) {
     )
     .all(sinceMs);
   return Object.fromEntries(rows.map((r) => [r.status || 'unknown', r.n]));
+  });
 }
 
 export function insertAudit(actor, action, entity = null, detail = null) {

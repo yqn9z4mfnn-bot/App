@@ -10,5 +10,12 @@ if (!process.env.ADMIN_DB) {
   process.env.ADMIN_DB = join(getDataDir(), 'admin.db');
 }
 
+process.on('uncaughtException', (err) => {
+  console.error('[admin] uncaughtException:', err?.message || err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[admin] unhandledRejection:', err?.message || err);
+});
+
 const { startAdminServer } = await import('./server.mjs');
 startAdminServer();

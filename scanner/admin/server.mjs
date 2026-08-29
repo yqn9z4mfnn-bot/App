@@ -576,27 +576,32 @@ export function startAdminServer() {
     const liveIds = new Set(live.map((s) => s.sessionId).filter(Boolean));
     const recentAuto = (auto.recent || []).map(slimSession).filter(Boolean);
 
-    const fromRecharges = listRechargeEvents({ limit: 40 })
-      .map(repairRechargeRow)
-      .map((row) => {
-        const extra = extrasFromRecharge(row);
-        return slimSession({
-          sessionId: extra.sessionId,
-          status: extra.status,
-          accessNumber: extra.login_msisdn,
-          rechargeTargetNumber: extra.target_msisdn,
-          browserAlive: false,
-          createdAt: extra.created_at,
-          paymentStatus: extra.status,
-          gateCode: extra.gate_code,
-          gateMessage: extra.gate_message,
-          nsu: extra.nsu,
-          username: extra.username,
-          productName: extra.product_name,
-          fromHistory: true,
-        });
-      })
-      .filter((s) => s?.sessionId || s?.accessNumber);
+    let fromRecharges = [];
+    try {
+      fromRecharges = listRechargeEvents({ limit: 40 })
+        .map(repairRechargeRow)
+        .map((row) => {
+          const extra = extrasFromRecharge(row);
+          return slimSession({
+            sessionId: extra.sessionId,
+            status: extra.status,
+            accessNumber: extra.login_msisdn,
+            rechargeTargetNumber: extra.target_msisdn,
+            browserAlive: false,
+            createdAt: extra.created_at,
+            paymentStatus: extra.status,
+            gateCode: extra.gate_code,
+            gateMessage: extra.gate_message,
+            nsu: extra.nsu,
+            username: extra.username,
+            productName: extra.product_name,
+            fromHistory: true,
+          });
+        })
+        .filter((s) => s?.sessionId || s?.accessNumber);
+    } catch (err) {
+      console.warn('[admin] sessões/histórico:', err.message);
+    }
 
     const recent = [];
     const seen = new Set(liveIds);
@@ -670,6 +675,13 @@ export function startAdminServer() {
     if (req.method !== 'GET') return next();
     if (req.path.startsWith('/api/') || req.path.startsWith('/assets/')) return next();
     return sendIndex(req, res);
+  });
+
+  app.use((err, req, res, _next) => {
+    console.error('[admin]', err?.message || err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'erro interno' });
+    }
   });
 
   try {
