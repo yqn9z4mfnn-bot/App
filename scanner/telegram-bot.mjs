@@ -719,44 +719,51 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
     title: 'Recarga automática',
     valueLabel: formatBRL(cents),
     target,
-    hint: 'Procurando login com esse valor…',
+    hint: 'Gerando login…',
   });
 
-  const used = new Set([target]);
+  const epoch = bumpWork(chatId);
   let lastErr = null;
 
   for (let attempt = 1; attempt <= 6; attempt += 1) {
-    const picked = pickLinkForValue(cents, { excludeMsisdns: [...used] });
-    if (!picked?.msisdn) {
-      lastErr = lastErr || new Error(`Nenhum login no banco com ${formatBRL(cents)} (exceto o destino).`);
-      break;
-    }
-    used.add(picked.msisdn);
+    if (isWorkStale(chatId, epoch)) return;
 
     await editBubble(chatId, statusMsg, {
       title: 'Recarga automática',
       valueLabel: formatBRL(cents),
-      login: picked.msisdn,
       target,
-      hint: `Abrindo sessão · tentativa ${attempt}`,
+      hint: `Gerando login · tentativa ${attempt}`,
     }).catch(() => {});
 
-    const ok = await prepareRechargeSession(chatId, picked.msisdn, {
+    let generated;
+    try {
+      generated = await generateLoginMsisdn({
+        shouldAbort: () => isWorkStale(chatId, epoch),
+      });
+    } catch (err) {
+      if (err?.cancelled || isWorkStale(chatId, epoch)) return;
+      lastErr = err;
+      continue;
+    }
+
+    if (isWorkStale(chatId, epoch)) return;
+
+    const ok = await prepareRechargeSession(chatId, generated.msisdn, {
       targetMsisdn: target,
       statusMsg,
       mode: 'other',
-      loginLink: picked.link,
+      loginLink: generated.link,
       skipValuePrompt: true,
     });
     if (!ok) {
-      lastErr = new Error(`Login ${picked.msisdn} falhou`);
+      lastErr = new Error(`Login ${generated.msisdn} falhou`);
       continue;
     }
 
     const entry = getCache(chatId);
     const product = (entry?.valores || []).find((v) => Number(v.value) === cents);
     if (!product) {
-      lastErr = new Error(`${formatBRL(cents)} sumiu no login ${picked.msisdn}`);
+      lastErr = new Error(`${formatBRL(cents)} não existe neste login gerado`);
       continue;
     }
 
@@ -787,7 +794,7 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
     title: 'Não iniciou',
     valueLabel: formatBRL(cents),
     target,
-    hint: lastErr?.message || 'sem login disponível',
+    hint: lastErr?.message || 'não gerou login com esse valor',
   }).catch(() => {});
 }
 

@@ -218,13 +218,13 @@ export function countForValue(valueCents) {
     .get(cents).n;
 }
 
-/** DDDs distintos presentes no banco (2 dígitos). */
+/** DDDs distintos no banco — só molde (não exige link/estoque). */
 export function listDistinctDdds() {
   return getDb()
     .prepare(
       `SELECT DISTINCT substr(msisdn, 1, 2) AS ddd
        FROM numbers
-       WHERE status = 'ok' AND link IS NOT NULL AND length(msisdn) = 11
+       WHERE length(msisdn) = 11
        ORDER BY ddd`,
     )
     .all()
@@ -232,14 +232,14 @@ export function listDistinctDdds() {
     .filter(Boolean);
 }
 
-/** Número aleatório do banco com o DDD informado (para extrair prefixo). */
+/** Número aleatório do DDD — só para copiar os 6 dígitos após o DDD. */
 export function pickRandomMsisdnByDdd(ddd) {
   const d = String(ddd ?? '').replace(/\D/g, '').slice(0, 2);
   if (!d) return null;
   const row = getDb()
     .prepare(
       `SELECT msisdn FROM numbers
-       WHERE msisdn LIKE ? AND status = 'ok' AND link IS NOT NULL AND length(msisdn) = 11
+       WHERE msisdn LIKE ? AND length(msisdn) = 11
        ORDER BY RANDOM() LIMIT 1`,
     )
     .get(`${d}%`);
