@@ -285,14 +285,24 @@ async function purgeLoginCards(chatId, statusMsg, bubble, { sessionId, msisdn, p
     hint: 'Limpando cartões do login…',
   }).catch(() => {});
   try {
-    const purge = await purgeAllLoginCardsStrict({ sessionId, msisdn, productId });
+    const purge = await purgeAllLoginCardsStrict({
+      sessionId,
+      msisdn,
+      productId,
+      timeoutMs: 8_000,
+    });
     if (purge.removed) {
       console.log(`[bot][purge] ${msisdn}: ${purge.removed} removido(s)`);
     }
     return purge;
   } catch (err) {
     console.error('[bot][purge-login]', err.message);
-    return { removed: 0, walletAuth: null };
+    await editBubble(chatId, statusMsg, {
+      ...bubble,
+      login: msisdn,
+      hint: 'Limpeza pulada — API lenta. Seguindo…',
+    }).catch(() => {});
+    return { removed: 0, walletAuth: null, skipped: true };
   }
 }
 
@@ -959,16 +969,21 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
 
   try {
     if (flow.mode === 'other' || entry.rechargeMode === 'other') {
-      const purge = await purgeLoginCards(chatId, statusMsg, runBubble, {
-        sessionId: entry.sessionId,
-        msisdn: entry.msisdn,
-        productId: flow.productId,
-      });
-      if (purge.walletAuth) {
-        entry.walletAuth = purge.walletAuth;
+      if (entry.purgedAt && Date.now() - entry.purgedAt < 120_000) {
+        await editBubble(chatId, statusMsg, { ...runBubble, hint: 'Aguardando checkout…' }).catch(() => {});
+      } else {
+        const purge = await purgeLoginCards(chatId, statusMsg, runBubble, {
+          sessionId: entry.sessionId,
+          msisdn: entry.msisdn,
+          productId: flow.productId,
+        });
+        if (purge.walletAuth) {
+          entry.walletAuth = purge.walletAuth;
+        }
+        entry.purgedAt = Date.now();
         setCache(chatId, entry);
+        await editBubble(chatId, statusMsg, { ...runBubble, hint: 'Aguardando checkout…' }).catch(() => {});
       }
-      await editBubble(chatId, statusMsg, { ...runBubble, hint: 'Aguardando checkout…' }).catch(() => {});
     }
 
     const outcome = useBrowser
