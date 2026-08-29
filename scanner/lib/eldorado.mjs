@@ -42,7 +42,9 @@ export async function openWalletSession(sessionId, msisdn, productId, opts = {})
     checkoutRes = await createSmartCheckout(sessionId, msisdn, productId, {
       recipient: opts.recipient ?? msisdn,
       payerMsisdn: opts.payerMsisdn ?? msisdn,
-      logLabel: attempt === 1 ? `smartcheckout msisdn=${msisdn}` : `smartcheckout retry ${attempt}`,
+      logLabel:
+        attempt === 1 && process.env.PROXY_LOG_IP ? `smartcheckout msisdn=${msisdn}` : undefined,
+      rotateIp: attempt > 1,
     });
 
     if (checkoutRes.status !== 429) break;

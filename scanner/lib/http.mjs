@@ -6,9 +6,13 @@ const CHANNEL = 'MINHA_CLARO_WEB';
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 async function logApiProxy(label) {
-  if (!proxyEnabled() || String(process.env.PROXY_LOG_IP || '1') === '0') return;
-  const ip = await fetchProxyEgressIp({ rotateIp: true }).catch(() => null);
-  console.log(`[claro-api] ${label} proxy=${describeProxy() || 'OFF'} ip=${ip || '?'}`);
+  if (!proxyEnabled() || String(process.env.PROXY_LOG_IP || '0') === '0') return;
+  if (String(process.env.PROXY_LOG_IP || '0') === 'verbose') {
+    const ip = await fetchProxyEgressIp({ rotateIp: false }).catch(() => null);
+    console.log(`[claro-api] ${label} proxy=${describeProxy() || 'OFF'} ip=${ip || '?'}`);
+    return;
+  }
+  console.log(`[claro-api] ${label} proxy=${describeProxy() || 'OFF'}`);
 }
 
 export async function request(url, options = {}) {
@@ -28,7 +32,7 @@ export async function request(url, options = {}) {
 
     const res = await proxiedFetch(url, {
       ...rest,
-      rotateIp: rotateIp !== false,
+      rotateIp: rotateIp === true,
       signal: controller.signal,
       headers: {
         channel: CHANNEL,

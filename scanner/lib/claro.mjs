@@ -21,7 +21,8 @@ export async function createSession(jwt) {
         origin: 'login',
       },
       {
-        logLabel: attempt === 1 ? 'POST /sessions/' : `POST /sessions/ retry ${attempt}`,
+        logLabel: attempt === 1 && process.env.PROXY_LOG_IP ? 'POST /sessions/' : undefined,
+        rotateIp: attempt > 1,
       },
     );
 

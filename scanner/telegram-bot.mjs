@@ -208,6 +208,7 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   statusMsg = null,
   title = null,
   mode = null,
+  loginLink = null,
 } = {}) {
   const access = normalizeBrMobile(accessMsisdn);
   if (!access) {
@@ -241,7 +242,9 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
   try {
     let link;
     const row = getNumber(access);
-    if (row?.link) {
+    if (loginLink) {
+      link = toLoginUrl(loginLink);
+    } else if (row?.link) {
       link = toLoginUrl(row.link);
     } else {
       const generated = await fetchClaroLoginLink(access);
@@ -348,7 +351,7 @@ async function startOtherNumberRecharge(chatId) {
   busy.add(chatId);
   const statusMsg = await send(chatId, '🎲 Gerando login aleatório (DDD do banco)…');
   try {
-    const { msisdn, attempt } = await generateLoginMsisdn();
+    const { msisdn, link, attempt } = await generateLoginMsisdn();
     await tg('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.message_id,
@@ -359,6 +362,7 @@ async function startOtherNumberRecharge(chatId) {
     await prepareRechargeSession(chatId, msisdn, {
       statusMsg,
       mode: 'other',
+      loginLink: link,
       title: `🔀 <b>Outro número</b>\n🔑 Login gerado: <code>${msisdn}</code>\n<i>Depois do valor, envie quem recebe.</i>`,
     });
   } catch (err) {
@@ -424,6 +428,7 @@ async function executeAutoRecharge(chatId) {
 /** Nova sessão para retry: novo login (modo other), mesmo destino/valor. */
 async function prepareRetryRecharge(chatId, retry, statusMsg) {
   let access = retry.loginMsisdn;
+  let prefetchedLink = null;
   if (retry.mode === 'other') {
     await tg('editMessageText', {
       chat_id: chatId,
@@ -431,8 +436,9 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
       text: '🎲 Gerando <b>novo login</b> para nova tentativa…',
       parse_mode: 'HTML',
     });
-    const { msisdn } = await generateLoginMsisdn();
-    access = msisdn;
+    const generated = await generateLoginMsisdn();
+    access = generated.msisdn;
+    prefetchedLink = generated.link;
   } else {
     await tg('editMessageText', {
       chat_id: chatId,
@@ -451,7 +457,9 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
   try {
     let link;
     const row = getNumber(access);
-    if (row?.link) {
+    if (prefetchedLink) {
+      link = toLoginUrl(prefetchedLink);
+    } else if (row?.link) {
       link = toLoginUrl(row.link);
     } else {
       const generated = await fetchClaroLoginLink(access);

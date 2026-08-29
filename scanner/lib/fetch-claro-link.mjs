@@ -1,5 +1,5 @@
 import './load-env.mjs';
-import { proxiedFetch, describeProxy, proxyEnabled, fetchProxyEgressIp, getProxyUrl } from './proxy.mjs';
+import { proxiedFetch, describeProxy, proxyEnabled, getProxyUrl } from './proxy.mjs';
 
 const DEFAULT_LINK_API = 'https://sarcastic-pertinaciously-shawnda.ngrok-free.dev';
 
@@ -27,10 +27,9 @@ async function logLinkProxyContext(label, attempt) {
     console.warn(`[link] ${label} attempt=${attempt} — proxy OFF (IP da VPS)`);
     return null;
   }
-  if (String(process.env.PROXY_LOG_IP || '1') === '0') return null;
-  const ip = await fetchProxyEgressIp({ rotateIp: true }).catch(() => null);
-  console.log(`[link] ${label} attempt=${attempt} proxy=${describeProxy()} ip=${ip || '?'}`);
-  return ip;
+  if (String(process.env.PROXY_LOG_IP || '0') === '0') return null;
+  console.log(`[link] ${label} attempt=${attempt} proxy=${describeProxy()}`);
+  return null;
 }
 
 export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
@@ -57,7 +56,7 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
       await logLinkProxyContext(`msisdn=${number}`, attempt);
 
       const res = await proxiedFetch(url, {
-        rotateIp: true,
+        rotateIp: attempt > 1,
         headers: {
           accept: 'application/json',
           'ngrok-skip-browser-warning': 'true',

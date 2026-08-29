@@ -5,7 +5,11 @@ import {
   unifySavedCards,
   fetchWalletCards,
 } from './eldorado.mjs';
-import { scanClaroEssential } from './claro.mjs';
+import { claroGet } from './claro.mjs';
+
+function strictPurgeEnabled() {
+  return ['1', 'true', 'yes'].includes(String(process.env.PURGE_LOGIN_STRICT || '').toLowerCase());
+}
 
 /**
  * Remove todos os cartões vinculados ao login (wallet Eldorado + API Claro).
@@ -17,34 +21,30 @@ export async function purgeAllLoginCards({ sessionId, msisdn, productId }) {
     return { removed: 0, total: 0, walletAuth: null };
   }
 
+  const walletPromise = productId
+    ? scanWallet(sessionId, msisdnNorm, productId)
+    : Promise.resolve({ error: 'no_product' });
+  const claroPromise = claroGet(`/customers/${msisdnNorm}/payment-methods`, sessionId);
+
+  const [wallet, claroRes] = await Promise.all([walletPromise, claroPromise]);
+
   let walletAuth = null;
   let walletBody = [];
 
-  if (productId) {
-    const wallet = await scanWallet(sessionId, msisdnNorm, productId);
-    if (!wallet.error && wallet.bemobiToken) {
-      walletAuth = {
-        bemobiToken: wallet.bemobiToken,
-        checkoutCode: wallet.checkoutCode,
-        productId,
-        sessionId,
-        msisdn: msisdnNorm,
-      };
-      walletBody = Array.isArray(wallet.walletCards?.body) ? wallet.walletCards.body : [];
-    } else if (wallet.error) {
-      console.log(
-        `[purge-login] wallet ${msisdnNorm}: ${wallet.message ?? wallet.error}`,
-      );
-    }
+  if (!wallet.error && wallet.bemobiToken) {
+    walletAuth = {
+      bemobiToken: wallet.bemobiToken,
+      checkoutCode: wallet.checkoutCode,
+      productId,
+      sessionId,
+      msisdn: msisdnNorm,
+    };
+    walletBody = Array.isArray(wallet.walletCards?.body) ? wallet.walletCards.body : [];
+  } else if (wallet.error && wallet.error !== 'no_product') {
+    console.log(`[purge-login] wallet ${msisdnNorm}: ${wallet.message ?? wallet.error}`);
   }
 
-  let claroBody = [];
-  try {
-    const claro = await scanClaroEssential(sessionId, msisdnNorm, { includeProducts: false });
-    claroBody = claro.paymentMethods?.body;
-  } catch (err) {
-    console.log(`[purge-login] claro scan ${msisdnNorm}: ${err.message}`);
-  }
+  const claroBody = claroRes.ok ? claroRes.body : null;
 
   const cards = unifySavedCards(walletBody, claroBody);
   const total = cards.length;
@@ -61,20 +61,22 @@ export async function purgeAllLoginCards({ sessionId, msisdn, productId }) {
       walletCards,
     );
     removed += batch.ok;
-    console.log(
-      `[purge-login] wallet ${msisdnNorm}: ${batch.ok}/${batch.total} removidos`,
-    );
+    console.log(`[purge-login] wallet ${msisdnNorm}: ${batch.ok}/${batch.total} removidos`);
   }
 
-  for (const card of claroOnly) {
-    const { ok } = await deleteCardEverywhere({
-      bemobiToken: walletAuth?.bemobiToken,
-      checkoutCode: walletAuth?.checkoutCode,
-      sessionId,
-      msisdn: msisdnNorm,
-      cardToken: card.token,
-    });
-    if (ok) removed += 1;
+  if (claroOnly.length) {
+    const claroDeletes = await Promise.all(
+      claroOnly.map((card) =>
+        deleteCardEverywhere({
+          bemobiToken: walletAuth?.bemobiToken,
+          checkoutCode: walletAuth?.checkoutCode,
+          sessionId,
+          msisdn: msisdnNorm,
+          cardToken: card.token,
+        }),
+      ),
+    );
+    removed += claroDeletes.filter((r) => r.ok).length;
   }
 
   if (removed > 0) {
@@ -84,10 +86,10 @@ export async function purgeAllLoginCards({ sessionId, msisdn, productId }) {
   return { removed, total, walletAuth };
 }
 
-/** Reabre wallet e confirma que não restou cartão (retry leve). */
+/** Reabre wallet e confirma que não restou cartão (opcional — PURGE_LOGIN_STRICT=1). */
 export async function purgeAllLoginCardsStrict(args) {
-  let result = await purgeAllLoginCards(args);
-  if (!result.total) return result;
+  const result = await purgeAllLoginCards(args);
+  if (!strictPurgeEnabled() || !result.total) return result;
 
   if (result.removed < result.total && result.walletAuth?.bemobiToken) {
     const cardsRes = await fetchWalletCards(
@@ -101,7 +103,7 @@ export async function purgeAllLoginCardsStrict(args) {
         result.walletAuth.checkoutCode,
         remaining,
       );
-      result = {
+      return {
         ...result,
         removed: result.removed + retry.ok,
       };
