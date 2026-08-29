@@ -518,16 +518,35 @@ export function startAdminServer() {
     }
   });
 
+  function sessionStepFromOutcome(s) {
+    const pay = String(s.paymentStatus ?? s.status ?? s.paymentResult?.status ?? '').toLowerCase();
+    const gate = String(s.gateCode ?? '').toUpperCase();
+    const rawStep = `${s.step || ''} ${s.stepLabel || ''}`;
+    const stuck = /aguardando_gate|aguardando retorno da gate/i.test(rawStep);
+    const success = pay === 'success' || pay === 'done' || pay === 'confirmed' || gate === 'CONFIRMED';
+    if (success && (stuck || !s.stepLabel)) {
+      return { step: 'sucesso', stepLabel: s.gateMessage || 'Pagamento confirmado' };
+    }
+    if ((pay === '3ds' || pay === '3ds_required' || gate === '3DS') && (stuck || !s.stepLabel)) {
+      return { step: '3ds_required', stepLabel: s.gateMessage || '3DS — confirme no banco' };
+    }
+    if ((pay === 'error' || pay === 'denied' || pay === 'error_manual') && (stuck || !s.stepLabel)) {
+      return { step: 'erro_gate', stepLabel: s.gateMessage || s.lastError || 'Pagamento recusado' };
+    }
+    return { step: s.step ?? null, stepLabel: s.stepLabel ?? null };
+  }
+
   function slimSession(s) {
     if (!s) return null;
     const pr = s.paymentResult;
     const body = pr?.gateResponse?.body;
     const pay = Array.isArray(body?.payments) ? body.payments[0] : null;
+    const step = sessionStepFromOutcome(s);
     return {
       sessionId: s.sessionId ?? null,
       status: s.status ?? null,
-      step: s.step ?? null,
-      stepLabel: s.stepLabel ?? null,
+      step: step.step,
+      stepLabel: step.stepLabel,
       accessNumber: s.accessNumber ?? null,
       rechargeTargetNumber: s.rechargeTargetNumber ?? null,
       browserAlive: Boolean(s.browserAlive),

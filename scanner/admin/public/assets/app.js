@@ -343,6 +343,23 @@ async function viewUsers() {
     </div>`;
 }
 
+function sessionStepLabel(s) {
+  const pay = String(s.paymentStatus || s.status || '').toLowerCase();
+  const gate = String(s.gateCode || '').toUpperCase();
+  const raw = `${s.stepLabel || ''} ${s.step || ''}`;
+  const stuck = /aguardando/i.test(raw);
+  if (pay === 'success' || pay === 'done' || pay === 'confirmed' || gate === 'CONFIRMED') {
+    if (stuck || !s.stepLabel) return s.gateMessage || 'Pagamento confirmado';
+  }
+  if (pay === '3ds' || pay === '3ds_required' || gate === '3DS') {
+    if (stuck || !s.stepLabel) return s.gateMessage || '3DS — confirme no banco';
+  }
+  if (['error', 'denied', 'fail', 'error_manual'].includes(pay)) {
+    if (stuck || !s.stepLabel) return s.gateMessage || s.lastError || 'Pagamento recusado';
+  }
+  return s.stepLabel || s.step || '—';
+}
+
 function sessionCard(s, { live = false } = {}) {
   const dest = s.rechargeTargetNumber && s.rechargeTargetNumber !== s.accessNumber
     ? `${s.accessNumber} → ${s.rechargeTargetNumber}`
@@ -359,7 +376,7 @@ function sessionCard(s, { live = false } = {}) {
     </div>
     <div class="hist-grid">
       <div><span class="label">Número</span><b class="mono">${esc(dest)}</b></div>
-      <div><span class="label">Passo</span><b>${esc(s.stepLabel || s.step || '—')}</b></div>
+      <div><span class="label">Passo</span><b>${esc(sessionStepLabel(s))}</b></div>
       <div><span class="label">Gate</span><b>${esc(s.gateCode || '—')}</b></div>
     </div>
     ${s.username || s.productName ? `<p class="muted">${esc([s.username && '@'+s.username, s.productName, s.nsu && 'NSU '+s.nsu].filter(Boolean).join(' · '))}</p>` : ''}

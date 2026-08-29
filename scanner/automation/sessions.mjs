@@ -190,15 +190,54 @@ function rememberSession(entry) {
   if (sessionHistory.length > SESSION_HISTORY_MAX) sessionHistory.length = SESSION_HISTORY_MAX;
 }
 
+function applyPaymentOutcomeStep(session, paymentResult) {
+  const st = String(paymentResult?.status ?? '').toLowerCase();
+  if (st === 'success') {
+    setSessionStep(session, 'sucesso', paymentResult.gateMessage || 'Pagamento confirmado');
+    return;
+  }
+  if (st === '3ds_required') {
+    setSessionStep(session, '3ds_required', paymentResult.gateMessage || '3DS — confirme no banco');
+    return;
+  }
+  if (st === 'timeout') {
+    setSessionStep(session, 'timeout', paymentResult.gateMessage || paymentResult.message || 'Timeout na gate');
+    return;
+  }
+  setSessionStep(
+    session,
+    'erro_gate',
+    paymentResult?.gateMessage || paymentResult?.message || session.lastError || 'Pagamento recusado',
+  );
+}
+
+function publicStepFromSession(session) {
+  const pay = String(session.paymentResult?.status ?? '').toLowerCase();
+  const stuckGate = /aguardando_gate|aguardando retorno da gate/i.test(
+    `${session.step || ''} ${session.stepLabel || ''}`,
+  );
+  if (stuckGate && pay === 'success') {
+    return { step: 'sucesso', stepLabel: session.paymentResult?.gateMessage || 'Pagamento confirmado' };
+  }
+  if (stuckGate && pay === '3ds_required') {
+    return { step: '3ds_required', stepLabel: session.paymentResult?.gateMessage || '3DS — confirme no banco' };
+  }
+  if (stuckGate && (pay === 'error' || session.status === 'error_manual')) {
+    return { step: 'erro_gate', stepLabel: session.paymentResult?.gateMessage || session.lastError || 'Pagamento recusado' };
+  }
+  return { step: session.step, stepLabel: session.stepLabel };
+}
+
 export const getSessionPublic = (sessionId) => {
   const session = sessions.get(sessionId);
   if (!session) return null;
   const payment = slimPayment(session.paymentResult);
+  const step = publicStepFromSession(session);
   return {
     sessionId: session.id,
     status: session.status,
-    step: session.step,
-    stepLabel: session.stepLabel,
+    step: step.step,
+    stepLabel: step.stepLabel,
     accessNumber: session.accessNumber,
     rechargeTargetNumber: session.rechargeTargetNumber ?? null,
     browserAlive: sessionPageAlive(session),
@@ -448,6 +487,7 @@ export const startSessionFromWebLink = async (payload) => {
     } else {
       session.status = 'error_manual';
     }
+    applyPaymentOutcomeStep(session, paymentResult);
 
     const replyUrl = (() => {
       try {
@@ -719,6 +759,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
     } else {
       session.status = 'error_manual';
     }
+    applyPaymentOutcomeStep(session, paymentResult);
 
     const replyUrl = gateMode === 'http-sse'
       ? checkoutUrl
