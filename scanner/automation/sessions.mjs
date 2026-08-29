@@ -149,10 +149,23 @@ export const getSessionPublic = (sessionId) => {
     step: session.step,
     stepLabel: session.stepLabel,
     accessNumber: session.accessNumber,
+    rechargeTargetNumber: session.rechargeTargetNumber ?? null,
     browserAlive: sessionPageAlive(session),
     paymentResult: session.paymentResult ?? null,
     lastError: session.lastError ?? null,
+    createdAt: session.createdAt ?? null,
+    browserName: session.browserName ?? null,
+    checkoutLinkMode: Boolean(session.checkoutLinkMode),
   };
+};
+
+export const listAllSessionsPublic = () => {
+  const items = [];
+  for (const session of sessions.values()) {
+    items.push(getSessionPublic(session.id));
+  }
+  items.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  return items;
 };
 
 const scheduleSessionClose = (sessionId, delayMs) => {

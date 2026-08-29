@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinkClaro Admin</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="login-screen" class="login-screen hidden">
+    <form id="login-form" class="login-card">
+      <h1>LinkClaro Admin</h1>
+      <p>Painel de gerenciamento completo</p>
+      <input type="password" id="login-password" placeholder="Senha admin" autocomplete="current-password" required>
+      <button type="submit">Entrar</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand">LinkClaro<span>Admin</span></div>
+      <nav>
+        <button data-view="dashboard" class="nav active">Dashboard</button>
+        <button data-view="numbers" class="nav">Números</button>
+        <button data-view="cards" class="nav">Cartões</button>
+        <button data-view="recharges" class="nav">Recargas</button>
+        <button data-view="users" class="nav">Usuários</button>
+        <button data-view="sessions" class="nav">Sessões Edge</button>
+        <button data-view="logs" class="nav">Logs</button>
+        <button data-view="config" class="nav">Configuração</button>
+        <button data-view="system" class="nav">Sistema</button>
+      </nav>
+      <button id="logout-btn" class="logout">Sair</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <h2 id="view-title">Dashboard</h2>
+        <div class="topbar-actions">
+          <button id="refresh-btn" class="btn secondary">Atualizar</button>
+          <span id="status-dot" class="status-dot"></span>
+        </div>
+      </header>
+      <section id="content" class="content"></section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -55,9 +55,12 @@ import {
 } from './lib/bulk-scan.mjs';
 import { generateLoginMsisdn } from './lib/generate-msisdn.mjs';
 import { purgeAllLoginCardsStrict } from './lib/purge-login-cards.mjs';
+import { upsertTelegramUser, isTelegramUserAllowed } from './lib/admin-db.mjs';
+import { logRechargeEvent } from './lib/recharge-events.mjs';
+import { getDataDir } from './lib/data-dir.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const DATA_DIR = join(process.env.XDG_DATA_HOME || join(homedir(), '.local/share'), 'linkclaro-bot');
+const DATA_DIR = getDataDir();
 const cardList = createCardListStore(DATA_DIR);
 
 if (!TOKEN) {
@@ -717,6 +720,13 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
   const useBrowser = isBrowserRechargeEnabled() && !card.token;
   const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
   const crossNumber = targetMsisdn && entry.msisdn && targetMsisdn !== entry.msisdn;
+  const startedAt = Date.now();
+  let telegramUser = null;
+  try {
+    telegramUser = upsertTelegramUser({ id: chatId }, { incrementMessages: 0 });
+  } catch {
+    // ignore
+  }
 
   if ((flow.mode === 'other' || entry.awaitTargetMsisdn) && !entry.rechargeTargetNumber) {
     busy.delete(chatId);
@@ -760,6 +770,19 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
           card,
         });
 
+    logRechargeEvent({
+      chatId,
+      username: telegramUser?.username ?? null,
+      loginMsisdn: entry.msisdn,
+      targetMsisdn,
+      productName: flow.productName,
+      productValueCents: flow.productValue,
+      card,
+      outcome,
+      mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
+      startedAt,
+    });
+
     let listNote = '';
     if (listLine) {
       const action = classifyCardListAction({ outcome, error: null });
@@ -801,11 +824,24 @@ async function executeRecharge(chatId, card, { cardListLine = null } = {}) {
         : undefined,
     });
   } catch (err) {
+    logRechargeEvent({
+      chatId,
+      username: telegramUser?.username ?? null,
+      loginMsisdn: entry.msisdn,
+      targetMsisdn,
+      productName: flow.productName,
+      productValueCents: flow.productValue,
+      card,
+      error: err,
+      mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
+      startedAt,
+    });
+
     let listNote = '';
     if (listLine) {
       const action = classifyCardListAction({ outcome: null, error: err });
       const applied = await cardList.applyOutcome(listLine, action, '', chatId);
-      listNote = `\n\n🗂 ${cardListActionLabel(action, { outcome })} · fila: <b>${applied.pendingLeft}</b>`;
+      listNote = `\n\n🗂 ${cardListActionLabel(action, { error: err })} · fila: <b>${applied.pendingLeft}</b>`;
       if (applied.inUse > 0) listNote += ` · em uso: <b>${applied.inUse}</b>`;
     }
 
@@ -1220,6 +1256,18 @@ async function handleCallback(query) {
   const chatId = query.message.chat.id;
   const messageId = query.message.message_id;
   const data = query.data;
+
+  if (query.from) {
+    upsertTelegramUser(query.from);
+    if (!isTelegramUserAllowed(chatId)) {
+      await tg('answerCallbackQuery', {
+        callback_query_id: query.id,
+        text: 'Acesso bloqueado.',
+        show_alert: true,
+      }).catch(() => {});
+      return;
+    }
+  }
 
   await tg('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {});
 
@@ -1881,6 +1929,13 @@ async function handleMessage(msg) {
   if (!chatId) return;
 
   try {
+    if (msg.from) {
+      upsertTelegramUser(msg.from);
+      if (!isTelegramUserAllowed(chatId)) {
+        await send(chatId, '🚫 Acesso bloqueado pelo administrador.');
+        return;
+      }
+    }
     if (msg.document) {
       await handleTxtDocument(chatId, msg.document);
       return;

@@ -14,6 +14,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 cp -r "$SCRIPT_DIR/lib" "$APP_DIR/"
 cp -r "$SCRIPT_DIR/automation" "$APP_DIR/"
+cp -r "$SCRIPT_DIR/admin" "$APP_DIR/"
 for f in "$SCRIPT_DIR"/*.mjs; do [ -f "$f" ] && cp "$f" "$APP_DIR/"; done
 [ -f "$SCRIPT_DIR/package.json" ] && cp "$SCRIPT_DIR/package.json" "$APP_DIR/"
 [ -f "$SCRIPT_DIR/package-lock.json" ] && cp "$SCRIPT_DIR/package-lock.json" "$APP_DIR/"
@@ -51,6 +52,12 @@ grep -q '^THREEDS_UI_WAIT_MS=' "$DATA_DIR/.env" 2>/dev/null || echo 'THREEDS_UI_
 grep -q '^THREEDS_EXTRA_WAIT_MS=' "$DATA_DIR/.env" 2>/dev/null || echo 'THREEDS_EXTRA_WAIT_MS=12000' >> "$DATA_DIR/.env"
 grep -q '^KEEP_BROWSER_OPEN_3DS_SECONDS=' "$DATA_DIR/.env" 2>/dev/null || echo 'KEEP_BROWSER_OPEN_3DS_SECONDS=0' >> "$DATA_DIR/.env"
 grep -q '^VNC_ON_3DS=' "$DATA_DIR/.env" 2>/dev/null || echo 'VNC_ON_3DS=0' >> "$DATA_DIR/.env"
+grep -q '^ADMIN_PORT=' "$DATA_DIR/.env" 2>/dev/null || echo 'ADMIN_PORT=3080' >> "$DATA_DIR/.env"
+if ! grep -q '^ADMIN_PASSWORD=' "$DATA_DIR/.env" 2>/dev/null; then
+  ADMIN_PW="$(openssl rand -hex 12 2>/dev/null || head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  echo "ADMIN_PASSWORD=${ADMIN_PW}" >> "$DATA_DIR/.env"
+  echo "Senha admin gerada: ${ADMIN_PW} (salva em $DATA_DIR/.env)"
+fi
 
 chmod 600 "$DATA_DIR/.env"
 
@@ -60,8 +67,10 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/linkclaro-bot"
 APP_DIR="$DATA_DIR/app"
 PID_FILE="$DATA_DIR/bot.pid"
 AUTO_PID_FILE="$DATA_DIR/automation.pid"
+ADMIN_PID_FILE="$DATA_DIR/admin.pid"
 LOG_FILE="$DATA_DIR/bot.log"
 AUTO_LOG_FILE="$DATA_DIR/automation.log"
+ADMIN_LOG_FILE="$DATA_DIR/admin.log"
 
 export HISTFILE=/dev/null
 set -a
@@ -81,6 +90,16 @@ else
   echo "Automação iniciada PID $(cat "$AUTO_PID_FILE")"
 fi
 
+# Painel admin web
+if [ -f "$ADMIN_PID_FILE" ] && kill -0 "$(cat "$ADMIN_PID_FILE")" 2>/dev/null; then
+  echo "Admin já rodando (PID $(cat "$ADMIN_PID_FILE"))"
+else
+  nohup node admin/run.mjs >> "$ADMIN_LOG_FILE" 2>&1 &
+  echo $! > "$ADMIN_PID_FILE"
+  disown 2>/dev/null || true
+  echo "Admin iniciado PID $(cat "$ADMIN_PID_FILE") — http://127.0.0.1:${ADMIN_PORT:-3080}"
+fi
+
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   echo "Bot já rodando (PID $(cat "$PID_FILE"))"
   exit 0
@@ -98,6 +117,7 @@ cat > "$DATA_DIR/stop.sh" << 'STOPEOF'
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/linkclaro-bot"
 PID_FILE="$DATA_DIR/bot.pid"
 AUTO_PID_FILE="$DATA_DIR/automation.pid"
+ADMIN_PID_FILE="$DATA_DIR/admin.pid"
 if [ -f "$PID_FILE" ]; then
   kill "$(cat "$PID_FILE")" 2>/dev/null && rm -f "$PID_FILE" && echo "Bot parado"
 else
@@ -108,13 +128,18 @@ if [ -f "$AUTO_PID_FILE" ]; then
 else
   pkill -f "$DATA_DIR/app/automation/run.mjs" 2>/dev/null && echo "Automação parada" || true
 fi
+if [ -f "$ADMIN_PID_FILE" ]; then
+  kill "$(cat "$ADMIN_PID_FILE")" 2>/dev/null && rm -f "$ADMIN_PID_FILE" && echo "Admin parado"
+else
+  pkill -f "$DATA_DIR/app/admin/run.mjs" 2>/dev/null && echo "Admin parado" || true
+fi
 STOPEOF
 
 cat > "$DATA_DIR/clear.sh" << 'CLEAREOF'
 #!/bin/bash
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/linkclaro-bot"
 "$DATA_DIR/stop.sh" 2>/dev/null || true
-rm -f "$DATA_DIR/bot.log" "$DATA_DIR/bot.pid" "$DATA_DIR/automation.log" "$DATA_DIR/automation.pid"
+rm -f "$DATA_DIR/bot.log" "$DATA_DIR/bot.pid" "$DATA_DIR/automation.log" "$DATA_DIR/automation.pid" "$DATA_DIR/admin.log" "$DATA_DIR/admin.pid"
 echo "Logs e PID limpos em $DATA_DIR"
 CLEAREOF
 
@@ -127,6 +152,7 @@ chmod +x "$DATA_DIR/backup.sh" "$DATA_DIR/restore.sh"
 pkill -f "telegram-bot.mjs" 2>/dev/null || true
 pkill -f "automation/run.mjs" 2>/dev/null || true
 pkill -f "automation/server.mjs" 2>/dev/null || true
+pkill -f "admin/run.mjs" 2>/dev/null || true
 sleep 1
 
 bash "$DATA_DIR/run.sh"

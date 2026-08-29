@@ -11,6 +11,7 @@
   "scripts": {
     "bot": "node telegram-bot.mjs",
     "automation": "node automation/server.mjs",
+    "admin": "node admin/run.mjs",
     "postinstall": "npx playwright install msedge || true"
   },
   "engines": {

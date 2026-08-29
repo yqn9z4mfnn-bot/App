@@ -6,6 +6,7 @@ import {
   closeSession,
   getConcurrencyPublic,
   getSessionPublic,
+  listAllSessionsPublic,
   startSessionFromWebLink,
   startSessionFromCheckoutLink,
 } from './sessions.mjs';
@@ -21,6 +22,13 @@ app.get('/health', (_req, res) => {
     defaultBrowser: normalizeBrowserName(config.defaultBrowser),
     browserLockedByEnv: isBrowserLockedByEnv(),
     ...getConcurrencyPublic(),
+  });
+});
+
+app.get('/api/sessions', (_req, res) => {
+  return res.json({
+    ...getConcurrencyPublic(),
+    sessions: listAllSessionsPublic(),
   });
 });
 
