@@ -2,7 +2,9 @@ import {
   checkoutErrorHint,
   isCheckoutErrorUrl,
   isCheckoutErrorText,
+  isCheckoutSuccessUrl,
   looksLikeCheckoutError,
+  looksLikeCheckoutSuccess,
   overrideThreedsIfCheckoutError,
 } from '../lib/checkout-error.mjs';
 import { mapAutomationPaymentStatus } from '../lib/automation-client.mjs';
@@ -138,6 +140,38 @@ const sse3ds = buildPaymentResultFromHttpSse(
   { had3ds: true },
 );
 check('http sse 3DS real', sse3ds.status === '3ds_required', sse3ds.status);
+
+const SUCCESS_URL =
+  'https://eldorado.m4u.com.br/bsc/checkout/success?code=452efbfd-378d-4893-b50d-fdca3b9bf7db';
+check('url checkout/success', isCheckoutSuccessUrl(SUCCESS_URL));
+check(
+  'looksLike success',
+  looksLikeCheckoutSuccess({ url: SUCCESS_URL, message: '3DS frictionless' }),
+);
+const mappedSuccess = mapAutomationPaymentStatus(
+  {
+    status: '3ds_required',
+    gateCode: '3DS',
+    gateMessage: '3DS frictionless — aguardando confirmação automática',
+    url: SUCCESS_URL,
+  },
+  {},
+);
+check('map 3ds+success url → CONFIRMED', mappedSuccess === 'CONFIRMED', mappedSuccess);
+const bubbleSuccess = formatRechargeResult({
+  result: {
+    status: '3DS_REQUIRED',
+    message: '3DS frictionless — aguardando confirmação automática',
+    visualVbv: false,
+    threeDsKind: 'challenge_api',
+  },
+  valueCents: 3000,
+  cardMask: '****6644',
+  loginMsisdn: '11992006644',
+  targetMsisdn: '61995063971',
+  automation: { raw: { url: SUCCESS_URL, status: '3ds_required' } },
+});
+check('bolha success titulo', /Recarga aprovada/.test(bubbleSuccess), bubbleSuccess);
 
 const CODE60 =
   'Negada com informação Compra não concluída Compra não concluída. Ligue no número informado no verso do cartão para maiores informações. Sua compra não pôde ser concluída, informe código 60 ao atendente via Central de Atendimento Sair';

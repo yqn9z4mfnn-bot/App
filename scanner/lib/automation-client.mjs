@@ -5,7 +5,7 @@ import {
   isGateDenialMessage,
   paymentBodyIsDenied,
 } from './card-outcome.mjs';
-import { looksLikeCheckoutError } from './checkout-error.mjs';
+import { looksLikeCheckoutError, looksLikeCheckoutSuccess } from './checkout-error.mjs';
 
 const DEFAULT_URL = process.env.AUTOMATION_API_URL || 'http://127.0.0.1:3000';
 
@@ -183,6 +183,9 @@ export function mapAutomationPaymentStatus(pr, data = {}) {
   const pageUrl = pr.url || data.url || pr.debug?.pageUrl || '';
 
   if (rawStatus === 'success') return 'CONFIRMED';
+  if (looksLikeCheckoutSuccess({ url: pageUrl, message: `${msg} ${threeDsHint}` })) {
+    return 'CONFIRMED';
+  }
   if (
     rawStatus !== 'success' &&
     looksLikeCheckoutError({ url: pageUrl, message: `${msg} ${threeDsHint}` })

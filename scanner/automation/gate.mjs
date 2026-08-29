@@ -13,6 +13,7 @@ import {
   CHECKOUT_ERROR_TEXT_RE,
   checkoutErrorHint,
   isCheckoutErrorUrl,
+  isCheckoutSuccessUrl,
   overrideThreedsIfCheckoutError,
 } from '../lib/checkout-error.mjs';
 
@@ -360,6 +361,10 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
     if (confirmed) {
       console.log('[automation][gate] CONFIRMED na captura — respondendo agora');
       return buildPaymentResult(page, 'success', url, { ...gateCapture, best: () => confirmed });
+    }
+    if (isCheckoutSuccessUrl(url)) {
+      console.log('[automation][gate] checkout/success — tratando como CONFIRMED');
+      return buildPaymentResult(page, 'success', url, gateCapture, 'Pagamento confirmado');
     }
 
     const denied = takeDenied();

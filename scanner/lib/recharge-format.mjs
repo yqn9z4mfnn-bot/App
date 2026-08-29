@@ -1,4 +1,4 @@
-import { isCheckoutErrorText, looksLikeCheckoutError } from './checkout-error.mjs';
+import { isCheckoutErrorText, looksLikeCheckoutError, looksLikeCheckoutSuccess } from './checkout-error.mjs';
 
 function esc(text) {
   return String(text ?? '')
@@ -179,6 +179,9 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
     '';
   const pageUrl = automation?.raw?.url || automation?.url || result?.pageUrl || '';
   const threeDsHint = result?.threeDsHint || automation?.raw?.threeDs?.hint || '';
+  if (looksLikeCheckoutSuccess({ url: pageUrl, message: `${reason} ${threeDsHint}` })) {
+    status = 'SUCCESS';
+  }
   if (
     status === '3DS_REQUIRED' &&
     looksLikeCheckoutError({ url: pageUrl, message: `${reason} ${threeDsHint}` })

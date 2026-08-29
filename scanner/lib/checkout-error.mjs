@@ -8,8 +8,26 @@ export const CHECKOUT_ERROR_TEXT_RE =
 
 const DEFAULT_HINT = 'Não foi possível concluir o pagamento';
 
+export const CHECKOUT_SUCCESS_URL_RE =
+  /\/bsc\/checkout\/success(?:\?|$|\/)|\/checkout\/success(?:\?|$|\/)|pagamento-sucesso|confirmacao-beneficio/i;
+
+export const CHECKOUT_SUCCESS_TEXT_RE =
+  /tudo certo|o seu pagamento foi realizado|pagamento confirmado|comprovante de pagamento/i;
+
 export function isCheckoutErrorUrl(url) {
   return CHECKOUT_ERROR_URL_RE.test(String(url || ''));
+}
+
+export function isCheckoutSuccessUrl(url) {
+  return CHECKOUT_SUCCESS_URL_RE.test(String(url || ''));
+}
+
+export function isCheckoutSuccessText(text) {
+  return CHECKOUT_SUCCESS_TEXT_RE.test(String(text || ''));
+}
+
+export function looksLikeCheckoutSuccess({ url, message } = {}) {
+  return isCheckoutSuccessUrl(url) || isCheckoutSuccessText(message);
 }
 
 export function isCheckoutErrorText(text) {
@@ -35,11 +53,36 @@ export function checkoutErrorHint(text, fallback = DEFAULT_HINT) {
   return String(m?.[0] || t).slice(0, 120);
 }
 
+/** Se a URL/texto for sucesso de checkout, 3DS vira pagamento confirmado. */
+export function overrideThreedsIfCheckoutSuccess(result, { url, text } = {}) {
+  if (!result || result.status === 'success') return result;
+  const pageUrl = url || result.url || '';
+  const hintSource = text || result.gateMessage || result.message || '';
+  if (!looksLikeCheckoutSuccess({ url: pageUrl, message: hintSource })) return result;
+  return {
+    ...result,
+    status: 'success',
+    url: pageUrl || result.url,
+    gateCode: 'CONFIRMED',
+    gateMessage: 'Pagamento confirmado',
+    message: 'Pagamento confirmado',
+    pagamentoErro: false,
+    visualVbv: false,
+    requiresImmediateAction: false,
+    threeDs: result.threeDs
+      ? { ...result.threeDs, supersededBy: 'checkout_success' }
+      : undefined,
+  };
+}
+
 /** Se a URL/texto for erro de checkout, o resultado 3DS deve virar erro de pagamento. */
 export function overrideThreedsIfCheckoutError(result, { url, text } = {}) {
   if (!result || result.status === 'success') return result;
   const pageUrl = url || result.url || '';
   const hintSource = text || result.gateMessage || result.message || '';
+  if (looksLikeCheckoutSuccess({ url: pageUrl, message: hintSource })) {
+    return overrideThreedsIfCheckoutSuccess(result, { url: pageUrl, text: hintSource });
+  }
   if (!looksLikeCheckoutError({ url: pageUrl, message: hintSource })) return result;
   const hint = checkoutErrorHint(hintSource);
   return {
