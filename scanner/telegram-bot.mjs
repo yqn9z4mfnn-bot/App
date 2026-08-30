@@ -2528,10 +2528,7 @@ async function handleMessage(msg) {
         await startSameNumberRecharge(chatId, link.msisdn);
         return;
       }
-      if (!mode) {
-        await send(chatId, '👇 Escolha o modo de recarga:', { reply_markup: buildRechargeModeKeyboard() });
-        return;
-      }
+      // Sem modo (ex.: bot recém-iniciado) ou "outro número": varredura completa.
     }
 
     if (!link) {
