@@ -26,6 +26,8 @@ import {
   buildPayMethodKeyboard,
   shouldOfferRechargeRetry,
   shouldScheduleAutoRetry,
+  summarizeRechargeAttempt,
+  formatAttemptLog,
   MAX_AUTO_RECHARGE_RETRIES,
   buildRetryKeyboard,
 } from './lib/recharge-format.mjs';
@@ -260,6 +262,7 @@ function saveRetryContext(chatId, {
   loginMsisdn,
   useAuto = true,
   autoRetries,
+  attemptLog,
 }) {
   const prev = rechargeRetry.get(chatId);
   rechargeRetry.set(chatId, {
@@ -271,8 +274,20 @@ function saveRetryContext(chatId, {
     loginMsisdn: normalizeBrMobile(loginMsisdn),
     useAuto,
     autoRetries: autoRetries ?? prev?.autoRetries ?? 0,
+    attemptLog: attemptLog ?? prev?.attemptLog ?? [],
     savedAt: Date.now(),
   });
+}
+
+function appendAttemptLog(chatId, attempt) {
+  const prev = rechargeRetry.get(chatId);
+  const attemptLog = [...(prev?.attemptLog ?? []), attempt];
+  if (prev) {
+    rechargeRetry.set(chatId, { ...prev, attemptLog });
+  } else {
+    rechargeRetry.set(chatId, { attemptLog, autoRetries: 0, savedAt: Date.now() });
+  }
+  return attemptLog;
 }
 
 function planRechargeRetry(chatId, { flow, entry, targetMsisdn, listLine, outcome, error }) {
@@ -1089,6 +1104,14 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       queueFooter = formatQueueFooter(action, applied.pendingLeft);
     }
 
+    const attemptLog = appendAttemptLog(
+      chatId,
+      summarizeRechargeAttempt({
+        outcome,
+        error: null,
+        cardMask: cardMaskFrom(card),
+      }),
+    );
     const plan = planRechargeRetry(chatId, {
       flow,
       entry,
@@ -1104,7 +1127,10 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       loginMsisdn: entry.msisdn,
       targetMsisdn,
     };
-    const report = formatRechargeResult(resultPayload, { footer: queueFooter });
+    const report = formatRechargeResult(resultPayload, {
+      footer: queueFooter,
+      attempts: attemptLog,
+    });
     const retryKb = plan.showRetryButton
       ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
       : undefined;
@@ -1141,6 +1167,14 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       queueFooter = formatQueueFooter(action, applied.pendingLeft);
     }
 
+    const attemptLog = appendAttemptLog(
+      chatId,
+      summarizeRechargeAttempt({
+        outcome: null,
+        error: err,
+        cardMask: cardMaskFrom(card),
+      }),
+    );
     const plan = planRechargeRetry(chatId, {
       flow,
       entry,
@@ -1153,6 +1187,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     const retryKb = plan.showRetryButton
       ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
       : undefined;
+    const multi = attemptLog.length > 1;
 
     await editBubble(
       chatId,
@@ -1160,7 +1195,9 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       {
         ...runBubble,
         title: 'Erro na recarga',
-        hint: formatFetchError(err),
+        cardMask: multi ? '' : runBubble.cardMask,
+        hint: multi ? '' : formatFetchError(err),
+        attempts: multi ? formatAttemptLog(attemptLog) : '',
         subhint: queueFooter,
       },
       { reply_markup: retryKb },

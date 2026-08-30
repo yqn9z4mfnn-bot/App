@@ -3,6 +3,9 @@ import {
   isRecharge3ds,
   shouldOfferRechargeRetry,
   shouldScheduleAutoRetry,
+  summarizeRechargeAttempt,
+  formatAttemptLog,
+  formatRechargeResult,
   MAX_AUTO_RECHARGE_RETRIES,
 } from '../lib/recharge-format.mjs';
 
@@ -100,6 +103,51 @@ check(
   !shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 0, pendingCards: 0 }),
 );
 check('teto padrao 3', MAX_AUTO_RECHARGE_RETRIES === 3, MAX_AUTO_RECHARGE_RETRIES);
+
+const a1 = summarizeRechargeAttempt({
+  outcome: {
+    result: { status: 'AUTOMATION_FAIL', message: '12 - ERRO NO CARTAO' },
+    cardMask: '****1951',
+  },
+  cardMask: '****1951',
+});
+const a2 = summarizeRechargeAttempt({
+  outcome: { result: { status: 'DENIED', message: 'CREDIT_CARD - 422 - suspected fraud' } },
+  cardMask: '****8803',
+});
+const a3 = summarizeRechargeAttempt({
+  outcome: { result: { status: 'TIMEOUT', message: 'Timeout aguardando SSE HTTP' } },
+  cardMask: '****3490',
+});
+check('resumo 1 tem 12', /12 - ERRO NO CARTAO/i.test(a1.reason), a1.reason);
+const log = formatAttemptLog([a1, a2, a3]);
+check('log 1', /1\) \*\*\*\*1951 · 12 - ERRO NO CARTAO/i.test(log), log);
+check('log 2', /2\) \*\*\*\*8803 · Fraude suspeita/i.test(log), log);
+check('log 3', /3\) \*\*\*\*3490 · Tempo esgotado/i.test(log), log);
+
+const single = formatRechargeResult({
+  result: { status: 'AUTOMATION_FAIL', message: '12 - ERRO NO CARTAO' },
+  valueCents: 2000,
+  cardMask: '****1951',
+  loginMsisdn: '11992007768',
+  targetMsisdn: '91987391356',
+});
+check('um erro nao numera', !/1\) \*\*\*\*1951/.test(single), single);
+check('um erro mostra cartao', /<code>\*\*\*\*1951<\/code>/.test(single), single);
+
+const triple = formatRechargeResult(
+  {
+    result: { status: 'AUTOMATION_FAIL', message: '12 - ERRO NO CARTAO' },
+    valueCents: 2000,
+    cardMask: '****3490',
+    loginMsisdn: '11992007768',
+    targetMsisdn: '91987391356',
+  },
+  { footer: 'Voltou pra fila · 2209 pendente(s)', attempts: [a1, a2, a3] },
+);
+check('tres erros na bolha', /1\) \*\*\*\*1951/.test(triple) && /2\) \*\*\*\*8803/.test(triple) && /3\) \*\*\*\*3490/.test(triple), triple);
+check('tres erros esconde cartao unico', !/<code>\*\*\*\*3490<\/code>/.test(triple), triple);
+check('tres erros mantem fila', /Voltou pra fila · 2209/.test(triple), triple);
 
 if (failed) {
   console.error(`${failed} falha(s)`);

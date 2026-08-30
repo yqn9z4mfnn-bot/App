@@ -114,12 +114,17 @@ export function formatStatusBubble({
   footer = '',
   hint = '',
   subhint = '',
+  attempts = '',
 } = {}) {
   const head = esc(clip(title || inferTitle(status, footer, hint), 28));
   const val = String(valueLabel ?? '').trim();
   const card = String(cardMask ?? '').trim();
-  const note = hint || inferHint(status, footer, hint);
   const extra = subhint || '';
+  const attemptLines = String(attempts ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const note = hint || (attemptLines.length ? '' : inferHint(status, footer, hint));
 
   const lines = [`<b>${head}</b>`, ''];
 
@@ -134,7 +139,12 @@ export function formatStatusBubble({
     lines.push(`💳 <code>${esc(card)}</code>`);
   }
 
-  if (note) lines.push('', `<i>${esc(note)}</i>`);
+  if (attemptLines.length) {
+    lines.push('');
+    for (const line of attemptLines) lines.push(`<i>${esc(line)}</i>`);
+  } else if (note) {
+    lines.push('', `<i>${esc(note)}</i>`);
+  }
   if (extra && extra !== note) lines.push(`<i>${esc(extra)}</i>`);
 
   return lines.join('\n');
@@ -156,29 +166,31 @@ function normalizeStatus(raw) {
   return st;
 }
 
-export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
-  const {
-    result,
-    valueCents,
-    cardMask,
-    latencyMs,
-    loginMsisdn,
-    targetMsisdn,
-    automation,
-  } = outcome ?? {};
+export function describeRechargeOutcome(outcome, error) {
+  if (error) {
+    const raw = String(error.message ?? error ?? '').trim();
+    return {
+      status: 'ERROR',
+      title: 'Erro na recarga',
+      reason: formatGateReason(raw) || clip(raw, 56) || 'Erro na recarga',
+    };
+  }
 
-  let status = normalizeStatus(result?.status);
-  const visualVbv = Boolean(result?.visualVbv);
-  const threeDsKind = result?.threeDsKind ?? null;
+  const result = outcome?.result ?? {};
+  const automation = outcome?.automation ?? {};
+  const raw = automation.raw ?? {};
+  let status = normalizeStatus(result.status);
+  const visualVbv = Boolean(result.visualVbv);
+  const threeDsKind = result.threeDsKind ?? null;
   let reason =
-    result?.negativeReason ??
-    result?.extra?.postMessage?.transaction?.reason ??
-    result?.message ??
-    automation?.raw?.gateMessage ??
-    automation?.raw?.message ??
+    result.negativeReason ??
+    result.extra?.postMessage?.transaction?.reason ??
+    result.message ??
+    raw.gateMessage ??
+    raw.message ??
     '';
-  const pageUrl = automation?.raw?.url || automation?.url || result?.pageUrl || '';
-  const threeDsHint = result?.threeDsHint || automation?.raw?.threeDs?.hint || '';
+  const pageUrl = raw.url || automation.url || result.pageUrl || '';
+  const threeDsHint = result.threeDsHint || raw.threeDs?.hint || '';
   if (looksLikeCheckoutSuccess({ url: pageUrl, message: `${reason} ${threeDsHint}` })) {
     status = 'SUCCESS';
   }
@@ -194,9 +206,6 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
         : 'Não foi possível concluir o pagamento';
   }
 
-  const login = String(loginMsisdn ?? '').replace(/\D/g, '');
-  const target = String(targetMsisdn ?? login).replace(/\D/g, '');
-
   let title = 'Resultado';
   if (status === 'SUCCESS') title = 'Recarga aprovada';
   else if (status === '3DS_REQUIRED') {
@@ -206,13 +215,13 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
   else if (status === 'TIMEOUT') title = 'Tempo esgotado';
   else if (status === 'ERROR') title = 'Erro na recarga';
 
-  let hint = '';
+  let displayReason = '';
   if (status === 'SUCCESS') {
-    hint = formatSeconds(latencyMs) ? `${formatSeconds(latencyMs)}` : '';
+    displayReason = formatSeconds(outcome?.latencyMs) ? `${formatSeconds(outcome.latencyMs)}` : 'Aprovada';
   } else if (status === '3DS_REQUIRED') {
-    hint = 'Confirme no app ou SMS do banco';
+    displayReason = 'Confirme no app ou SMS do banco';
   } else {
-    hint =
+    displayReason =
       formatGateReason(reason) ||
       (status === 'DENIED'
         ? 'Negada pela operadora'
@@ -227,13 +236,42 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
                 : 'Sem detalhe da gate');
   }
 
+  return { status, title, reason: displayReason };
+}
+
+export function summarizeRechargeAttempt({ outcome, error, cardMask } = {}) {
+  const desc = describeRechargeOutcome(outcome, error);
+  return {
+    cardMask: cardMask || outcome?.cardMask || '—',
+    reason: desc.reason,
+    title: desc.title,
+    status: desc.status,
+  };
+}
+
+export function formatAttemptLog(attempts = []) {
+  return (attempts ?? [])
+    .map((a, i) => {
+      const card = a.cardMask && a.cardMask !== '—' ? a.cardMask : '****';
+      return `${i + 1}) ${card} · ${a.reason || a.title || 'sem detalhe'}`;
+    })
+    .join('\n');
+}
+
+export function formatRechargeResult(outcome, { footer: extraFooter, attempts } = {}) {
+  const desc = describeRechargeOutcome(outcome, null);
+  const login = String(outcome?.loginMsisdn ?? '').replace(/\D/g, '');
+  const target = String(outcome?.targetMsisdn ?? login).replace(/\D/g, '');
+  const multi = Array.isArray(attempts) && attempts.length > 1;
+
   return formatStatusBubble({
-    title,
-    valueLabel: formatBRL(valueCents ?? 0),
-    cardMask: cardMask || '',
+    title: desc.title,
+    valueLabel: formatBRL(outcome?.valueCents ?? 0),
+    cardMask: multi ? '' : outcome?.cardMask || '',
     login,
     target,
-    hint,
+    hint: multi ? '' : desc.reason,
+    attempts: multi ? formatAttemptLog(attempts) : '',
     subhint: extraFooter || '',
   });
 }
