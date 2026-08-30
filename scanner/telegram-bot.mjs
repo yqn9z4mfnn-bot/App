@@ -29,7 +29,12 @@ import {
   buildRetryKeyboard,
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
-import { createCardListStore, looksLikeCardsTxt, extractCardLinesFromText } from './lib/card-list.mjs';
+import {
+  createCardListStore,
+  looksLikeCardsTxt,
+  extractCardLinesFromText,
+  MAX_CARD_LINES_PER_INGEST,
+} from './lib/card-list.mjs';
 import { classifyCardListAction } from './lib/card-outcome.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
@@ -1951,18 +1956,19 @@ async function sendLinkForValue(chatId, valueCents, { excludeMsisdn } = {}) {
 }
 
 async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
-  const cardLines = extractCardLinesFromText(text);
+  const extracted = extractCardLinesFromText(text);
+  const cardLines = extracted.lines;
   if (!cardLines.length) {
     await send(chatId, '❌ Nenhuma linha de cartão válida.\n\nFormato: <code>NUMERO|MM|AAAA|CVV</code>');
     return;
   }
-  const MAX_CARDS = 500;
-  const truncated = cardLines.length > MAX_CARDS;
-  const batch = truncated ? cardLines.slice(0, MAX_CARDS) : cardLines;
-  const result = await cardList.ingestText(batch.join('\n'));
+  const result = await cardList.ingestText(cardLines.join('\n'));
+  const leftover = extracted.truncated ? extracted.total - cardLines.length : 0;
   const lines = [
     '<b>💳 Cartões adicionados à fila</b>',
-    truncated ? `⚠️ Limite de <b>${MAX_CARDS}</b> por envio — envie o restante em outra mensagem.` : null,
+    leftover
+      ? `⚠️ <b>${extracted.total}</b> linhas válidas — limite de <b>${MAX_CARD_LINES_PER_INGEST}</b> por envio. Ficaram de fora: <b>${leftover}</b>. Envie o restante em outro arquivo.`
+      : `Linhas válidas no arquivo: <b>${extracted.total}</b>`,
     '',
     `✅ Novos: <b>${result.added}</b>`,
     result.duplicates
@@ -1998,7 +2004,7 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
 async function tryIngestCardListFromMessage(chatId, text) {
   if (!text?.trim() || text.startsWith('/')) return false;
 
-  const cardLines = extractCardLinesFromText(text);
+  const { lines: cardLines } = extractCardLinesFromText(text);
   if (cardLines.length >= 2) {
     await handleCardsTxtIngest(chatId, cardLines.join('\n'));
     return true;

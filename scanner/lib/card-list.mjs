@@ -465,14 +465,23 @@ export function looksLikeCardsTxt(text) {
   return false;
 }
 
+/** Teto por envio de .txt / lista colada (Telegram getFile aguenta bem acima disso). */
+export const MAX_CARD_LINES_PER_INGEST = Math.max(
+  1,
+  Number(process.env.MAX_CARD_LINES_PER_INGEST) || 20_000,
+);
+
 /** Extrai linhas de cartão válidas de texto colado (mensagem ou .txt). */
-export function extractCardLinesFromText(text, { maxLines = 500 } = {}) {
-  const out = [];
+export function extractCardLinesFromText(text, { maxLines = MAX_CARD_LINES_PER_INGEST } = {}) {
+  const lines = [];
+  let total = 0;
+  const cap = Math.max(1, Number(maxLines) || MAX_CARD_LINES_PER_INGEST);
   for (const raw of String(text ?? '').split(/\r?\n/)) {
-    if (out.length >= maxLines) break;
     const line = raw.trim().replace(/\s+#.*$/, '');
     if (!line || line.startsWith('#')) continue;
-    if (looksLikeCardLine(line)) out.push(line);
+    if (!looksLikeCardLine(line)) continue;
+    total += 1;
+    if (lines.length < cap) lines.push(line);
   }
-  return out;
+  return { lines, total, truncated: total > lines.length };
 }
