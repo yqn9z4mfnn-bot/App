@@ -81,14 +81,14 @@ const cases = [
     expected: 'return',
   },
   {
-    name: 'INVALID_STATE / field value devolve',
+    name: 'INVALID_STATE / field value remove da fila',
     input: {
       outcome: outcome('AUTOMATION_FAIL', {
         gateCode: 'INVALID_STATE',
         message: 'Request cannot be executed due to incorrect field value.',
       }),
     },
-    expected: 'return',
+    expected: 'consumed',
   },
   {
     name: 'DENIED real',

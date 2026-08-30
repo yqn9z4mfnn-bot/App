@@ -29,13 +29,19 @@ export function classifyCardListAction({ outcome, error } = {}) {
   if (status === 'success') return 'approved';
   if (status === '3ds') return 'consumed';
 
+  // Cartão inválido na tokenização / Click to Pay (INVALID_STATE).
+  if (isUnusableCardMessage(msg) || gateCode === 'INVALID_STATE') {
+    return 'consumed';
+  }
+
   // Só sai da fila se a gate recusou de verdade.
   // erro / timeout / falha de automação voltam para reutilizar.
   if (status === 'denied') {
     if (
       isAutomationFailureMessage(msg) &&
       !paymentBodyIsDenied(raw.gateResponse?.body) &&
-      gateCode !== 'DENIED'
+      gateCode !== 'DENIED' &&
+      !isUnusableCardMessage(msg)
     ) {
       return 'return';
     }
@@ -45,8 +51,13 @@ export function classifyCardListAction({ outcome, error } = {}) {
   return 'return';
 }
 
+/** Elo/Mastercard: campo inválido — cartão sem condição, não reutilizar. */
+export function isUnusableCardMessage(msg) {
+  return /incorrect field value|INVALID_STATE/i.test(String(msg));
+}
+
 export function isGateDenialMessage(msg) {
-  return /negad|denied|recusad|n[aã]o autoriz|bloqueado|insuficiente|saldo insuficiente|cart[aã]o inv[aá]lido|transa[cç][aã]o negada|operadora recusou|fraud|fraude|suspeit|CREDIT_CARD\s*-\s*422|n[aã]o foi poss[ií]vel concluir|n[aã]o conseguimos (processar|realizar)|compra n[aã]o conclu[ií]da|informe c[oó]digo\s*\d+/i.test(
+  return /negad|denied|recusad|n[aã]o autoriz|bloqueado|insuficiente|saldo insuficiente|cart[aã]o inv[aá]lido|transa[cç][aã]o negada|operadora recusou|fraud|fraude|suspeit|CREDIT_CARD\s*-\s*422|n[aã]o foi poss[ií]vel concluir|n[aã]o conseguimos (processar|realizar)|compra n[aã]o conclu[ií]da|informe c[oó]digo\s*\d+|incorrect field value|INVALID_STATE/i.test(
     String(msg),
   );
 }
