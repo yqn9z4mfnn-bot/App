@@ -238,14 +238,52 @@ export function formatRechargeResult(outcome, { footer: extraFooter } = {}) {
   });
 }
 
+/** Quantas vezes o bot aperta “Tentar novamente” sozinho (além da 1ª recarga). */
+export const MAX_AUTO_RECHARGE_RETRIES = Math.max(
+  0,
+  Number(process.env.MAX_AUTO_RECHARGE_RETRIES) || 3,
+);
+
 export function isRechargeSuccess(outcome) {
   const st = String(outcome?.result?.status ?? '').toUpperCase();
-  return st === 'CONFIRMED' || st === 'SUCCESS';
+  if (st === 'CONFIRMED' || st === 'SUCCESS') return true;
+  const raw = outcome?.automation?.raw ?? {};
+  return looksLikeCheckoutSuccess({
+    url: raw.url,
+    message: `${outcome?.result?.message ?? ''} ${raw.gateMessage ?? ''} ${raw.threeDs?.hint ?? ''}`,
+  });
+}
+
+/** 3DS/VBV real — não retry automático nem botão. checkout/error e checkout/success não contam. */
+export function isRecharge3ds(outcome) {
+  if (!outcome || isRechargeSuccess(outcome)) return false;
+  const result = outcome?.result ?? {};
+  const raw = outcome?.automation?.raw ?? {};
+  const pageUrl = raw.url || outcome?.url || result.pageUrl || '';
+  const reason = `${result.negativeReason ?? ''} ${result.message ?? ''} ${raw.gateMessage ?? ''} ${raw.message ?? ''}`;
+  const threeDsHint = result.threeDsHint || raw.threeDs?.hint || '';
+  const blob = `${reason} ${threeDsHint}`;
+  if (looksLikeCheckoutSuccess({ url: pageUrl, message: blob })) return false;
+  if (looksLikeCheckoutError({ url: pageUrl, message: blob })) return false;
+  const st = String(result.status ?? raw.status ?? '').toUpperCase();
+  return st === '3DS_REQUIRED' || st === '3DS';
 }
 
 export function shouldOfferRechargeRetry(outcome, error) {
-  if (error) return true;
-  return !isRechargeSuccess(outcome);
+  if (isRechargeSuccess(outcome)) return false;
+  if (!error && isRecharge3ds(outcome)) return false;
+  return true;
+}
+
+export function shouldScheduleAutoRetry({
+  outcome,
+  error,
+  autoRetriesUsed = 0,
+  pendingCards = 0,
+} = {}) {
+  if (!shouldOfferRechargeRetry(outcome, error)) return false;
+  if (Number(pendingCards) <= 0) return false;
+  return Number(autoRetriesUsed) < MAX_AUTO_RECHARGE_RETRIES;
 }
 
 export function buildRetryKeyboard({ autoAvailable = false } = {}) {

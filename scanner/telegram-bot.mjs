@@ -24,8 +24,9 @@ import {
   formatQueueFooter,
   buildValueKeyboard,
   buildPayMethodKeyboard,
-  isRechargeSuccess,
   shouldOfferRechargeRetry,
+  shouldScheduleAutoRetry,
+  MAX_AUTO_RECHARGE_RETRIES,
   buildRetryKeyboard,
 } from './lib/recharge-format.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
@@ -258,7 +259,9 @@ function saveRetryContext(chatId, {
   targetMsisdn,
   loginMsisdn,
   useAuto = true,
+  autoRetries,
 }) {
+  const prev = rechargeRetry.get(chatId);
   rechargeRetry.set(chatId, {
     mode: mode ?? 'same',
     productId,
@@ -267,8 +270,48 @@ function saveRetryContext(chatId, {
     targetMsisdn: normalizeBrMobile(targetMsisdn),
     loginMsisdn: normalizeBrMobile(loginMsisdn),
     useAuto,
+    autoRetries: autoRetries ?? prev?.autoRetries ?? 0,
     savedAt: Date.now(),
   });
+}
+
+function planRechargeRetry(chatId, { flow, entry, targetMsisdn, listLine, outcome, error }) {
+  if (!shouldOfferRechargeRetry(outcome, error)) {
+    clearRetryContext(chatId);
+    return { showRetryButton: false, autoRetry: false };
+  }
+
+  const used = rechargeRetry.get(chatId)?.autoRetries ?? 0;
+  saveRetryContext(chatId, {
+    mode: flow.mode,
+    productId: flow.productId,
+    productValue: flow.productValue,
+    productName: flow.productName,
+    targetMsisdn,
+    loginMsisdn: entry.msisdn,
+    useAuto: Boolean(flow.autoPay || listLine),
+    autoRetries: used,
+  });
+
+  const autoRetry = shouldScheduleAutoRetry({
+    outcome,
+    error,
+    autoRetriesUsed: used,
+    pendingCards: cardList.countPending(),
+  });
+  if (autoRetry) {
+    saveRetryContext(chatId, {
+      mode: flow.mode,
+      productId: flow.productId,
+      productValue: flow.productValue,
+      productName: flow.productName,
+      targetMsisdn,
+      loginMsisdn: entry.msisdn,
+      useAuto: Boolean(flow.autoPay || listLine),
+      autoRetries: used + 1,
+    });
+  }
+  return { showRetryButton: !autoRetry, autoRetry };
 }
 
 function clearRetryContext(chatId) {
@@ -652,7 +695,7 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
   }
 }
 
-async function runRechargeRetry(chatId, messageId) {
+async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
   const retry = rechargeRetry.get(chatId);
   if (!retry) {
     await send(chatId, '❌ Nada para tentar de novo. Use /start');
@@ -665,12 +708,17 @@ async function runRechargeRetry(chatId, messageId) {
   }
 
   const statusMsg = { message_id: messageId, chat: { id: chatId } };
+  const retryN = automatic ? retry.autoRetries || 0 : 0;
+  const retryHint =
+    retryN > 0
+      ? `Retry automático ${retryN}/${MAX_AUTO_RECHARGE_RETRIES} · próximo cartão`
+      : 'Mesmo valor e destino · próximo cartão';
   await editBubble(chatId, statusMsg, {
-    title: 'Nova tentativa',
+    title: retryN > 0 ? `Nova tentativa ${retryN}/${MAX_AUTO_RECHARGE_RETRIES}` : 'Nova tentativa',
     valueLabel: retry.productName ?? '',
     login: retry.loginMsisdn || '',
     target: retry.targetMsisdn || '',
-    hint: 'Mesmo valor e destino · próximo cartão',
+    hint: retryHint,
   });
 
   const prep = await prepareRetryRecharge(chatId, retry, statusMsg);
@@ -973,6 +1021,8 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     hint: 'Aguardando checkout…',
   };
   const statusMsg = await editBubble(chatId, incomingStatus, runBubble);
+  const epochAtStart = workEpoch.get(chatId);
+  let scheduledAutoRetry = false;
 
   try {
     if (flow.mode === 'other' || entry.rechargeMode === 'other') {
@@ -1017,28 +1067,45 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
           card,
         });
 
-    const offerRetry = shouldOfferRechargeRetry(outcome, null);
-    if (offerRetry) {
-      saveRetryContext(chatId, {
-        mode: flow.mode,
-        productId: flow.productId,
-        productValue: flow.productValue,
-        productName: flow.productName,
-        targetMsisdn,
-        loginMsisdn: entry.msisdn,
-        useAuto: Boolean(flow.autoPay || listLine),
-      });
-    } else {
-      clearRetryContext(chatId);
+    logRechargeEvent({
+      chatId,
+      username: telegramUser?.username ?? null,
+      loginMsisdn: entry.msisdn,
+      targetMsisdn,
+      productName: flow.productName,
+      productValueCents: flow.productValue,
+      card,
+      outcome,
+      mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
+      startedAt,
+    });
+
+    let queueFooter = '';
+    if (listLine) {
+      const action = classifyCardListAction({ outcome, error: null });
+      const meta =
+        action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
+      const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
+      queueFooter = formatQueueFooter(action, applied.pendingLeft);
     }
+
+    const plan = planRechargeRetry(chatId, {
+      flow,
+      entry,
+      targetMsisdn,
+      listLine,
+      outcome,
+      error: null,
+    });
+    scheduledAutoRetry = plan.autoRetry;
 
     const resultPayload = {
       ...outcome,
       loginMsisdn: entry.msisdn,
       targetMsisdn,
     };
-    let report = formatRechargeResult(resultPayload);
-    const retryKb = offerRetry
+    const report = formatRechargeResult(resultPayload, { footer: queueFooter });
+    const retryKb = plan.showRetryButton
       ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
       : undefined;
     try {
@@ -1053,55 +1120,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       console.warn('[bot] resultado: edit falhou, enviando nova:', err.message);
       await send(chatId, report, { reply_markup: retryKb });
     }
-
-    logRechargeEvent({
-      chatId,
-      username: telegramUser?.username ?? null,
-      loginMsisdn: entry.msisdn,
-      targetMsisdn,
-      productName: flow.productName,
-      productValueCents: flow.productValue,
-      card,
-      outcome,
-      mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
-      startedAt,
-    });
-
-    if (listLine) {
-      const action = classifyCardListAction({ outcome, error: null });
-      const meta =
-        action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
-      const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
-      report = formatRechargeResult(resultPayload, {
-        footer: formatQueueFooter(action, applied.pendingLeft),
-      });
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: statusMsg.message_id,
-        text: report,
-        parse_mode: 'HTML',
-        reply_markup: retryKb,
-      }).catch(() => {});
-    }
   } catch (err) {
-    saveRetryContext(chatId, {
-      mode: flow.mode,
-      productId: flow.productId,
-      productValue: flow.productValue,
-      productName: flow.productName,
-      targetMsisdn,
-      loginMsisdn: entry.msisdn,
-      useAuto: Boolean(flow.autoPay || listLine),
-    });
-
-    const retryKb = buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 });
-    await editBubble(
-      chatId,
-      statusMsg,
-      { ...runBubble, title: 'Erro na recarga', hint: formatFetchError(err) },
-      { reply_markup: retryKb },
-    );
-
     logRechargeEvent({
       chatId,
       username: telegramUser?.username ?? null,
@@ -1115,24 +1134,48 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       startedAt,
     });
 
+    let queueFooter = '';
     if (listLine) {
       const action = classifyCardListAction({ outcome: null, error: err });
       const applied = await cardList.applyOutcome(listLine, action, '', chatId);
-      await editBubble(
-        chatId,
-        statusMsg,
-        {
-          ...runBubble,
-          title: 'Erro na recarga',
-          hint: formatFetchError(err),
-          subhint: formatQueueFooter(action, applied.pendingLeft),
-        },
-        { reply_markup: retryKb },
-      ).catch(() => {});
+      queueFooter = formatQueueFooter(action, applied.pendingLeft);
     }
+
+    const plan = planRechargeRetry(chatId, {
+      flow,
+      entry,
+      targetMsisdn,
+      listLine,
+      outcome: null,
+      error: err,
+    });
+    scheduledAutoRetry = plan.autoRetry;
+    const retryKb = plan.showRetryButton
+      ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
+      : undefined;
+
+    await editBubble(
+      chatId,
+      statusMsg,
+      {
+        ...runBubble,
+        title: 'Erro na recarga',
+        hint: formatFetchError(err),
+        subhint: queueFooter,
+      },
+      { reply_markup: retryKb },
+    ).catch(() => {});
   } finally {
     busy.delete(chatId);
     clearRecharge(chatId);
+  }
+
+  if (scheduledAutoRetry && !isWorkStale(chatId, epochAtStart) && statusMsg?.message_id) {
+    const n = rechargeRetry.get(chatId)?.autoRetries ?? 0;
+    console.log(`[bot] auto-retry ${n}/${MAX_AUTO_RECHARGE_RETRIES} chat=${chatId}`);
+    await sleep(400);
+    if (isWorkStale(chatId, epochAtStart)) return;
+    await runRechargeRetry(chatId, statusMsg.message_id, { automatic: true });
   }
 }
 
