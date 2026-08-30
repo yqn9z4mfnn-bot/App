@@ -207,7 +207,7 @@ export function describeRechargeOutcome(outcome, error) {
   }
 
   let title = 'Resultado';
-  if (status === 'SUCCESS') title = 'Recarga aprovada';
+  if (status === 'SUCCESS') title = '✅ APROVADA';
   else if (status === '3DS_REQUIRED') {
     title = visualVbv || threeDsKind === 'cardinal' ? '3DS visual' : threeDsKind === 'sms' ? '3DS por SMS' : 'Validação 3DS';
   } else if (status === 'DENIED') title = 'Recarga negada';
@@ -217,7 +217,8 @@ export function describeRechargeOutcome(outcome, error) {
 
   let displayReason = '';
   if (status === 'SUCCESS') {
-    displayReason = formatSeconds(outcome?.latencyMs) ? `${formatSeconds(outcome.latencyMs)}` : 'Aprovada';
+    const secs = formatSeconds(outcome?.latencyMs);
+    displayReason = secs ? `✨ Confirmada em ${secs}` : '✨ Pagamento confirmado';
   } else if (status === '3DS_REQUIRED') {
     displayReason = 'Confirme no app ou SMS do banco';
   } else {
@@ -262,17 +263,19 @@ export function formatRechargeResult(outcome, { footer: extraFooter, attempts } 
   const desc = describeRechargeOutcome(outcome, null);
   const login = String(outcome?.loginMsisdn ?? '').replace(/\D/g, '');
   const target = String(outcome?.targetMsisdn ?? login).replace(/\D/g, '');
-  const multi = Array.isArray(attempts) && attempts.length > 1;
+  const approved = desc.status === 'SUCCESS';
+  const fails = (attempts ?? []).filter((a) => String(a.status ?? '').toUpperCase() !== 'SUCCESS');
+  const showLog = !approved && fails.length > 1;
 
   return formatStatusBubble({
     title: desc.title,
     valueLabel: formatBRL(outcome?.valueCents ?? 0),
-    cardMask: multi ? '' : outcome?.cardMask || '',
+    cardMask: showLog ? '' : outcome?.cardMask || '',
     login,
     target,
-    hint: multi ? '' : desc.reason,
-    attempts: multi ? formatAttemptLog(attempts) : '',
-    subhint: extraFooter || '',
+    hint: showLog ? '' : desc.reason,
+    attempts: showLog ? formatAttemptLog(fails) : '',
+    subhint: approved ? '' : extraFooter || '',
   });
 }
 

@@ -171,7 +171,7 @@ const bubbleSuccess = formatRechargeResult({
   targetMsisdn: '61995063971',
   automation: { raw: { url: SUCCESS_URL, status: '3ds_required' } },
 });
-check('bolha success titulo', /Recarga aprovada/.test(bubbleSuccess), bubbleSuccess);
+check('bolha success titulo', /APROVADA/.test(bubbleSuccess), bubbleSuccess);
 
 const CODE60 =
   'Negada com informação Compra não concluída Compra não concluída. Ligue no número informado no verso do cartão para maiores informações. Sua compra não pôde ser concluída, informe código 60 ao atendente via Central de Atendimento Sair';
@@ -236,7 +236,7 @@ const successIncidentOutcome = {
   },
 };
 const bubbleApproved = formatRechargeResult(successIncidentOutcome, { footer: 'Aprovado · fila 0' });
-check('incidente 1864 titulo aprovada', /Recarga aprovada/.test(bubbleApproved), bubbleApproved);
+check('incidente 1864 titulo aprovada', /APROVADA/.test(bubbleApproved), bubbleApproved);
 check('incidente 1864 nao 3DS', !/Validação 3DS|Confirme no app/i.test(bubbleApproved), bubbleApproved);
 check(
   'incidente 1864 classifica aprovado',

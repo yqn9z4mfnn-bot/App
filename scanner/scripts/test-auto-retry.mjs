@@ -149,6 +149,32 @@ check('tres erros na bolha', /1\) \*\*\*\*1951/.test(triple) && /2\) \*\*\*\*880
 check('tres erros esconde cartao unico', !/<code>\*\*\*\*3490<\/code>/.test(triple), triple);
 check('tres erros mantem fila', /Voltou pra fila · 2209/.test(triple), triple);
 
+const approvedAfterFails = formatRechargeResult(
+  {
+    result: { status: 'CONFIRMED' },
+    valueCents: 2000,
+    cardMask: '****8383',
+    loginMsisdn: '11992000282',
+    targetMsisdn: '91987391356',
+    latencyMs: 25000,
+  },
+  {
+    footer: 'Aprovado · fila 2207',
+    attempts: [
+      a1,
+      summarizeRechargeAttempt({
+        outcome: { result: { status: 'CONFIRMED' }, latencyMs: 25000 },
+        cardMask: '****8383',
+      }),
+    ],
+  },
+);
+check('aprovada sem historico', !/1\) \*\*\*\*1951/.test(approvedAfterFails), approvedAfterFails);
+check('aprovada sem footer fila', !/Aprovado · fila/.test(approvedAfterFails), approvedAfterFails);
+check('aprovada titulo', /✅ APROVADA/.test(approvedAfterFails), approvedAfterFails);
+check('aprovada tempo', /Confirmada em 25s/.test(approvedAfterFails), approvedAfterFails);
+check('aprovada mostra cartao', /\*\*\*\*8383/.test(approvedAfterFails), approvedAfterFails);
+
 if (failed) {
   console.error(`${failed} falha(s)`);
   process.exit(1);
