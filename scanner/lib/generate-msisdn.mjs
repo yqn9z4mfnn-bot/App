@@ -4,8 +4,8 @@ import { getProxyUrl, proxyEnabled } from './proxy.mjs';
 import { isTransientFetchError, sleep } from './transient-fetch.mjs';
 
 /**
- * Gera MSISDN: DDD aleatório do banco + 6 dígitos (após DDD) de um número real + 3 aleatórios.
- * Ex.: template 11991004238 → DDD 11 + 991004 + XXX
+ * Gera MSISDN: DDD do banco + 5 dígitos após o DDD de um número real + 4 aleatórios.
+ * Ex.: template 11991004238 → DDD 11 + 99100 + XXXX
  */
 export function generateMsisdnFromDb() {
   const ddds = listDistinctDdds();
@@ -19,13 +19,13 @@ export function generateMsisdnFromDb() {
     throw new Error(`Sem números no DDD ${ddd} para montar o prefixo.`);
   }
 
-  const prefix6 = template.slice(2, 8);
-  if (!/^9\d{5}$/.test(prefix6)) {
-    throw new Error(`Prefixo inválido no DDD ${ddd}: ${prefix6}`);
+  const prefix5 = template.slice(2, 7);
+  if (!/^9\d{4}$/.test(prefix5)) {
+    throw new Error(`Prefixo inválido no DDD ${ddd}: ${prefix5}`);
   }
 
-  const suffix3 = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
-  const msisdn = `${ddd}${prefix6}${suffix3}`;
+  const suffix4 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  const msisdn = `${ddd}${prefix5}${suffix4}`;
   return normalizeBrMobile(msisdn);
 }
 

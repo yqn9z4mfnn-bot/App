@@ -232,7 +232,7 @@ export function listDistinctDdds() {
     .filter(Boolean);
 }
 
-/** Número aleatório do DDD — só para copiar os 6 dígitos após o DDD. */
+/** Número aleatório do DDD — só para copiar os 5 dígitos após o DDD. */
 export function pickRandomMsisdnByDdd(ddd) {
   const d = String(ddd ?? '').replace(/\D/g, '').slice(0, 2);
   if (!d) return null;

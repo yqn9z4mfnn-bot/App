@@ -25,7 +25,7 @@ try {
   }
 
   const generated = generateMsisdnFromDb();
-  if (!/^11991004\d{3}$/.test(generated)) {
+  if (!/^1199100\d{4}$/.test(generated)) {
     failed += 1;
     console.error('FAIL template', generated);
   }
