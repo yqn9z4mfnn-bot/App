@@ -56,11 +56,12 @@ export async function createSession(jwt) {
   return res.body;
 }
 
-/** Endpoints essenciais — número, valores, cartões API, histórico (~6 req). */
+/** Endpoints essenciais — número, saldo, valores, cartões API, histórico. */
 export async function scanClaroEssential(sessionId, msisdn, { includeProducts = true } = {}) {
   const base = `/customers/${msisdn}`;
   const jobs = [
     ['customer', claroGet(base, sessionId)],
+    ['balance', claroGet(`${base}/recharge/balance`, sessionId)],
     ...(includeProducts ? [['products', claroGet(`${base}/products`, sessionId)]] : []),
     ['paymentMethods', claroGet(`${base}/payment-methods`, sessionId)],
     ['recharges', claroGet(`${base}/recharges`, sessionId)],

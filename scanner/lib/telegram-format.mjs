@@ -26,6 +26,7 @@ export function formatTelegramReport(summary) {
     '',
     `<b>Número:</b> ${esc(summary.numero)}`,
     `<b>Segmento:</b> ${esc(summary.segmento)}`,
+    `<b>Saldo:</b> ${esc(summary.saldo?.ok ? summary.saldo.formatted : summary.saldo?.error || '—')}`,
     `<b>Status:</b> ${esc(summary.cliente?.status)}`,
     `<b>Perfil:</b> ${esc(summary.cliente?.profile?.name)}`,
   ];

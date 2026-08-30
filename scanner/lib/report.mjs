@@ -1,5 +1,25 @@
+import { parseBalanceBody, formatBalanceLine } from './line-balance.mjs';
+
 function formatBRL(cents) {
   return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
+}
+
+function buildSaldo(balanceRes) {
+  if (!balanceRes) return null;
+  if (balanceRes.status === 404) {
+    return { ok: false, error: 'sem saldo prepaid' };
+  }
+  if (!balanceRes.ok) {
+    return { ok: false, error: `HTTP ${balanceRes.status}` };
+  }
+  const parsed = parseBalanceBody(balanceRes.body);
+  if (!parsed) return { ok: false, error: 'resposta sem valor' };
+  return {
+    ok: true,
+    cents: parsed.cents,
+    expiration: parsed.expiration,
+    formatted: formatBalanceLine(parsed),
+  };
 }
 
 function maskCard(card) {
@@ -66,6 +86,7 @@ export function buildSummary({ session, claro, wallet, skipWallet = false }) {
     scannedAt: new Date().toISOString(),
     numero: msisdn,
     segmento: session.segment,
+    saldo: buildSaldo(claro.balance),
     cliente: {
       id: customer?.id,
       status: customer?.status,
@@ -114,6 +135,7 @@ export function printSummary(summary) {
     '══════════════════════════════════════════',
     `Número:     ${summary.numero}`,
     `Segmento:   ${summary.segmento}`,
+    `Saldo:      ${summary.saldo?.ok ? summary.saldo.formatted : summary.saldo?.error ?? '—'}`,
     `Status:     ${summary.cliente?.status ?? '—'}`,
     `Perfil:     ${summary.cliente?.profile?.name ?? '—'}`,
     '',
