@@ -3,6 +3,8 @@ import {
   formatBalanceLine,
   formatBalanceCompare,
   formatValidityDate,
+  balancesChanged,
+  AFTER_BALANCE_POLL_MS,
 } from '../lib/line-balance.mjs';
 import { formatRechargeResult } from '../lib/recharge-format.mjs';
 
@@ -37,7 +39,15 @@ check('delta', /Δ \+R\$ 20,00/.test(cmp), cmp);
 check('validade mudou', /22\/09\/2026 → 22\/10\/2026/.test(cmp), cmp);
 
 const same = formatBalanceCompare(parsed, parsed);
-check('igual avisa', /Saldo não mudou/.test(same), same);
+check('igual nao afirma que nao caiu', !/Saldo não mudou/.test(same), same);
+check('igual avisa atraso', /API ainda não atualizou/.test(same), same);
+check('mudou valor', balancesChanged(parsed, after) === true);
+check('igual nao mudou', balancesChanged(parsed, parsed) === false);
+check(
+  'mudou validade',
+  balancesChanged(parsed, { ...parsed, expiration: '2026-11-28' }) === true,
+);
+check('poll tem esperas', AFTER_BALANCE_POLL_MS.length >= 3 && AFTER_BALANCE_POLL_MS[0] >= 2000);
 
 const bubble = formatRechargeResult(
   {

@@ -32,7 +32,11 @@ import {
   MAX_AUTO_RECHARGE_RETRIES,
   buildRetryKeyboard,
 } from './lib/recharge-format.mjs';
-import { snapshotDestBalance, formatBalanceCompare } from './lib/line-balance.mjs';
+import {
+  snapshotDestBalance,
+  snapshotDestBalanceUntilChange,
+  formatBalanceCompare,
+} from './lib/line-balance.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 import {
   createCardListStore,
@@ -1159,20 +1163,27 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
 
     if (isRechargeSuccess(outcome) && destKey) {
       const pack = destBalanceByChat.get(chatId) || { dest: destKey };
-      await editBubble(chatId, statusMsg, {
-        ...runBubble,
-        title: 'Conferindo saldo',
-        hint: 'Lendo saldo e validade após a recarga…',
-      }).catch(() => {});
-      await sleep(2500);
-      const afterSnap = await snapshotDestBalance(destKey, { sessionId: pack.sessionId });
+      const afterSnap = await snapshotDestBalanceUntilChange(destKey, pack.before, {
+        sessionId: pack.sessionId,
+        onAttempt: ({ attempt, total, waitMs }) =>
+          editBubble(chatId, statusMsg, {
+            ...runBubble,
+            title: 'Conferindo saldo',
+            hint:
+              attempt === 1
+                ? 'Lendo saldo e validade após a recarga…'
+                : `A API atrasou — nova leitura ${attempt}/${total} (${Math.round(waitMs / 1000)}s)…`,
+          }).catch(() => {}),
+      });
       pack.after = afterSnap.ok ? afterSnap.balance : null;
       pack.sessionId = afterSnap.sessionId ?? pack.sessionId;
       destBalanceByChat.set(chatId, pack);
-      destBalanceText = formatBalanceCompare(pack.before, pack.after);
+      destBalanceText = formatBalanceCompare(pack.before, pack.after, {
+        stale: afterSnap.ok && afterSnap.changed === false,
+      });
       if (afterSnap.ok) {
         console.log(
-          `[bot] saldo depois dest=${destKey} ${afterSnap.balance.cents}c val=${afterSnap.balance.expiration || '—'}`,
+          `[bot] saldo depois dest=${destKey} ${afterSnap.balance.cents}c val=${afterSnap.balance.expiration || '—'} tent=${afterSnap.attempts} mudou=${afterSnap.changed}`,
         );
       } else {
         console.warn(`[bot] saldo depois dest=${destKey} falhou: ${afterSnap.error}`);

@@ -2,6 +2,10 @@ import { createSession } from './claro.mjs';
 import { claroGet } from './http.mjs';
 import { fetchClaroLoginLink, normalizeBrMobile } from './fetch-claro-link.mjs';
 import { parseLink } from './parse-link.mjs';
+import { sleep } from './transient-fetch.mjs';
+
+/** Espera a API prepaid refletir a recarga (às vezes demora mais que 2–3s). */
+export const AFTER_BALANCE_POLL_MS = [3000, 5000, 7000, 8000];
 
 export function formatBRLCents(cents) {
   const n = Number(cents);
@@ -42,7 +46,14 @@ export function formatBalanceLine(snap) {
   return val ? `${money} · val. ${val}` : money;
 }
 
-export function formatBalanceCompare(before, after) {
+export function balancesChanged(before, after) {
+  if (!after || !Number.isFinite(after.cents)) return false;
+  if (!before || !Number.isFinite(before.cents)) return true;
+  if (before.cents !== after.cents) return true;
+  return String(before.expiration ?? '') !== String(after.expiration ?? '');
+}
+
+export function formatBalanceCompare(before, after, { stale = false } = {}) {
   const lines = ['📊 Saldo do destino'];
   if (before) lines.push(`Antes: ${formatBalanceLine(before)}`);
   else lines.push('Antes: não consultado');
@@ -50,8 +61,10 @@ export function formatBalanceCompare(before, after) {
     lines.push(`Depois: ${formatBalanceLine(after)}`);
     if (before && Number.isFinite(before.cents) && Number.isFinite(after.cents)) {
       const delta = after.cents - before.cents;
-      if (delta === 0) lines.push('⚠️ Saldo não mudou');
-      else lines.push(`Δ ${delta > 0 ? '+' : ''}${formatBRLCents(delta)}`);
+      if (delta !== 0) lines.push(`Δ ${delta > 0 ? '+' : ''}${formatBRLCents(delta)}`);
+      else if (stale || !balancesChanged(before, after)) {
+        lines.push('⏳ A API ainda não atualizou o saldo (atraso comum)');
+      }
     }
     if (before?.expiration && after?.expiration && before.expiration !== after.expiration) {
       lines.push(
@@ -126,4 +139,48 @@ export async function snapshotDestBalance(msisdn, { sessionId = null, loginLink 
   } catch (err) {
     return { ok: false, sessionId: sid, msisdn: ident, error: err.message || String(err) };
   }
+}
+
+/**
+ * Relê o saldo depois da aprovada até mudar valor/validade ou esgotar as esperas.
+ * Na 2ª tentativa em diante abre login novo — a sessão antiga às vezes devolve cache.
+ */
+export async function snapshotDestBalanceUntilChange(
+  msisdn,
+  before,
+  { sessionId = null, delaysMs = AFTER_BALANCE_POLL_MS, onAttempt } = {},
+) {
+  let sid = sessionId || null;
+  let lastOk = null;
+  let lastErr = null;
+  for (let i = 0; i < delaysMs.length; i += 1) {
+    const waitMs = Math.max(0, Number(delaysMs[i]) || 0);
+    if (typeof onAttempt === 'function') {
+      await onAttempt({ attempt: i + 1, total: delaysMs.length, waitMs });
+    }
+    if (waitMs) await sleep(waitMs);
+    const freshLogin = i > 0;
+    const snap = await snapshotDestBalance(msisdn, {
+      sessionId: freshLogin ? null : sid,
+    });
+    if (snap.sessionId) sid = snap.sessionId;
+    if (!snap.ok) {
+      lastErr = snap.error;
+      continue;
+    }
+    lastOk = snap;
+    if (balancesChanged(before, snap.balance)) {
+      return { ...snap, attempts: i + 1, changed: true };
+    }
+  }
+  if (lastOk) {
+    return { ...lastOk, attempts: delaysMs.length, changed: false };
+  }
+  return {
+    ok: false,
+    sessionId: sid,
+    error: lastErr || 'não consultado',
+    attempts: delaysMs.length,
+    changed: false,
+  };
 }
