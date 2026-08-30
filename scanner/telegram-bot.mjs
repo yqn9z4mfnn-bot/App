@@ -28,9 +28,11 @@ import {
   shouldScheduleAutoRetry,
   summarizeRechargeAttempt,
   formatAttemptLog,
+  isRechargeSuccess,
   MAX_AUTO_RECHARGE_RETRIES,
   buildRetryKeyboard,
 } from './lib/recharge-format.mjs';
+import { snapshotDestBalance, formatBalanceCompare } from './lib/line-balance.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
 import {
   createCardListStore,
@@ -98,6 +100,12 @@ const rechargeFlow = new Map();
 const chatRechargeMode = new Map();
 /** @type {Map<number, object>} última recarga falha — para botão "Tentar novamente" */
 const rechargeRetry = new Map();
+/** Saldo/validade do destino — sobrevive ao retry da mesma recarga. */
+const destBalanceByChat = new Map();
+
+function clearDestBalance(chatId) {
+  destBalanceByChat.delete(chatId);
+}
 
 function bumpWork(chatId) {
   const n = (workEpoch.get(chatId) || 0) + 1;
@@ -330,6 +338,7 @@ function clearRetryContext(chatId) {
 async function promptRechargeMode(chatId) {
   clearRecharge(chatId);
   clearRetryContext(chatId);
+  clearDestBalance(chatId);
   chatRechargeMode.delete(chatId);
   await send(chatId, WELCOME, { reply_markup: buildRechargeModeKeyboard() });
 }
@@ -781,6 +790,7 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
 
   preemptChatWork(chatId);
   resetRetryRound(chatId);
+  clearDestBalance(chatId);
 
   if (cardList.countPending() === 0) {
     const inUse = cardList.countInUse();
@@ -1034,8 +1044,37 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
   const statusMsg = await editBubble(chatId, incomingStatus, runBubble);
   const epochAtStart = workEpoch.get(chatId);
   let scheduledAutoRetry = false;
+  let destBalanceText = '';
 
   try {
+    const destKey = normalizeBrMobile(targetMsisdn);
+    if (destKey) {
+      let pack = destBalanceByChat.get(chatId);
+      if (!pack?.before || pack.dest !== destKey) {
+        await editBubble(chatId, statusMsg, {
+          ...runBubble,
+          hint: 'Consultando saldo do destino…',
+        }).catch(() => {});
+        const snap = await snapshotDestBalance(destKey, { sessionId: pack?.sessionId });
+        pack = {
+          dest: destKey,
+          sessionId: snap.sessionId ?? null,
+          before: snap.ok ? snap.balance : null,
+          after: null,
+          error: snap.ok ? null : snap.error,
+        };
+        destBalanceByChat.set(chatId, pack);
+        if (snap.ok) {
+          console.log(
+            `[bot] saldo antes dest=${destKey} ${snap.balance.cents}c val=${snap.balance.expiration || '—'}`,
+          );
+        } else {
+          console.warn(`[bot] saldo antes dest=${destKey} falhou: ${snap.error}`);
+        }
+      }
+    }
+    await editBubble(chatId, statusMsg, { ...runBubble, hint: 'Aguardando checkout…' }).catch(() => {});
+
     if (flow.mode === 'other' || entry.rechargeMode === 'other') {
       if (entry.purgedAt && Date.now() - entry.purgedAt < 120_000) {
         await editBubble(chatId, statusMsg, { ...runBubble, hint: 'Aguardando checkout…' }).catch(() => {});
@@ -1118,6 +1157,29 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     });
     scheduledAutoRetry = plan.autoRetry;
 
+    if (isRechargeSuccess(outcome) && destKey) {
+      const pack = destBalanceByChat.get(chatId) || { dest: destKey };
+      await editBubble(chatId, statusMsg, {
+        ...runBubble,
+        title: 'Conferindo saldo',
+        hint: 'Lendo saldo e validade após a recarga…',
+      }).catch(() => {});
+      await sleep(2500);
+      const afterSnap = await snapshotDestBalance(destKey, { sessionId: pack.sessionId });
+      pack.after = afterSnap.ok ? afterSnap.balance : null;
+      pack.sessionId = afterSnap.sessionId ?? pack.sessionId;
+      destBalanceByChat.set(chatId, pack);
+      destBalanceText = formatBalanceCompare(pack.before, pack.after);
+      if (afterSnap.ok) {
+        console.log(
+          `[bot] saldo depois dest=${destKey} ${afterSnap.balance.cents}c val=${afterSnap.balance.expiration || '—'}`,
+        );
+      } else {
+        console.warn(`[bot] saldo depois dest=${destKey} falhou: ${afterSnap.error}`);
+        destBalanceText = formatBalanceCompare(pack.before, null);
+      }
+    }
+
     const resultPayload = {
       ...outcome,
       loginMsisdn: entry.msisdn,
@@ -1126,6 +1188,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     const report = formatRechargeResult(resultPayload, {
       footer: queueFooter,
       attempts: attemptLog,
+      balance: destBalanceText,
     });
     const retryKb = plan.showRetryButton
       ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
@@ -1696,6 +1759,7 @@ async function handleCallback(query) {
       return;
     }
     resetRetryRound(chatId);
+    clearDestBalance(chatId);
     await executeAutoRecharge(chatId);
     return;
   }

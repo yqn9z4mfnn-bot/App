@@ -115,6 +115,7 @@ export function formatStatusBubble({
   hint = '',
   subhint = '',
   attempts = '',
+  balance = '',
 } = {}) {
   const head = esc(clip(title || inferTitle(status, footer, hint), 28));
   const val = String(valueLabel ?? '').trim();
@@ -146,6 +147,17 @@ export function formatStatusBubble({
     lines.push('', `<i>${esc(note)}</i>`);
   }
   if (extra && extra !== note) lines.push(`<i>${esc(extra)}</i>`);
+
+  const balanceLines = String(balance ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (balanceLines.length) {
+    lines.push('');
+    for (const line of balanceLines) {
+      lines.push(line.startsWith('📊') ? `<b>${esc(line)}</b>` : `<i>${esc(line)}</i>`);
+    }
+  }
 
   return lines.join('\n');
 }
@@ -260,7 +272,7 @@ export function formatAttemptLog(attempts = [], { limit = MAX_AUTO_RECHARGE_RETR
     .join('\n');
 }
 
-export function formatRechargeResult(outcome, { footer: extraFooter, attempts } = {}) {
+export function formatRechargeResult(outcome, { footer: extraFooter, attempts, balance } = {}) {
   const desc = describeRechargeOutcome(outcome, null);
   const login = String(outcome?.loginMsisdn ?? '').replace(/\D/g, '');
   const target = String(outcome?.targetMsisdn ?? login).replace(/\D/g, '');
@@ -279,6 +291,7 @@ export function formatRechargeResult(outcome, { footer: extraFooter, attempts } 
     hint: showLog ? '' : desc.reason,
     attempts: showLog ? formatAttemptLog(fails) : '',
     subhint: approved ? '' : extraFooter || '',
+    balance: approved ? balance || '' : '',
   });
 }
 

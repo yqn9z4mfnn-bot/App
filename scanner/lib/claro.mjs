@@ -78,6 +78,10 @@ export async function fetchRechargeProducts(sessionId, msisdn) {
   return claroGet(`/customers/${msisdn}/products`, sessionId);
 }
 
+export async function fetchRechargeBalance(sessionId, msisdn) {
+  return claroGet(`/customers/${msisdn}/recharge/balance`, sessionId);
+}
+
 export async function createSmartCheckout(sessionId, msisdn, productId, opts = {}) {
   const recipient = normalizeBrMobile(opts.recipient ?? msisdn) ?? msisdn;
   const payer = normalizeBrMobile(opts.payerMsisdn ?? msisdn) ?? msisdn;
