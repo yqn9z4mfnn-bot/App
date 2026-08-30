@@ -281,7 +281,7 @@ function saveRetryContext(chatId, {
 
 function appendAttemptLog(chatId, attempt) {
   const prev = rechargeRetry.get(chatId);
-  const attemptLog = [...(prev?.attemptLog ?? []), attempt];
+  const attemptLog = [...(prev?.attemptLog ?? []), attempt].slice(-MAX_AUTO_RECHARGE_RETRIES);
   if (prev) {
     rechargeRetry.set(chatId, { ...prev, attemptLog });
   } else {
@@ -290,13 +290,19 @@ function appendAttemptLog(chatId, attempt) {
   return attemptLog;
 }
 
+function resetRetryRound(chatId) {
+  const prev = rechargeRetry.get(chatId);
+  if (!prev) return;
+  rechargeRetry.set(chatId, { ...prev, autoRetries: 0, attemptLog: [], savedAt: Date.now() });
+}
+
 function planRechargeRetry(chatId, { flow, entry, targetMsisdn, listLine, outcome, error }) {
   if (!shouldOfferRechargeRetry(outcome, error)) {
     clearRetryContext(chatId);
     return { showRetryButton: false, autoRetry: false };
   }
 
-  const used = rechargeRetry.get(chatId)?.autoRetries ?? 0;
+  const attemptsInRound = (rechargeRetry.get(chatId)?.autoRetries ?? 0) + 1;
   saveRetryContext(chatId, {
     mode: flow.mode,
     productId: flow.productId,
@@ -305,27 +311,15 @@ function planRechargeRetry(chatId, { flow, entry, targetMsisdn, listLine, outcom
     targetMsisdn,
     loginMsisdn: entry.msisdn,
     useAuto: Boolean(flow.autoPay || listLine),
-    autoRetries: used,
+    autoRetries: attemptsInRound,
   });
 
   const autoRetry = shouldScheduleAutoRetry({
     outcome,
     error,
-    autoRetriesUsed: used,
+    autoRetriesUsed: attemptsInRound,
     pendingCards: cardList.countPending(),
   });
-  if (autoRetry) {
-    saveRetryContext(chatId, {
-      mode: flow.mode,
-      productId: flow.productId,
-      productValue: flow.productValue,
-      productName: flow.productName,
-      targetMsisdn,
-      loginMsisdn: entry.msisdn,
-      useAuto: Boolean(flow.autoPay || listLine),
-      autoRetries: used + 1,
-    });
-  }
   return { showRetryButton: !autoRetry, autoRetry };
 }
 
@@ -716,6 +710,7 @@ async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
     await send(chatId, '❌ Nada para tentar de novo. Use /start');
     return;
   }
+  if (!automatic) resetRetryRound(chatId);
 
   if (busy.has(chatId)) {
     await send(chatId, '⏳ Aguarde a recarga anterior…');
@@ -723,7 +718,7 @@ async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
   }
 
   const statusMsg = { message_id: messageId, chat: { id: chatId } };
-  const retryN = automatic ? retry.autoRetries || 0 : 0;
+  const retryN = automatic ? (retry.autoRetries || 0) + 1 : 0;
   const retryHint =
     retryN > 0
       ? `Retry automático ${retryN}/${MAX_AUTO_RECHARGE_RETRIES} · próximo cartão`
@@ -785,6 +780,7 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
   }
 
   preemptChatWork(chatId);
+  resetRetryRound(chatId);
 
   if (cardList.countPending() === 0) {
     const inUse = cardList.countInUse();
@@ -1699,6 +1695,7 @@ async function handleCallback(query) {
       await send(chatId, '⏳ Aguarde…');
       return;
     }
+    resetRetryRound(chatId);
     await executeAutoRecharge(chatId);
     return;
   }

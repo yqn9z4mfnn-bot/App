@@ -250,8 +250,9 @@ export function summarizeRechargeAttempt({ outcome, error, cardMask } = {}) {
   };
 }
 
-export function formatAttemptLog(attempts = []) {
-  return (attempts ?? [])
+export function formatAttemptLog(attempts = [], { limit = MAX_AUTO_RECHARGE_RETRIES } = {}) {
+  const rows = (attempts ?? []).slice(-Math.max(1, Number(limit) || MAX_AUTO_RECHARGE_RETRIES));
+  return rows
     .map((a, i) => {
       const card = a.cardMask && a.cardMask !== '—' ? a.cardMask : '****';
       return `${i + 1}) ${card} · ${a.reason || a.title || 'sem detalhe'}`;
@@ -264,7 +265,9 @@ export function formatRechargeResult(outcome, { footer: extraFooter, attempts } 
   const login = String(outcome?.loginMsisdn ?? '').replace(/\D/g, '');
   const target = String(outcome?.targetMsisdn ?? login).replace(/\D/g, '');
   const approved = desc.status === 'SUCCESS';
-  const fails = (attempts ?? []).filter((a) => String(a.status ?? '').toUpperCase() !== 'SUCCESS');
+  const fails = (attempts ?? [])
+    .filter((a) => String(a.status ?? '').toUpperCase() !== 'SUCCESS')
+    .slice(-MAX_AUTO_RECHARGE_RETRIES);
   const showLog = !approved && fails.length > 1;
 
   return formatStatusBubble({
@@ -279,7 +282,7 @@ export function formatRechargeResult(outcome, { footer: extraFooter, attempts } 
   });
 }
 
-/** Quantas vezes o bot aperta “Tentar novamente” sozinho (além da 1ª recarga). */
+/** Tentativas automáticas por rodada (clique em retry começa rodada nova). */
 export const MAX_AUTO_RECHARGE_RETRIES = Math.max(
   0,
   Number(process.env.MAX_AUTO_RECHARGE_RETRIES) || 3,

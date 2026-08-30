@@ -91,11 +91,11 @@ check(
   shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 0, pendingCards: 5 }),
 );
 check(
-  'auto 3/3 ainda vai',
+  'auto 2/3 ainda vai',
   shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 2, pendingCards: 5 }),
 );
 check(
-  'auto esgotou',
+  'auto esgotou na 3',
   !shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 3, pendingCards: 5 }),
 );
 check(
@@ -148,6 +148,26 @@ const triple = formatRechargeResult(
 check('tres erros na bolha', /1\) \*\*\*\*1951/.test(triple) && /2\) \*\*\*\*8803/.test(triple) && /3\) \*\*\*\*3490/.test(triple), triple);
 check('tres erros esconde cartao unico', !/<code>\*\*\*\*3490<\/code>/.test(triple), triple);
 check('tres erros mantem fila', /Voltou pra fila · 2209/.test(triple), triple);
+
+const seven = [
+  a1, a2, a3,
+  summarizeRechargeAttempt({ outcome: denied, cardMask: '****1616' }),
+  summarizeRechargeAttempt({ outcome: denied, cardMask: '****9683' }),
+  summarizeRechargeAttempt({ outcome: timeout, cardMask: '****1434' }),
+  summarizeRechargeAttempt({ outcome: automationFail, cardMask: '****6913' }),
+];
+const capped = formatRechargeResult(
+  {
+    result: { status: 'AUTOMATION_FAIL', message: '12 - ERRO NO CARTAO' },
+    valueCents: 2000,
+    cardMask: '****6913',
+    loginMsisdn: '11992005797',
+    targetMsisdn: '91987572274',
+  },
+  { footer: 'Voltou pra fila · 2175 pendente(s)', attempts: seven },
+);
+check('nao lista 7 erros', !/4\)/.test(capped) && !/\*\*\*\*1951/.test(capped), capped);
+check('so os 3 ultimos', /1\) \*\*\*\*9683/.test(capped) && /3\) \*\*\*\*6913/.test(capped), capped);
 
 const approvedAfterFails = formatRechargeResult(
   {
