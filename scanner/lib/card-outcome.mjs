@@ -1,26 +1,21 @@
 import { looksLikeCheckoutSuccess } from './checkout-error.mjs';
+import { normalizeRechargeStatus } from './recharge-events.mjs';
 
 /** Classifica o que fazer com o cartão da fila TXT após a recarga. */
 
 export function classifyCardListAction({ outcome, error } = {}) {
-  if (error) {
-    const msg = String(error?.message ?? error);
-    if (isAutomationFailureMessage(msg)) return 'return';
-    if (isGateDenialMessage(msg)) return 'consumed';
-    return 'return';
-  }
-
   const result = outcome?.result ?? {};
-  const status = String(result.status ?? '').toUpperCase();
   const raw = outcome?.automation?.raw ?? {};
-  const rawStatus = String(raw.status ?? '').toLowerCase();
   const gateCode = String(raw.gateCode ?? result.gateCode ?? '').toUpperCase();
   const msg = String(
-    result.negativeReason ?? result.message ?? raw.gateMessage ?? raw.message ?? '',
+    result.negativeReason ??
+      result.message ??
+      raw.gateMessage ??
+      raw.message ??
+      error?.message ??
+      '',
   );
 
-  if (status === 'CONFIRMED' || status === 'SUCCESS') return 'approved';
-  if (rawStatus === 'success') return 'approved';
   if (
     looksLikeCheckoutSuccess({
       url: raw.url,
@@ -30,26 +25,22 @@ export function classifyCardListAction({ outcome, error } = {}) {
     return 'approved';
   }
 
-  if (status === '3DS_REQUIRED' || rawStatus === '3ds_required') return 'consumed';
+  const status = normalizeRechargeStatus(outcome, error);
+  if (status === 'success') return 'approved';
+  if (status === '3ds') return 'consumed';
 
-  const bodyDenied = paymentBodyIsDenied(raw.gateResponse?.body);
-  const explicitDenied =
-    status === 'DENIED' ||
-    status === 'REJECTED' ||
-    status === 'FAILURE' ||
-    gateCode === 'DENIED' ||
-    rawStatus === 'denied';
-
-  if (explicitDenied || bodyDenied || isGateDenialMessage(msg)) {
-    if (isAutomationFailureMessage(msg) && !bodyDenied && gateCode !== 'DENIED') {
+  // Só sai da fila se a gate recusou de verdade.
+  // erro / timeout / falha de automação voltam para reutilizar.
+  if (status === 'denied') {
+    if (
+      isAutomationFailureMessage(msg) &&
+      !paymentBodyIsDenied(raw.gateResponse?.body) &&
+      gateCode !== 'DENIED'
+    ) {
       return 'return';
     }
     return 'consumed';
   }
-
-  if (status === 'TIMEOUT' || rawStatus === 'timeout') return 'return';
-  if (status === 'AUTOMATION_FAIL' || rawStatus === 'error_manual') return 'return';
-  if (isAutomationFailureMessage(msg)) return 'return';
 
   return 'return';
 }

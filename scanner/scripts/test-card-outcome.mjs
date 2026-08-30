@@ -65,6 +65,32 @@ const cases = [
     expected: 'return',
   },
   {
+    name: 'throw com texto de gate ainda é erro → devolve',
+    input: { error: new Error('CREDIT_CARD - 422 - suspected fraud') },
+    expected: 'return',
+  },
+  {
+    name: 'ERROR de processo (checkout) devolve',
+    input: {
+      outcome: outcome('ERROR', {
+        rawStatus: 'error',
+        message: 'Não foi possível concluir o pagamento',
+        pagamentoErro: true,
+      }),
+    },
+    expected: 'return',
+  },
+  {
+    name: 'INVALID_STATE / field value devolve',
+    input: {
+      outcome: outcome('AUTOMATION_FAIL', {
+        gateCode: 'INVALID_STATE',
+        message: 'Request cannot be executed due to incorrect field value.',
+      }),
+    },
+    expected: 'return',
+  },
+  {
     name: 'DENIED real',
     input: {
       outcome: outcome('DENIED', {

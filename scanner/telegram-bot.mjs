@@ -385,6 +385,7 @@ async function prepareRechargeSession(chatId, accessMsisdn, {
       valores,
       rechargeMode: resolvedMode,
       awaitTargetMsisdn: resolvedMode === 'other' && !cross,
+      purgedAt: resolvedMode === 'other' ? Date.now() : null,
     });
 
     if (!valores.length) {
@@ -951,6 +952,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
 
   if ((flow.mode === 'other' || entry.awaitTargetMsisdn) && !entry.rechargeTargetNumber) {
     busy.delete(chatId);
+    if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
     await send(chatId, '❌ Informe o número destino antes do cartão (/start → Outro número).');
     clearRecharge(chatId);
     return;
