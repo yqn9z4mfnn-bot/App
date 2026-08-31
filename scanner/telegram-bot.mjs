@@ -38,7 +38,7 @@ import {
   snapshotDestBalanceUntilChange,
   formatBalanceCompare,
 } from './lib/line-balance.mjs';
-import { parseCardInput, CARD_INPUT_HINT, randomHolderName } from './lib/card-parse.mjs';
+import { parseCardInput, CARD_INPUT_HINT, randomHolderName, formatCardMask } from './lib/card-parse.mjs';
 import {
   createCardListStore,
   looksLikeCardsTxt,
@@ -141,8 +141,7 @@ const CACHE_TTL = 10 * 60 * 1000;
 const BULK_CONCURRENCY = Math.max(1, Number(process.env.BULK_CONCURRENCY || 1));
 
 function cardMaskFrom(card) {
-  const n = String(card?.number ?? '').replace(/\D/g, '');
-  return n.length >= 4 ? `****${n.slice(-4)}` : '—';
+  return formatCardMask(card);
 }
 
 async function editBubble(chatId, statusMsg, fields, extra = {}) {
@@ -2154,7 +2153,7 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
     result.duplicates
       ? `⏭ Duplicados (mesmo número): <b>${result.duplicates}</b>${
           result.duplicateLast4?.length
-            ? ` — ${result.duplicateLast4.map((d) => `****${d}`).join(', ')}`
+            ? ` — ${result.duplicateLast4.join(', ')}`
             : ''
         }`
       : null,
@@ -2208,7 +2207,7 @@ async function sendCartoesFila(chatId) {
   let nextMask = '—';
   if (next) {
     const parsed = parseCardInput(next);
-    if (parsed?.number) nextMask = `****${parsed.number.slice(-4)}`;
+    if (parsed?.number) nextMask = formatCardMask(parsed.number);
   }
   await send(
     chatId,

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { classifyCardListAction } from '../lib/card-outcome.mjs';
 import { mapAutomationPaymentStatus } from '../lib/automation-client.mjs';
 import { createCardListStore } from '../lib/card-list.mjs';
+import { formatCardMask } from '../lib/card-parse.mjs';
 
 function outcome(status, extra = {}) {
   return {
@@ -213,6 +214,15 @@ const mapCases = [
 ];
 
 let failed = 0;
+
+if (formatCardMask('6516520002817303') !== '651652****7303') {
+  failed += 1;
+  console.error('FAIL formatCardMask full pan');
+}
+if (formatCardMask('1234') !== '****1234') {
+  failed += 1;
+  console.error('FAIL formatCardMask short');
+}
 
 for (const c of cases) {
   const got = classifyCardListAction(c.input);

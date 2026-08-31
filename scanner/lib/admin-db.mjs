@@ -94,6 +94,10 @@ export function openAdminDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
   `);
+  const cols = database.prepare('PRAGMA table_info(recharge_events)').all().map((r) => r.name);
+  if (!cols.includes('card_bin')) {
+    database.exec('ALTER TABLE recharge_events ADD COLUMN card_bin TEXT');
+  }
   return database;
 }
 
@@ -206,8 +210,8 @@ export function insertRechargeEvent(event) {
     .prepare(
       `INSERT INTO recharge_events
         (created_at, chat_id, username, login_msisdn, target_msisdn, product_name, product_value_cents,
-         card_last4, status, gate_code, gate_message, mode, duration_ms, raw_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         card_last4, card_bin, status, gate_code, gate_message, mode, duration_ms, raw_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       event.createdAt ?? Date.now(),
@@ -218,6 +222,7 @@ export function insertRechargeEvent(event) {
       event.productName ?? null,
       event.productValueCents ?? null,
       event.cardLast4 ?? null,
+      event.cardBin ?? null,
       event.status ?? null,
       event.gateCode ?? null,
       event.gateMessage ?? null,

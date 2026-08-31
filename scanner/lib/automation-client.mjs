@@ -6,6 +6,7 @@ import {
   paymentBodyIsDenied,
 } from './card-outcome.mjs';
 import { looksLikeCheckoutError, looksLikeCheckoutSuccess } from './checkout-error.mjs';
+import { formatCardMask } from './card-parse.mjs';
 
 const DEFAULT_URL = process.env.AUTOMATION_API_URL || 'http://127.0.0.1:3000';
 
@@ -82,7 +83,7 @@ export async function runBrowserRecharge({
     },
     valueCents: productValue,
     latencyMs: Date.now() - started,
-    cardMask: `****${pan.slice(-4)}`,
+    cardMask: formatCardMask(pan),
     automation: {
       sessionId: data.sessionId,
       browser: data.browser,
@@ -161,7 +162,7 @@ export async function runHybridRecharge({
     },
     valueCents: productValue,
     latencyMs: Date.now() - started,
-    cardMask: `****${pamInfo.split('|')[0].slice(-4)}`,
+    cardMask: formatCardMask(pamInfo.split('|')[0]),
     automation: {
       sessionId: data.sessionId,
       mode: data.mode ?? 'checkout-link',

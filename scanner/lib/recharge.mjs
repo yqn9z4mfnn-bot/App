@@ -2,6 +2,7 @@ import { request } from './http.mjs';
 import { proxiedFetch } from './proxy.mjs';
 import { openWalletSession } from './eldorado.mjs';
 import { buildBrowserPaymentExtras } from './antifraud-payload.mjs';
+import { formatCardMask } from './card-parse.mjs';
 
 const ELDORADO = 'https://eldorado.m4u.com.br';
 
@@ -292,7 +293,7 @@ export async function runRecharge({
     valueCents: productValue ?? bemobiBody?.invoices?.[0]?.value,
     latencyMs: Date.now() - started,
     cardMask: isSaved
-      ? `${card.brand} *${card.last}`
-      : `****${card.number.replace(/\D/g, '').slice(-4)}`,
+      ? (card.bin ? `${card.bin}****${card.last}` : `****${card.last}`)
+      : formatCardMask(card.number),
   };
 }

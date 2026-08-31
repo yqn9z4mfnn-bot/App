@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { dirname, join } from 'node:path';
-import { parseCardInput, formatCardLine } from './card-parse.mjs';
+import { parseCardInput, formatCardLine, formatCardMask, extractCardBin } from './card-parse.mjs';
 
 const RESERVATION_TTL_MS = Number(process.env.CARD_RESERVATION_TTL_MS || 15 * 60 * 1000);
 
@@ -133,7 +133,7 @@ export function createCardListStore(dataDir) {
     if (hit && hit.chatId !== chatId) {
       return {
         ok: false,
-        reason: `Cartão ****${pan.slice(-4)} em uso por outra sessão (desde ${new Date(hit.reservedAt).toLocaleTimeString('pt-BR')})`,
+        reason: `Cartão ${formatCardMask(pan)} em uso por outra sessão (desde ${new Date(hit.reservedAt).toLocaleTimeString('pt-BR')})`,
       };
     }
     return { ok: true };
@@ -299,7 +299,7 @@ export function createCardListStore(dataDir) {
         if (known.has(key)) {
           stats.duplicates += 1;
           if (stats.duplicateLast4.length < 8) {
-            stats.duplicateLast4.push(key.slice(-4));
+            stats.duplicateLast4.push(formatCardMask(key));
           }
           continue;
         }

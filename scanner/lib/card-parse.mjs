@@ -130,6 +130,25 @@ export function formatCardLine(card) {
   return `${pan}|${mm}|${yyyy}|${cvv}`;
 }
 
+/** BIN (6) + **** + últimos 4 — ex.: 651652****7303 */
+export function formatCardMask(cardOrPan) {
+  const n =
+    typeof cardOrPan === 'object' && cardOrPan != null
+      ? String(cardOrPan.number ?? cardOrPan.pan ?? '').replace(/\D/g, '')
+      : String(cardOrPan ?? '').replace(/\D/g, '');
+  if (n.length < 4) return '—';
+  if (n.length >= 10) return `${n.slice(0, 6)}****${n.slice(-4)}`;
+  return `****${n.slice(-4)}`;
+}
+
+export function extractCardBin(cardOrPan) {
+  const n =
+    typeof cardOrPan === 'object' && cardOrPan != null
+      ? String(cardOrPan.number ?? cardOrPan.pan ?? '').replace(/\D/g, '')
+      : String(cardOrPan ?? '').replace(/\D/g, '');
+  return n.length >= 6 ? n.slice(0, 6) : null;
+}
+
 export function parseCardsFromTxt(text) {
   const lines = [];
   for (const raw of String(text ?? '').split(/\r?\n/)) {

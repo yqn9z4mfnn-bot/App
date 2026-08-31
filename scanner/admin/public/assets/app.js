@@ -304,7 +304,9 @@ function rechargeCard(r) {
     : (r.login_msisdn || '—');
   const meta = [
     r.brand ? r.brand : null,
-    r.card_last4 ? `****${r.card_last4}` : null,
+    r.card_last4
+      ? (r.card_bin ? `${r.card_bin}****${r.card_last4}` : `****${r.card_last4}`)
+      : null,
     r.nsu ? `NSU ${r.nsu}` : null,
     r.auth ? `AUTH ${r.auth}` : null,
     r.mode ? r.mode : null,

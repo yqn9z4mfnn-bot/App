@@ -59,6 +59,14 @@ export function extractCardLast4(card, outcome) {
   return m ? m[1] : null;
 }
 
+export function extractCardBin(card, outcome) {
+  const pan = String(card?.number ?? card?.pan ?? '').replace(/\D/g, '');
+  if (pan.length >= 6) return pan.slice(0, 6);
+  const mask = String(outcome?.cardMask ?? '');
+  const m = mask.match(/^(\d{6})\*{4}/);
+  return m ? m[1] : null;
+}
+
 export function enrichRechargeFromRaw(row) {
   if (!row) return row;
   let parsed = null;
@@ -80,6 +88,7 @@ export function enrichRechargeFromRaw(row) {
     gate_code: row.gate_code || gate.gateCode,
     gate_message: row.gate_message || gate.gateMessage,
     card_last4: row.card_last4 || extractCardLast4(null, outcome),
+    card_bin: row.card_bin || extractCardBin(null, outcome),
   };
 }
 
@@ -106,6 +115,7 @@ export function logRechargeEvent({
       productName,
       productValueCents,
       cardLast4: extractCardLast4(card, outcome),
+      cardBin: extractCardBin(card, outcome),
       status: normalizeRechargeStatus(outcome, error),
       gateCode,
       gateMessage,
