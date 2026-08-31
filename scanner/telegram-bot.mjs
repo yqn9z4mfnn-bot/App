@@ -45,6 +45,7 @@ import {
   MAX_CARD_LINES_PER_INGEST,
 } from './lib/card-list.mjs';
 import { classifyCardListAction } from './lib/card-outcome.mjs';
+import { confirmClaroReload, applyClaroNokToOutcome } from './lib/claro-reload-confirm.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
 import { describeProxy, resetProxyAgent } from './lib/proxy.mjs';
@@ -1097,7 +1098,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       }
     }
 
-    const outcome = useBrowser
+    let outcome = useBrowser
       ? useHybrid
         ? await runHybridRecharge({
             loginUrl: toLoginUrl(entry.link),
@@ -1120,6 +1121,32 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
           productValue: flow.productValue,
           card,
         });
+
+    if (isRechargeSuccess(outcome)) {
+      await editBubble(chatId, statusMsg, {
+        ...runBubble,
+        title: 'Conferindo Claro',
+        hint: 'Confirmando no histórico da operadora…',
+      }).catch(() => {});
+      const last4 = String(card?.number ?? '').replace(/\D/g, '').slice(-4);
+      const confirm = await confirmClaroReload({
+        sessionId: entry.sessionId,
+        loginMsisdn: entry.msisdn,
+        targetMsisdn,
+        last4,
+        startedAt,
+      });
+      if (confirm.status === 'nok') {
+        console.warn(
+          `[bot] Claro nok dest=${normalizeBrMobile(targetMsisdn) || targetMsisdn} last4=${last4} — Eldorado tinha CONFIRMED`,
+        );
+        outcome = applyClaroNokToOutcome(outcome, confirm);
+      } else if (confirm.status === 'ok') {
+        console.log(`[bot] Claro ok dest=${normalizeBrMobile(targetMsisdn) || targetMsisdn} last4=${last4}`);
+      } else {
+        console.warn(`[bot] Claro histórico incerto dest=${normalizeBrMobile(targetMsisdn) || targetMsisdn}: ${confirm.error || confirm.status}`);
+      }
+    }
 
     logRechargeEvent({
       chatId,
