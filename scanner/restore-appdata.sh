@@ -31,7 +31,11 @@ restore_file() {
 }
 
 restore_file numbers.db
+restore_file admin.db
 restore_file .env
+for f in cards-pending.txt cards-approved.txt cards-consumed.txt cards-reserved.json; do
+  restore_file "$f"
+done
 
 if [ -d "$BACKUP_DIR/debug" ]; then
   rm -rf "$DATA_DIR/debug"
