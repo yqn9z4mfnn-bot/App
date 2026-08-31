@@ -275,6 +275,20 @@ try {
     failed += 1;
     console.error('FAIL fila após return', store.countPending());
   }
+
+  const reserved3 = await store.reserveNextCard(1);
+  const consumedMeta = '2026-08-31 12:00:00 R$35,00 119->219 3DS_SMS — test';
+  const consumedApply = await store.applyOutcome(reserved3.line, 'consumed', consumedMeta, 1);
+  if (store.countConsumed() !== 1 || !consumedApply.removed) {
+    failed += 1;
+    console.error('FAIL applyOutcome consumed', consumedApply, store.countConsumed());
+  } else {
+    const lines = store.loadConsumed();
+    if (!lines[0]?.includes('3DS_SMS') || !lines[0]?.includes(reserved3.line.split('|')[0])) {
+      failed += 1;
+      console.error('FAIL consumed line', lines[0]);
+    }
+  }
 } catch (err) {
   failed += 1;
   console.error('FAIL applyOutcome', err);

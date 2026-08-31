@@ -1,4 +1,5 @@
 import { isCheckoutErrorText, looksLikeCheckoutError, looksLikeCheckoutSuccess } from './checkout-error.mjs';
+import { extractGate, normalizeRechargeStatus } from './recharge-events.mjs';
 
 function esc(text) {
   return String(text ?? '')
@@ -168,6 +169,37 @@ export function formatQueueFooter(action, pendingLeft) {
   if (action === 'consumed') return `Removido da fila · restam ${n}`;
   if (action === 'return') return `Voltou pra fila · ${n} pendente(s)`;
   return `Fila ${n}`;
+}
+
+/** Metadados anexados em cards-approved.txt / cards-consumed.txt após a recarga. */
+export function buildCardListArchiveMeta({
+  outcome,
+  error,
+  entry,
+  targetMsisdn,
+  flow,
+  action,
+} = {}) {
+  const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const val = flow?.productName ?? formatBRL(flow?.productValue ?? 0);
+  const route = `${entry?.msisdn ?? '?'}->${targetMsisdn ?? '?'}`;
+
+  if (action === 'approved') {
+    return `${ts} ${val} ${route} SUCCESS`;
+  }
+
+  const status = normalizeRechargeStatus(outcome, error);
+  const { gateCode, gateMessage } = extractGate(outcome, error);
+  let tag = String(gateCode ?? status ?? 'CONSUMED').toUpperCase();
+
+  if (status === '3ds') {
+    const kind =
+      outcome?.result?.threeDsKind ?? outcome?.automation?.raw?.threeDs?.kind ?? '';
+    tag = kind === 'sms' ? '3DS_SMS' : '3DS_VBV';
+  }
+
+  const note = clip(gateMessage || error?.message || '', 100);
+  return note ? `${ts} ${val} ${route} ${tag} — ${note}` : `${ts} ${val} ${route} ${tag}`;
 }
 
 function normalizeStatus(raw) {

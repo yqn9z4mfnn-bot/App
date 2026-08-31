@@ -22,6 +22,7 @@ import {
   formatRechargeResult,
   formatStatusBubble,
   formatQueueFooter,
+  buildCardListArchiveMeta,
   buildValueKeyboard,
   buildPayMethodKeyboard,
   shouldOfferRechargeRetry,
@@ -554,12 +555,6 @@ function payMethodKeyboard(cards) {
   const inUse = cardList.countInUse();
   const label = inUse > 0 ? `${pending} fila · ${inUse} em uso` : `${pending}`;
   return buildPayMethodKeyboard(cards, { pendingCards: pending, queueLabel: label });
-}
-
-function buildCardListMeta(outcome, entry, targetMsisdn, flow) {
-  const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
-  const val = flow?.productName ?? formatBRL(flow?.productValue ?? 0);
-  return `${ts} ${val} ${entry?.msisdn ?? '?'}->${targetMsisdn ?? '?'} SUCCESS`;
 }
 
 async function pickAutoCardLine(chatId) {
@@ -1165,7 +1160,9 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     if (listLine) {
       const action = classifyCardListAction({ outcome, error: null });
       const meta =
-        action === 'approved' ? buildCardListMeta(outcome, entry, targetMsisdn, flow) : '';
+        action === 'return'
+          ? ''
+          : buildCardListArchiveMeta({ outcome, error: null, entry, targetMsisdn, flow, action });
       const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
       queueFooter = formatQueueFooter(action, applied.pendingLeft);
     }
@@ -1260,7 +1257,11 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     let queueFooter = '';
     if (listLine) {
       const action = classifyCardListAction({ outcome: null, error: err });
-      const applied = await cardList.applyOutcome(listLine, action, '', chatId);
+      const meta =
+        action === 'return'
+          ? ''
+          : buildCardListArchiveMeta({ outcome: null, error: err, entry, targetMsisdn, flow, action });
+      const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
       queueFooter = formatQueueFooter(action, applied.pendingLeft);
     }
 
@@ -2162,6 +2163,7 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
     `Total na fila: <b>${result.total}</b>`,
     `Em uso agora: <b>${result.inUse ?? cardList.countInUse()}</b>`,
     `Aprovados (histórico): <b>${cardList.countApproved()}</b>`,
+    `Consumidos (VBV/negada): <b>${cardList.countConsumed()}</b> (<code>cards-consumed.txt</code>)`,
     '',
     '<i>Duplicata = mesmo número já na fila, em uso ou em aprovados.</i>',
     '',
@@ -2200,6 +2202,7 @@ async function tryIngestCardListFromMessage(chatId, text) {
 async function sendCartoesFila(chatId) {
   const pending = cardList.countPending();
   const approved = cardList.countApproved();
+  const consumed = cardList.countConsumed();
   const inUse = cardList.countInUse();
   const next = cardList.peekPendingLine();
   let nextMask = '—';
@@ -2215,6 +2218,7 @@ async function sendCartoesFila(chatId) {
       `Pendentes: <b>${pending}</b> (<code>cards-pending.txt</code>)`,
       `Em uso agora: <b>${inUse}</b> (<code>cards-reserved.json</code>)`,
       `Aprovados: <b>${approved}</b> (<code>cards-approved.txt</code>)`,
+      `Consumidos: <b>${consumed}</b> (<code>cards-consumed.txt</code>)`,
       `Próximo: <code>${nextMask}</code>`,
       '',
       '🔒 Cada cartão reservado fica bloqueado para outros usuários até a recarga terminar.',

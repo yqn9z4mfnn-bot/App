@@ -265,9 +265,10 @@ export function startAdminServer() {
         () => ({
           pending: cardList.countPending(),
           approved: cardList.countApproved(),
+          consumed: cardList.countConsumed(),
           inUse: cardList.countInUse(),
         }),
-        { pending: 0, approved: 0, inUse: 0 },
+        { pending: 0, approved: 0, consumed: 0, inUse: 0 },
       ),
       users: safeCall(() => countTelegramUsers(), 0),
       recharges: safeCall(

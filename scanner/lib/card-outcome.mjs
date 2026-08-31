@@ -84,9 +84,9 @@ export function cardListActionLabel(action, { outcome } = {}) {
     const st = String(outcome?.result?.status ?? '').toUpperCase();
     const rawSt = String(outcome?.automation?.raw?.status ?? '').toLowerCase();
     if (st === '3DS_REQUIRED' || rawSt === '3ds_required') {
-      return '🔐 3DS acionado → removido da fila (não reutilizar)';
+      return '🔐 3DS acionado → salvo em cards-consumed.txt';
     }
-    return '🚫 negado na gate → removido da fila';
+    return '🚫 negado na gate → salvo em cards-consumed.txt';
   }
   if (action === 'return') return '↩️ falha (não foi a gate) → cartão voltou pra fila';
   return '';

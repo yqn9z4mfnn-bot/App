@@ -52,10 +52,12 @@ function writeJson(filePath, data) {
 export function createCardListStore(dataDir) {
   const pendingPath = join(dataDir, 'cards-pending.txt');
   const approvedPath = join(dataDir, 'cards-approved.txt');
+  const consumedPath = join(dataDir, 'cards-consumed.txt');
   const reservedPath = join(dataDir, 'cards-reserved.json');
 
   const loadPending = () => readLines(pendingPath);
   const loadApproved = () => readLines(approvedPath);
+  const loadConsumed = () => readLines(consumedPath);
 
   const loadReserved = () => {
     const data = readJson(reservedPath, { reservations: [] });
@@ -85,7 +87,14 @@ export function createCardListStore(dataDir) {
 
   const countPending = () => loadPending().length;
   const countApproved = () => loadApproved().length;
+  const countConsumed = () => loadConsumed().length;
   const countInUse = () => loadReserved().length;
+
+  const archiveConsumed = (cardLine, meta = '') => {
+    const consumed = loadConsumed();
+    consumed.push(meta ? `${cardLine} # ${meta}` : cardLine);
+    writeLines(consumedPath, consumed);
+  };
 
   const peekPendingLine = () => loadPending()[0] ?? null;
 
@@ -368,6 +377,8 @@ export function createCardListStore(dataDir) {
           const approved = loadApproved();
           approved.push(meta ? `${removedRes.line} # ${meta}` : removedRes.line);
           writeLines(approvedPath, approved);
+        } else if (action === 'consumed') {
+          archiveConsumed(removedRes.line, meta);
         }
 
         return {
@@ -393,6 +404,8 @@ export function createCardListStore(dataDir) {
           const approved = loadApproved();
           approved.push(meta ? `${line} # ${meta}` : line);
           writeLines(approvedPath, approved);
+        } else if (action === 'consumed') {
+          archiveConsumed(line, meta);
         }
         return { action, pendingLeft: pending.length, inUse: reservations.length, warning: 'sem reserva' };
       }
@@ -404,6 +417,8 @@ export function createCardListStore(dataDir) {
         const approved = loadApproved();
         approved.push(meta ? `${removed} # ${meta}` : removed);
         writeLines(approvedPath, approved);
+      } else if (action === 'consumed') {
+        archiveConsumed(removed, meta);
       }
 
       return {
@@ -417,11 +432,14 @@ export function createCardListStore(dataDir) {
   return {
     pendingPath,
     approvedPath,
+    consumedPath,
     reservedPath,
     loadPending,
     loadApproved,
+    loadConsumed,
     countPending,
     countApproved,
+    countConsumed,
     countInUse,
     peekPendingLine,
     shiftPendingLine,
