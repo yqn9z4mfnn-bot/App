@@ -175,9 +175,9 @@ export function createCardListStore(dataDir) {
   /**
    * Reserva atomicamente o próximo cartão disponível — sai da fila até concluir a recarga.
    * Impede que dois usuários peguem o mesmo cartão.
-   * Se este chat já tem reserva, reutiliza em vez de queimar outro cartão.
+   * skipReuse: true no auto-retry — sempre pega o próximo da fila (não reutiliza reserva).
    */
-  const reserveNextCard = (chatId) =>
+  const reserveNextCard = (chatId, { skipReuse = false, skipPans = [] } = {}) =>
     withLock(() => {
       let reservations = loadReserved();
       const purged = purgeStaleReservations(reservations);
@@ -186,15 +186,25 @@ export function createCardListStore(dataDir) {
         returnLinesToPending(purged.expired);
       }
 
-      const existing = reservations.find((r) => r.chatId === chatId && !r.adHoc && r.line);
-      if (existing) {
-        saveReserved(reservations);
-        return {
-          line: existing.line,
-          card: parseCardInput(existing.line),
-          pan: existing.pan,
-          reused: true,
-        };
+      const skipSet = new Set(
+        (Array.isArray(skipPans) ? skipPans : [])
+          .map((p) => String(p ?? '').replace(/\D/g, ''))
+          .filter(Boolean),
+      );
+
+      if (skipReuse) {
+        reservations = reservations.filter((r) => r.chatId !== chatId || r.adHoc);
+      } else {
+        const existing = reservations.find((r) => r.chatId === chatId && !r.adHoc && r.line);
+        if (existing && !skipSet.has(existing.pan)) {
+          saveReserved(reservations);
+          return {
+            line: existing.line,
+            card: parseCardInput(existing.line),
+            pan: existing.pan,
+            reused: true,
+          };
+        }
       }
 
       const inUse = pansInUse(reservations);
@@ -209,6 +219,7 @@ export function createCardListStore(dataDir) {
         if (!card) continue;
         const pan = card.number.replace(/\D/g, '');
         if (inUse.has(pan)) continue;
+        if (skipSet.has(pan)) continue;
         pickedIdx = i;
         pickedLine = line;
         pickedPan = pan;

@@ -551,14 +551,14 @@ function payMethodKeyboard(cards) {
   return buildPayMethodKeyboard(cards, { pendingCards: pending, queueLabel: label });
 }
 
-async function pickAutoCardLine(chatId) {
-  const reserved = await cardList.reserveNextCard(chatId);
+async function pickAutoCardLine(chatId, { skipReuse = false, skipPans = [] } = {}) {
+  const reserved = await cardList.reserveNextCard(chatId, { skipReuse, skipPans });
   if (!reserved?.card) return null;
   return { line: reserved.line, card: reserved.card, pan: reserved.pan };
 }
 
-async function executeAutoRecharge(chatId, { statusMsg = null } = {}) {
-  const picked = await pickAutoCardLine(chatId);
+async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = false, skipPans = [] } = {}) {
+  const picked = await pickAutoCardLine(chatId, { skipReuse, skipPans });
   if (!picked) {
     const inUse = cardList.countInUse();
     await send(
@@ -755,7 +755,7 @@ async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
       target: prep.target,
       hint: 'Pegando próximo cartão da fila…',
     });
-    await executeAutoRecharge(chatId, { statusMsg });
+    await executeAutoRecharge(chatId, { statusMsg, skipReuse: automatic });
     return;
   }
 
