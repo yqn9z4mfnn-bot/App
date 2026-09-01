@@ -68,7 +68,7 @@ export const fillCardFieldsHuman = async (locators, pam, holderName) => {
   await sleep(jitter(config.antifraudFieldGapMs ?? 220, 0.45));
   await typeFieldHuman(locators.holder, holderName, Math.max(28, delay - 5));
   await sleep(jitter(config.antifraudFieldGapMs ?? 220, 0.45));
-  await typeFieldHuman(locators.expiration, String(pam.mmYY), delay);
+  await typeFieldHuman(locators.expiration, `${pam.mm}${pam.yy}`, delay);
   await sleep(jitter(config.antifraudFieldGapMs ?? 220, 0.45));
   await typeFieldHuman(locators.cvv, String(pam.cvv || config.defaultCvv), delay + 8);
 };

@@ -31,8 +31,9 @@ export function classifyCardListAction({ outcome, error } = {}) {
   if (status === 'success') return 'approved';
   if (status === '3ds') return stopOnVbv() ? 'consumed' : 'return';
 
-  // Cartão inválido na tokenização / Click to Pay (INVALID_STATE).
-  if (isUnusableCardMessage(msg) || gateCode === 'INVALID_STATE') {
+  // INVALID_STATE / Click-to-Pay: devolve à fila (costuma ser SRC/automação, não cartão morto).
+  if (gateCode === 'INVALID_STATE' || isUnusableCardMessage(msg)) {
+    if (/incorrect field value|click.?to.?pay|BPG_000|DATAONLY/i.test(msg)) return 'return';
     return 'consumed';
   }
 

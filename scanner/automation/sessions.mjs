@@ -16,11 +16,10 @@ import {
   sleep,
 } from './helpers.mjs';
 import { runWebLinkRecharge } from './web-flow.mjs';
-import { runWebLinkCheckoutPay } from './checkout.mjs';
+import { runWebLinkCheckoutPay, installCheckoutLinkRouteGuards } from './checkout.mjs';
 import { waitForCheckoutAntifraud } from './antifraud-browser.mjs';
 import { waitForPaymentResult, waitForPaymentResultViaHttp, waitForPaymentIdFromGate } from './gate.mjs';
 import { prepareCheckoutViaHttp } from '../lib/prepare-checkout-http.mjs';
-import { proxyAllTraffic } from '../lib/proxy.mjs';
 import {
   fetchWalletCards,
   deleteAllWalletCards,
@@ -621,6 +620,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
     const browserStarted = Date.now();
     browser = await launchBrowser(browserName);
     const context = await createMobileContext(browser);
+    await installCheckoutLinkRouteGuards(context);
     const page = await context.newPage();
     timings.browserMs = Date.now() - browserStarted;
     const gateCapture = attachGateCapture(context);
@@ -674,11 +674,9 @@ export const startSessionFromCheckoutLink = async (payload) => {
       await dismissCookieBanner(page);
       await sleep(config.pauseAfterNavMs);
     }
-    if (config.antifraudHumanFill) {
-      const afHits = await waitForCheckoutAntifraud(page);
-      timings.antifraudWaitMs = config.antifraudWaitMs;
-      if (afHits) console.log(`[automation] antifraud fingerprint ok (${afHits} req)`);
-    }
+    const afHits = await waitForCheckoutAntifraud(page, config.antifraudWaitMs ?? 3500);
+    timings.antifraudWaitMs = config.antifraudWaitMs;
+    if (afHits) console.log(`[automation] antifraud fingerprint ok (${afHits} req)`);
 
     session.status = 'running';
     const payPayload = buildPamPayload(payload);

@@ -266,7 +266,7 @@ export const fillCardFormDirectly = async (page, pam, opts = {}) => {
         );
       } else {
         await panInput.fill(String(pam.pan).replace(/\D/g, ''), { force: true });
-        await expirationInput.fill(String(pam.mmYY), { force: true });
+        await expirationInput.fill(`${pam.mm}${pam.yy}`, { force: true });
         await cvvInput.fill(String(pam.cvv || config.defaultCvv), { force: true });
         await holderInput.fill(holderName, { force: true });
         await holderInput.press('Tab').catch(() => {});
@@ -407,6 +407,84 @@ const MANUAL_CARD_LABELS = [
   'Novo',
 ];
 
+const CLICK_TO_PAY_SKIP_LABELS = [
+  'Inserir dados do cartão manualmente',
+  'Enter card details manually',
+  'Continuar sem',
+  'Pagar com cartão',
+  'Cartão de crédito',
+  'Cartão (Crédito)',
+  'Novo cartão',
+  'Outro cartão',
+  'Usar outro cartão',
+];
+
+/** Evita fluxo Click-to-Pay (src.mastercard.com) que gera INVALID_STATE/BPG_000. */
+export const bypassClickToPay = async (page) => {
+  let hit = null;
+  for (const frame of page.frames()) {
+    try {
+      hit = await frame.evaluate(() => {
+        const skipUi = /click\s*to\s*pay|mastercard\s+pass/i;
+        const manual = [
+          /inserir dados do cart[aã]o manualmente/i,
+          /enter card details manually/i,
+          /continuar sem/i,
+          /novo cart[aã]o/i,
+          /outro cart[aã]o/i,
+          /usar outro cart[aã]o/i,
+          /cart[aã]o de cr[eé]dito/i,
+        ];
+        for (const el of document.querySelectorAll('button, a, [role="button"], label, span, div')) {
+          const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!t || t.length > 64) continue;
+          if (skipUi.test(t) && manual.some((re) => re.test(t))) {
+            const r = el.getBoundingClientRect();
+            if (r.width < 20 || r.height < 16) continue;
+            el.click();
+            return t;
+          }
+        }
+        for (const el of document.querySelectorAll('button, a, [role="button"], label, span, div')) {
+          const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!manual.some((re) => re.test(t))) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 20 || r.height < 16) continue;
+          el.click();
+          return t;
+        }
+        return null;
+      });
+    } catch {
+      // ignore cross-origin
+    }
+    if (hit) break;
+  }
+  if (!hit) {
+    hit = await clickInAnyFrame(page, CLICK_TO_PAY_SKIP_LABELS, 1500).catch(() => null);
+  }
+  if (hit) {
+    console.log(`[automation] bypass Click-to-Pay: "${String(hit).slice(0, 60)}"`);
+    await sleep(config.cardFormSettleMs || 450);
+  }
+  return Boolean(hit);
+};
+
+/** Bloqueia Click-to-Pay SRC — checkout segue só pelo tokenizer Eldorado. */
+export const installCheckoutLinkRouteGuards = async (context) => {
+  if (String(process.env.CHECKOUT_BYPASS_SRC ?? '1').toLowerCase() === '0') return;
+  await context.route((url) => {
+    const u = url.toString();
+    return /src\.mastercard\.com/i.test(u) && /\/payments/i.test(u);
+  }, (route) => {
+    console.log(
+      `[automation] bloqueando SRC ${route.request().method()} ${route.request().url().slice(0, 100)}`,
+    );
+    route.abort('blockedbyclient');
+  });
+  console.log('[automation] route guard Click-to-Pay (SRC payments) ativo');
+};
+
 const dismissCheckoutOverlays = async (page) => {
   await dismissBonusModalIfVisible(page).catch(() => {});
   await clickInAnyFrame(page, MANUAL_CARD_LABELS, 600).catch(() => {});
@@ -495,6 +573,7 @@ export const ensureCheckoutLinkPanReady = async (page) => {
   const deadline = Date.now() + timeoutMs;
   const shell = await waitForCheckoutShell(page, Math.min(18000, Math.max(0, deadline - Date.now())));
   if (shell) console.log(`[automation] checkout UI: ${shell}`);
+  await bypassClickToPay(page);
   if (shell && shell !== 'pan') {
     await ensureCreditCardSectionOpen(page);
   }
@@ -531,11 +610,13 @@ export const fillWebLinkCardDirect = async (session, pam) => {
       }).catch(() => {});
       throw new Error('Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).');
     }
+    await bypassClickToPay(page);
+    await clickCheckoutNewCard(page);
     await ensureCreditCardSectionOpen(page);
     setSessionStep(session, 'fill_pan', 'PAN / validade / CVV / nome…');
     await fillCardFormDirectly(page, pam, {
-      fast: config.checkoutLinkFast && !config.antifraudHumanFill,
-      human: config.antifraudHumanFill,
+      fast: false,
+      human: true,
     });
     session.pamTouchCommitted = true;
     return;

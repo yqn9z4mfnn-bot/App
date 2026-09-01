@@ -21,6 +21,10 @@ import {
 const GATE_URL_RE =
   /eldorado\.m4u|claro-recarga-api|bemobi\.com|smart-checkout|\/recharges\/result|\/loop\/events|\/api\/v1\/payments|\/tokenizer\/|wallet|card/i;
 
+const skipSrcGateCapture = (url) =>
+  String(process.env.CHECKOUT_BYPASS_SRC ?? '1') !== '0' &&
+  /src\.mastercard\.com/i.test(String(url || ''));
+
 const parseSseJson = (text) => {
   const line = String(text || '')
     .split('\n')
@@ -77,7 +81,7 @@ const pickGateFields = (body) => {
 
 /** Última captura relevante de erro (422, DENIED, 502 Braspag…). */
 export const findBestGateErrorCapture = (gateCapture) => {
-  const list = gateCapture?.captures ?? [];
+  const list = (gateCapture?.captures ?? []).filter((c) => !skipSrcGateCapture(c.url));
   const ranked = list
     .map((c) => {
       let score = 0;
@@ -202,6 +206,8 @@ export const attachGateCapture = (context) => {
     },
     best: () => {
       if (!captures.length) return null;
+      const usable = captures.filter((c) => !skipSrcGateCapture(c.url));
+      const pool = usable.length ? usable : captures;
       const rank = (c) => {
         let r = 0;
         const b = c.body;
@@ -212,7 +218,7 @@ export const attachGateCapture = (context) => {
         if (/\/payments/i.test(u) && /^PENDING$/i.test(String(b?.status || b?.payments?.[0]?.status || ''))) r += 5;
         return r * 1e6 + c.ts;
       };
-      return [...captures].sort((a, b) => rank(b) - rank(a))[0];
+      return [...pool].sort((a, b) => rank(b) - rank(a))[0];
     },
     tail: (n = 8) => summarizeGateCaptures({ captures }, n),
   };
@@ -222,6 +228,7 @@ export const gateIndicatesSuccess = (gateResponse) => {
   const b = gateResponse?.body;
   if (!b) return false;
   const u = gateResponse?.url || '';
+  if (skipSrcGateCapture(u)) return false;
   if (!/\/payments/i.test(u)) return false;
   if (/^CONFIRMED$/i.test(String(b.status || ''))) return true;
   if (b.payments?.[0]?.status === 'CONFIRMED') return true;
@@ -241,6 +248,8 @@ export const findConfirmedPaymentCapture = (gateCapture) => {
 export const gateIndicatesError = (gateResponse) => {
   const b = gateResponse?.body;
   if (!b) return false;
+  const u = gateResponse?.url || '';
+  if (skipSrcGateCapture(u)) return false;
   if (/^DENIED$/i.test(String(b.status || ''))) return true;
   if (b.payments?.[0]?.status === 'DENIED') return true;
   if (Array.isArray(b) && b[0]?.status === 'nok') return true;
