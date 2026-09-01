@@ -82,14 +82,14 @@ const cases = [
     expected: 'return',
   },
   {
-    name: 'INVALID_STATE / field value remove da fila',
+    name: 'INVALID_STATE / field value devolve à fila (Click-to-Pay)',
     input: {
       outcome: outcome('AUTOMATION_FAIL', {
         gateCode: 'INVALID_STATE',
         message: 'Request cannot be executed due to incorrect field value.',
       }),
     },
-    expected: 'consumed',
+    expected: 'return',
   },
   {
     name: 'DENIED real',
