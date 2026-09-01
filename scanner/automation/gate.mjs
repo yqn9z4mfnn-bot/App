@@ -410,43 +410,43 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
         });
       }
       if (threeDs?.detected) {
-        const stopNow = threedsRequiresImmediateAction(threeDs);
+        const stopNow = config.threedsStopOnVbv && threedsRequiresImmediateAction(threeDs);
         if (session && !session.threeDsSeen) {
           session.threeDsSeen = threeDs;
           session.threeDsSeenAt = Date.now();
           if (stopNow) {
             console.log('[automation][3ds] VBV visual — parando na hora');
           } else {
-            console.log(
-              `[automation][3ds] frictionless — aguardando CONFIRMED até ${Math.round((config.threedsExtraWaitMs || 12000) / 1000)}s…`,
+            console.log('[automation][3ds] detectado — continuando gate-wait (sem parar no VBV)');
+          }
+        }
+        if (config.threedsStopOnVbv) {
+          const continueWait = config.threedsContinueGateWait !== false;
+          if (!continueWait || stopNow) {
+            const pageUrl = page.url();
+            if (isCheckoutSuccessUrl(pageUrl)) {
+              return buildPaymentResult(page, 'success', pageUrl, gateCapture, 'Pagamento confirmado');
+            }
+            const errNow = await takeCheckoutErrorResult(page, gateCapture);
+            if (errNow) return errNow;
+            return overrideThreedsIfCheckoutError(
+              await build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, { browserOpen: stopNow }),
+              { url: pageUrl },
             );
           }
-        }
-        const continueWait = config.threedsContinueGateWait !== false;
-        if (!continueWait || stopNow) {
-          const pageUrl = page.url();
-          if (isCheckoutSuccessUrl(pageUrl)) {
-            return buildPaymentResult(page, 'success', pageUrl, gateCapture, 'Pagamento confirmado');
+          const extraMs = config.threedsExtraWaitMs ?? 12000;
+          if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
+            const pageUrl = page.url();
+            if (isCheckoutSuccessUrl(pageUrl)) {
+              return buildPaymentResult(page, 'success', pageUrl, gateCapture, 'Pagamento confirmado');
+            }
+            const errNow = await takeCheckoutErrorResult(page, gateCapture);
+            if (errNow) return errNow;
+            return overrideThreedsIfCheckoutError(
+              await build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed),
+              { url: pageUrl },
+            );
           }
-          const errNow = await takeCheckoutErrorResult(page, gateCapture);
-          if (errNow) return errNow;
-          return overrideThreedsIfCheckoutError(
-            await build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed, { browserOpen: stopNow }),
-            { url: pageUrl },
-          );
-        }
-        const extraMs = config.threedsExtraWaitMs ?? 12000;
-        if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
-          const pageUrl = page.url();
-          if (isCheckoutSuccessUrl(pageUrl)) {
-            return buildPaymentResult(page, 'success', pageUrl, gateCapture, 'Pagamento confirmado');
-          }
-          const errNow = await takeCheckoutErrorResult(page, gateCapture);
-          if (errNow) return errNow;
-          return overrideThreedsIfCheckoutError(
-            await build3dsRequiredResult(page, session, gateCapture, threeDs, elapsed),
-            { url: pageUrl },
-          );
         }
       }
     }
@@ -483,7 +483,7 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
   }
   const timeoutError = await takeCheckoutErrorResult(page, gateCapture);
   if (timeoutError) return timeoutError;
-  if (session?.threeDsSeen) {
+  if (session?.threeDsSeen && config.threedsStopOnVbv) {
     return overrideThreedsIfCheckoutError(
       await build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed),
       { url: page.url() },
@@ -595,6 +595,17 @@ export function buildPaymentResultFromHttpSse(sse, url, paymentId, opts = {}) {
         pagamentoErro: true,
       };
     }
+    if (!config.threedsStopOnVbv) {
+      const msg = sse?.message || 'Timeout aguardando gate após 3DS';
+      return {
+        ...base,
+        status: 'timeout',
+        gateCode: st || 'TIMEOUT',
+        gateMessage: msg,
+        message: msg,
+        pagamentoErro: true,
+      };
+    }
     return {
       ...base,
       status: '3ds_required',
@@ -631,7 +642,7 @@ export async function waitForPaymentResultViaHttp(gateCapture, bemobiToken, chec
   }
 
   if (!idResult?.paymentId) {
-    if (had3ds) {
+    if (had3ds && config.threedsStopOnVbv) {
       return buildPaymentResultFromHttpSse(
         { status: 'PENDING' },
         checkoutUrl,
@@ -664,7 +675,9 @@ export async function waitForPaymentResultViaHttp(gateCapture, bemobiToken, chec
     return buildPaymentResultFromHttpSse(sse, checkoutUrl, idResult.paymentId, { had3ds: true });
   }
 
-  if (had3ds) {
+  if (had3ds && !config.threedsStopOnVbv) {
+    console.log('[automation][3ds] challenge API — segue SSE HTTP (sem parar no VBV)');
+  } else if (had3ds) {
     console.log('[automation][3ds] challenge API — sem frictionless, retorna 3DS');
     return buildPaymentResultFromHttpSse(
       { status: 'PENDING' },

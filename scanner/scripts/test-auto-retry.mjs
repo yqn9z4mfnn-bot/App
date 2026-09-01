@@ -67,8 +67,13 @@ check('success no retry', !shouldOfferRechargeRetry(success, null));
 check('success no auto', !shouldScheduleAutoRetry({ outcome: success, pendingCards: 10 }));
 
 check('3ds detect', isRecharge3ds(threeds));
-check('3ds no retry', !shouldOfferRechargeRetry(threeds, null));
-check('3ds no auto', !shouldScheduleAutoRetry({ outcome: threeds, pendingCards: 10 }));
+{
+  const prev = process.env.THREEDS_STOP_ON_VBV;
+  process.env.THREEDS_STOP_ON_VBV = '1';
+  check('3ds no retry quando para', !shouldOfferRechargeRetry(threeds, null));
+  process.env.THREEDS_STOP_ON_VBV = prev ?? '0';
+}
+check('3ds auto quando nao para', shouldScheduleAutoRetry({ outcome: threeds, pendingCards: 10 }));
 
 check('checkout/error nao e 3ds', !isRecharge3ds(checkoutErrorAs3ds));
 check('checkout/error oferece retry', shouldOfferRechargeRetry(checkoutErrorAs3ds, null));

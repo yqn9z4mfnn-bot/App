@@ -360,7 +360,8 @@ export function isRecharge3ds(outcome) {
 
 export function shouldOfferRechargeRetry(outcome, error) {
   if (isRechargeSuccess(outcome)) return false;
-  if (!error && isRecharge3ds(outcome)) return false;
+  const stopOnVbv = String(process.env.THREEDS_STOP_ON_VBV ?? '0').toLowerCase() === '1';
+  if (!error && isRecharge3ds(outcome) && stopOnVbv) return false;
   return true;
 }
 

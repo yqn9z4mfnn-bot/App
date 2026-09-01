@@ -1,6 +1,8 @@
 import { looksLikeCheckoutSuccess } from './checkout-error.mjs';
 import { normalizeRechargeStatus } from './recharge-events.mjs';
 
+const stopOnVbv = () => String(process.env.THREEDS_STOP_ON_VBV ?? '0').toLowerCase() === '1';
+
 /** Classifica o que fazer com o cartão da fila TXT após a recarga. */
 
 export function classifyCardListAction({ outcome, error } = {}) {
@@ -27,7 +29,7 @@ export function classifyCardListAction({ outcome, error } = {}) {
 
   const status = normalizeRechargeStatus(outcome, error);
   if (status === 'success') return 'approved';
-  if (status === '3ds') return 'consumed';
+  if (status === '3ds') return stopOnVbv() ? 'consumed' : 'return';
 
   // Cartão inválido na tokenização / Click to Pay (INVALID_STATE).
   if (isUnusableCardMessage(msg) || gateCode === 'INVALID_STATE') {

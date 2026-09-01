@@ -55,8 +55,9 @@ export function isVisualVbv(threeDs) {
   return false;
 }
 
-/** VBV visual / SMS → para na hora; API frictionless continua gate-wait. */
+/** VBV visual / SMS → para na hora só se THREEDS_STOP_ON_VBV=1; senão segue gate-wait. */
 export function threedsRequiresImmediateAction(threeDs) {
+  if (!config.threedsStopOnVbv) return false;
   if (!threeDs?.detected) return false;
   if (isVisualVbv(threeDs)) return true;
   if (threeDs.kind === 'sms') return true;

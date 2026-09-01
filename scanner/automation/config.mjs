@@ -26,6 +26,8 @@ export const config = {
   threedsExtraWaitMs: toInt(process.env.THREEDS_EXTRA_WAIT_MS, 12000),
   threedsContinueGateWait:
     String(process.env.THREEDS_CONTINUE_GATE_WAIT ?? '1').toLowerCase() !== '0',
+  /** 1 = para na hora em VBV/SMS (headful manual). 0 = segue gate-wait até CONFIRMED/negado/timeout. */
+  threedsStopOnVbv: String(process.env.THREEDS_STOP_ON_VBV ?? '0').toLowerCase() === '1',
   maxConcurrentSessions: toInt(process.env.MAX_CONCURRENT_SESSIONS, 3),
   sessionSlotWaitMs: toInt(process.env.SESSION_SLOT_WAIT_MS, 600000),
   actionTimeoutMs: toInt(process.env.ACTION_TIMEOUT_MS, 20000),
