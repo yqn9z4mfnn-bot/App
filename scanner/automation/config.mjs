@@ -26,7 +26,7 @@ export const config = {
   threedsExtraWaitMs: toInt(process.env.THREEDS_EXTRA_WAIT_MS, 12000),
   threedsContinueGateWait:
     String(process.env.THREEDS_CONTINUE_GATE_WAIT ?? '1').toLowerCase() !== '0',
-  /** 1 = para na hora em VBV/SMS (headful manual). 0 = segue gate-wait até CONFIRMED/negado/timeout. */
+  /** @deprecated use threedsStopOnVbvEnabled() — lê THREEDS_STOP_ON_VBV em runtime */
   threedsStopOnVbv: String(process.env.THREEDS_STOP_ON_VBV ?? '0').toLowerCase() === '1',
   maxConcurrentSessions: toInt(process.env.MAX_CONCURRENT_SESSIONS, 3),
   sessionSlotWaitMs: toInt(process.env.SESSION_SLOT_WAIT_MS, 600000),
@@ -73,5 +73,10 @@ export const config = {
   antifraudPrePayMotion:
     String(process.env.ANTIFRAUD_PRE_PAY_MOTION ?? '0').toLowerCase() !== '0',
 };
+
+/** 1 = para na hora em VBV/SMS. 0 (padrão) = segue gate-wait até CONFIRMED/negado/timeout. */
+export function threedsStopOnVbvEnabled() {
+  return String(process.env.THREEDS_STOP_ON_VBV ?? '0').toLowerCase() === '1';
+}
 
 export const WEB_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';

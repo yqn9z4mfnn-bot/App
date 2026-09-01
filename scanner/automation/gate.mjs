@@ -1,5 +1,5 @@
 import { sleep } from './helpers.mjs';
-import { config } from './config.mjs';
+import { config, threedsStopOnVbvEnabled } from './config.mjs';
 import { saveStallDebug, summarizeGateBody, summarizeGateCaptures } from './debug.mjs';
 import {
   detect3dsChallenge,
@@ -410,7 +410,7 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
         });
       }
       if (threeDs?.detected) {
-        const stopNow = config.threedsStopOnVbv && threedsRequiresImmediateAction(threeDs);
+        const stopNow = threedsStopOnVbvEnabled() && threedsRequiresImmediateAction(threeDs);
         if (session && !session.threeDsSeen) {
           session.threeDsSeen = threeDs;
           session.threeDsSeenAt = Date.now();
@@ -420,7 +420,7 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
             console.log('[automation][3ds] detectado — continuando gate-wait (sem parar no VBV)');
           }
         }
-        if (config.threedsStopOnVbv) {
+        if (threedsStopOnVbvEnabled()) {
           const continueWait = config.threedsContinueGateWait !== false;
           if (!continueWait || stopNow) {
             const pageUrl = page.url();
@@ -483,7 +483,7 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
   }
   const timeoutError = await takeCheckoutErrorResult(page, gateCapture);
   if (timeoutError) return timeoutError;
-  if (session?.threeDsSeen && config.threedsStopOnVbv) {
+  if (session?.threeDsSeen && threedsStopOnVbvEnabled()) {
     return overrideThreedsIfCheckoutError(
       await build3dsRequiredResult(page, session, gateCapture, session.threeDsSeen, elapsed),
       { url: page.url() },
@@ -595,7 +595,7 @@ export function buildPaymentResultFromHttpSse(sse, url, paymentId, opts = {}) {
         pagamentoErro: true,
       };
     }
-    if (!config.threedsStopOnVbv) {
+    if (!threedsStopOnVbvEnabled()) {
       const msg = sse?.message || 'Timeout aguardando gate após 3DS';
       return {
         ...base,
@@ -642,7 +642,7 @@ export async function waitForPaymentResultViaHttp(gateCapture, bemobiToken, chec
   }
 
   if (!idResult?.paymentId) {
-    if (had3ds && config.threedsStopOnVbv) {
+    if (had3ds && threedsStopOnVbvEnabled()) {
       return buildPaymentResultFromHttpSse(
         { status: 'PENDING' },
         checkoutUrl,
@@ -675,7 +675,7 @@ export async function waitForPaymentResultViaHttp(gateCapture, bemobiToken, chec
     return buildPaymentResultFromHttpSse(sse, checkoutUrl, idResult.paymentId, { had3ds: true });
   }
 
-  if (had3ds && !config.threedsStopOnVbv) {
+  if (had3ds && !threedsStopOnVbvEnabled()) {
     console.log('[automation][3ds] challenge API — segue SSE HTTP (sem parar no VBV)');
   } else if (had3ds) {
     console.log('[automation][3ds] challenge API — sem frictionless, retorna 3DS');

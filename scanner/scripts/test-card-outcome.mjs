@@ -120,9 +120,9 @@ const cases = [
     expected: 'consumed',
   },
   {
-    name: '3DS consome',
+    name: '3DS volta pra fila (sem parar no VBV)',
     input: { outcome: outcome('3DS_REQUIRED', { rawStatus: '3ds_required' }) },
-    expected: 'consumed',
+    expected: 'return',
   },
   {
     name: '3DS + checkout/success é aprovado',

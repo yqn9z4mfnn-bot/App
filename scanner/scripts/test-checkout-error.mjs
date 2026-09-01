@@ -139,7 +139,19 @@ const sse3ds = buildPaymentResultFromHttpSse(
   'pay-2',
   { had3ds: true },
 );
-check('http sse 3DS real', sse3ds.status === '3ds_required', sse3ds.status);
+check('http sse 3DS sem parar → timeout', sse3ds.status === 'timeout', sse3ds.status);
+{
+  const prev = process.env.THREEDS_STOP_ON_VBV;
+  process.env.THREEDS_STOP_ON_VBV = '1';
+  const sseStop = buildPaymentResultFromHttpSse(
+    { status: 'PENDING' },
+    'https://eldorado.m4u.com.br/bsc/checkout-link',
+    'pay-2',
+    { had3ds: true },
+  );
+  check('http sse 3DS com parar', sseStop.status === '3ds_required', sseStop.status);
+  process.env.THREEDS_STOP_ON_VBV = prev ?? '0';
+}
 
 const SUCCESS_URL =
   'https://eldorado.m4u.com.br/bsc/checkout/success?code=452efbfd-378d-4893-b50d-fdca3b9bf7db';
