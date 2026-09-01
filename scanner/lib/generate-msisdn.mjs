@@ -1,6 +1,6 @@
 import { listDistinctDdds, pickRandomMsisdnByDdd } from './numbers-db.mjs';
 import { fetchClaroLoginLink, normalizeBrMobile } from './fetch-claro-link.mjs';
-import { getProxyUrl, proxyEnabled } from './proxy.mjs';
+import { getPaymentProxyUrl, proxyEnabled, proxyAllTraffic } from './proxy.mjs';
 import { isTransientFetchError, sleep } from './transient-fetch.mjs';
 
 /**
@@ -35,11 +35,11 @@ export async function generateLoginMsisdn({
   timeoutMs = 10_000,
   shouldAbort = null,
 } = {}) {
-  if (proxyEnabled() && !getProxyUrl()) {
+  if (proxyEnabled() && !getPaymentProxyUrl()) {
     throw new Error('PROXY_ENABLED=1 mas proxy incompleto no .env');
   }
 
-  const attempts = proxyEnabled() ? maxAttempts : Math.min(maxAttempts, 3);
+  const attempts = proxyAllTraffic() ? maxAttempts : Math.min(maxAttempts, 3);
   let lastErr = null;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     if (shouldAbort?.()) {

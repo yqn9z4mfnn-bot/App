@@ -1,6 +1,6 @@
 import { chromium, firefox, devices } from 'playwright';
 import { config } from './config.mjs';
-import { describeProxy, getPlaywrightProxy, proxyEnabled } from '../lib/proxy.mjs';
+import { describeProxy, getPlaywrightProxy, proxyEnabled, proxyPaymentOnly } from '../lib/proxy.mjs';
 
 export const normalizeBrowserName = (raw) => {
   const name = String(raw ?? config.defaultBrowser).trim().toLowerCase();
@@ -41,7 +41,7 @@ export const launchBrowser = async (browserName) => {
   }
 
   console.log(
-    `[automation] launch browser=${name} headless=${headless} proxy=${describeProxy() || 'OFF (IP da VPS)'}`,
+    `[automation] launch browser=${name} headless=${headless} proxy=${describeProxy() || (proxyPaymentOnly() ? 'OFF até checkout' : 'OFF (IP da VPS)')}`,
   );
 
   if (name === 'chrome') {

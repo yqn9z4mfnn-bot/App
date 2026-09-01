@@ -1,5 +1,5 @@
 import './load-env.mjs';
-import { proxiedFetch, describeProxy, proxyEnabled, getProxyUrl, resetProxyAgent } from './proxy.mjs';
+import { proxiedFetch, describeProxy, proxyEnabled, proxyAllTraffic, proxyPaymentOnly, getPaymentProxyUrl, resetProxyAgent } from './proxy.mjs';
 import { formatFetchError, isTransientFetchError, sleep } from './transient-fetch.mjs';
 
 const DEFAULT_LINK_API = 'https://sarcastic-pertinaciously-shawnda.ngrok-free.dev';
@@ -38,8 +38,8 @@ export function looksLikeMsisdn(text) {
 }
 
 async function logLinkProxyContext(label, attempt) {
-  if (!proxyEnabled()) {
-    console.warn(`[link] ${label} attempt=${attempt} — proxy OFF (IP da VPS)`);
+  if (proxyPaymentOnly() || !proxyEnabled()) {
+    console.warn(`[link] ${label} attempt=${attempt} — proxy OFF (IP direto)`);
     return null;
   }
   if (String(process.env.PROXY_LOG_IP || '0') === '0') return null;
@@ -53,14 +53,14 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
     throw new Error('Número inválido. Use DDD + 9 dígitos, ex: 38991121276');
   }
 
-  if (proxyEnabled() && !getProxyUrl()) {
+  if (proxyEnabled() && !getPaymentProxyUrl()) {
     throw new Error('PROXY_ENABLED=1 mas PROXY_SERVER/PORT/USER/PASS incompletos no .env');
   }
 
   const defaultTimeout = Number(process.env.CLARO_LINK_TIMEOUT_MS) || 20_000;
   const waitMs = timeoutMs ?? defaultTimeout;
   const configuredRetries = Number(process.env.CLARO_LINK_429_RETRIES) || 5;
-  const maxRetries = proxyEnabled() ? configuredRetries : Math.min(configuredRetries, 2);
+  const maxRetries = proxyAllTraffic() ? configuredRetries : Math.min(configuredRetries, 2);
   const base = String(process.env.CLARO_LINK_API ?? DEFAULT_LINK_API).replace(/\/+$/, '');
   const url = `${base}/claro/link/${number}`;
 

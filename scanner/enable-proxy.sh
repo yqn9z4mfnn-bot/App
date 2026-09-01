@@ -26,6 +26,7 @@ set_var() {
 }
 
 set_var PROXY_ENABLED 1
+set_var PROXY_PAYMENT_ONLY 1
 set_var PROXY_SERVER "$PROXY_SERVER"
 set_var PROXY_PORT "$PROXY_PORT"
 set_var PROXY_USERNAME "$PROXY_USERNAME"

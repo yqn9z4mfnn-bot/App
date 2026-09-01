@@ -1,19 +1,20 @@
 import './load-env.mjs';
-import { proxiedFetch, describeProxy, proxyEnabled, fetchProxyEgressIp, resetProxyAgent } from './proxy.mjs';
+import { proxiedFetch, describeProxy, proxyEnabled, proxyAllTraffic, proxyPaymentOnly, fetchProxyEgressIp, resetProxyAgent } from './proxy.mjs';
 import { formatFetchError, isTransientFetchError, sleep } from './transient-fetch.mjs';
 
 const CLARO_API = 'https://claro-recarga-api.m4u.com.br';
 const CHANNEL = 'MINHA_CLARO_WEB';
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-async function logApiProxy(label) {
+async function logApiProxy(label, url) {
   if (!proxyEnabled() || String(process.env.PROXY_LOG_IP || '0') === '0') return;
+  const scope = proxyPaymentOnly() ? 'payment-only' : 'all';
   if (String(process.env.PROXY_LOG_IP || '0') === 'verbose') {
     const ip = await fetchProxyEgressIp({ rotateIp: false }).catch(() => null);
-    console.log(`[claro-api] ${label} proxy=${describeProxy() || 'OFF'} ip=${ip || '?'}`);
+    console.log(`[claro-api] ${label} proxy=${describeProxy() || 'OFF'} scope=${scope} ip=${ip || '?'}`);
     return;
   }
-  console.log(`[claro-api] ${label} proxy=${describeProxy() || 'OFF'}`);
+  console.log(`[claro-api] ${label} proxy=${describeProxy() || 'OFF'} scope=${scope} url=${String(url ?? '').slice(0, 80)}`);
 }
 
 export async function request(url, options = {}) {
@@ -32,7 +33,7 @@ export async function request(url, options = {}) {
     }
 
     try {
-      if (logLabel && attempt === 1) await logApiProxy(logLabel);
+      if (logLabel && attempt === 1) await logApiProxy(logLabel, url);
 
       const res = await proxiedFetch(url, {
         ...rest,
