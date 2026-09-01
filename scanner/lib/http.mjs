@@ -78,7 +78,7 @@ export async function request(url, options = {}) {
     }
   }
 
-  throw lastErr ?? new Error('Falha de rede no proxy');
+  throw lastErr ?? new Error(formatFetchError(lastErr) || 'Falha de rede na API');
 }
 
 function claroHeaders(sessionId) {

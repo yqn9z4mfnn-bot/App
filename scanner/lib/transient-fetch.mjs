@@ -10,11 +10,22 @@ export function isTransientFetchError(err) {
   );
 }
 
+import { proxyEnabled } from './proxy.mjs';
+
+function networkFailureLabel() {
+  return proxyEnabled() ? 'Falha de rede no proxy' : 'Falha de rede na API';
+}
+
 export function formatFetchError(err) {
   const text = fetchErrorText(err);
-  if (/timeout|aborted|ConnectTimeout/i.test(text)) return 'Timeout na API (proxy/rede)';
+  if (/ECONNREFUSED.*\b3000\b|127\.0\.0\.1:3000|localhost:3000/i.test(text)) {
+    return 'Automação indisponível (serviço parado)';
+  }
+  if (/timeout|aborted|ConnectTimeout/i.test(text)) {
+    return proxyEnabled() ? 'Timeout na API (proxy/rede)' : 'Timeout na API';
+  }
   if (/fetch failed|ECONNRESET|UND_ERR|socket|other side closed|EPIPE|ECONNREFUSED/i.test(text)) {
-    return 'Falha de rede no proxy';
+    return networkFailureLabel();
   }
   return String(err?.message || err);
 }
