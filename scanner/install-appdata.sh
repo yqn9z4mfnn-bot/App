@@ -40,6 +40,7 @@ fi
 touch "$DATA_DIR/.env"
 grep -q '^AUTOMATION_API_URL=' "$DATA_DIR/.env" 2>/dev/null || echo 'AUTOMATION_API_URL=http://127.0.0.1:3000' >> "$DATA_DIR/.env"
 grep -q '^BROWSER_NAME=' "$DATA_DIR/.env" 2>/dev/null || echo 'BROWSER_NAME=edge' >> "$DATA_DIR/.env"
+grep -q '^BROWSER_USE_NATIVE_EDGE=' "$DATA_DIR/.env" 2>/dev/null || echo 'BROWSER_USE_NATIVE_EDGE=0' >> "$DATA_DIR/.env"
 grep -q '^HEADLESS=' "$DATA_DIR/.env" 2>/dev/null || echo 'HEADLESS=false' >> "$DATA_DIR/.env"
 grep -q '^RECHARGE_MODE=' "$DATA_DIR/.env" 2>/dev/null || echo 'RECHARGE_MODE=browser' >> "$DATA_DIR/.env"
 grep -q '^PROXY_ENABLED=' "$DATA_DIR/.env" 2>/dev/null || echo 'PROXY_ENABLED=0' >> "$DATA_DIR/.env"
