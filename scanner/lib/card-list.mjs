@@ -367,7 +367,7 @@ export function createCardListStore(dataDir) {
         if (action === 'return') {
           const pending = loadPending();
           if (!pending.some((l) => normalizeCardKey(l) === removedRes.pan)) {
-            pending.unshift(removedRes.line);
+            pending.push(removedRes.line);
             writeLines(pendingPath, pending);
           }
           return { action, pendingLeft: pending.length, inUse: reservations.length, returned: true };

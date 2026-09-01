@@ -420,7 +420,27 @@ export const waitForPaymentResult = async (page, timeoutMs = 120000, gateCapture
             console.log('[automation][3ds] detectado — continuando gate-wait (sem parar no VBV)');
           }
         }
-        if (threedsStopOnVbvEnabled()) {
+        if (!threedsStopOnVbvEnabled()) {
+          const extraMs = config.threedsExtraWaitMs ?? 12000;
+          if (session?.threeDsSeenAt && Date.now() - session.threeDsSeenAt > extraMs) {
+            const pageUrl = page.url();
+            if (isCheckoutSuccessUrl(pageUrl)) {
+              return buildPaymentResult(page, 'success', pageUrl, gateCapture, 'Pagamento confirmado');
+            }
+            const errNow = await takeCheckoutErrorResult(page, gateCapture);
+            if (errNow) return errNow;
+            console.log(
+              `[automation][3ds] VBV sem confirmação após ${Math.round(extraMs / 1000)}s — erro (próximo cartão)`,
+            );
+            return buildPaymentResult(
+              page,
+              'error',
+              pageUrl,
+              gateCapture,
+              '3DS sem confirmação automática',
+            );
+          }
+        } else if (threedsStopOnVbvEnabled()) {
           const continueWait = config.threedsContinueGateWait !== false;
           if (!continueWait || stopNow) {
             const pageUrl = page.url();

@@ -90,6 +90,6 @@ export function cardListActionLabel(action, { outcome } = {}) {
     }
     return '🚫 negado na gate → salvo em cards-consumed.txt';
   }
-  if (action === 'return') return '↩️ falha (não foi a gate) → cartão voltou pra fila';
+  if (action === 'return') return '↩️ falha (não foi a gate) → cartão foi pro fim da fila';
   return '';
 }
