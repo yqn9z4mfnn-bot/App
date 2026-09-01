@@ -555,23 +555,18 @@ export const startSessionFromCheckoutLink = async (payload) => {
   let browser = null;
   let sessionId;
   let session;
+  let prep = null;
 
-  const browserStarted = Date.now();
-  const browserPromise = launchBrowser(browserName).then(async (b) => {
-    const context = await createMobileContext(b);
-    const page = await context.newPage();
-    return { browser: b, context, page, browserMs: Date.now() - browserStarted };
-  });
-
-  const httpStarted = Date.now();
-  const prepPromise = (async () => {
-    const prep = await prepareCheckoutViaHttp({
+  try {
+    const httpStarted = Date.now();
+    prep = await prepareCheckoutViaHttp({
       loginUrl,
       msisdn: accessNumber,
       targetMsisdn: rechargeTargetNumber,
       valueCents,
     });
     prep.httpLatencyMs = Date.now() - httpStarted;
+    timings.httpPrepMs = prep.httpLatencyMs;
     console.log(
       `[automation] HTTP checkout pronto em ${prep.httpLatencyMs}ms → ${prep.checkoutUrl.slice(0, 80)}…`,
     );
@@ -621,24 +616,21 @@ export const startSessionFromCheckoutLink = async (payload) => {
         );
       }
     }
-    return prep;
-  })();
 
-  let prep = null;
-  try {
-    const [prepResult, browserPack] = await Promise.all([prepPromise, browserPromise]);
-    prep = prepResult;
-    timings.httpPrepMs = prep.httpLatencyMs;
-    timings.browserMs = browserPack.browserMs;
-    browser = browserPack.browser;
-    const gateCapture = attachGateCapture(browserPack.context);
+    console.log('[automation] abrindo Edge após checkout HTTP pronto…');
+    const browserStarted = Date.now();
+    browser = await launchBrowser(browserName);
+    const context = await createMobileContext(browser);
+    const page = await context.newPage();
+    timings.browserMs = Date.now() - browserStarted;
+    const gateCapture = attachGateCapture(context);
 
     sessionId = randomUUID();
     session = {
       id: sessionId,
       browser,
-      context: browserPack.context,
-      page: browserPack.page,
+      context,
+      page,
       gateCapture,
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
@@ -672,11 +664,13 @@ export const startSessionFromCheckoutLink = async (payload) => {
     console.log(`[automation] goto checkout ${prep.checkoutUrl.slice(0, 90)}…`);
     const navStarted = Date.now();
     await page.goto(prep.checkoutUrl, {
-      waitUntil: fast && !proxyAllTraffic() ? 'commit' : 'domcontentloaded',
+      waitUntil: 'domcontentloaded',
       timeout: 45000,
     });
     timings.navMs = Date.now() - navStarted;
-    if (!fast) {
+    if (fast) {
+      await sleep(Math.max(config.checkoutLinkCardSettleMs, 120));
+    } else {
       await dismissCookieBanner(page);
       await sleep(config.pauseAfterNavMs);
     }
