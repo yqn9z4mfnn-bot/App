@@ -10,7 +10,13 @@ import {
 } from './lib/eldorado.mjs';
 import { scanClaroEssential, createSession } from './lib/claro.mjs';
 import { runRecharge } from './lib/recharge.mjs';
-import { runBrowserRecharge, runHybridRecharge, isBrowserRechargeEnabled, isHybridRechargeEnabled } from './lib/automation-client.mjs';
+import {
+  runBrowserRecharge,
+  runHybridRecharge,
+  isBrowserRechargeEnabled,
+  isHybridRechargeEnabled,
+  waitForAutomationIdle,
+} from './lib/automation-client.mjs';
 import {
   formatTelegramReport,
   buildCardKeyboard,
@@ -1302,7 +1308,9 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
   if (scheduledAutoRetry && !isWorkStale(chatId, epochAtStart) && statusMsg?.message_id) {
     const n = rechargeRetry.get(chatId)?.autoRetries ?? 0;
     console.log(`[bot] auto-retry ${n}/${MAX_AUTO_RECHARGE_RETRIES} chat=${chatId}`);
-    await sleep(400);
+    if (isBrowserRechargeEnabled()) {
+      await waitForAutomationIdle();
+    }
     if (isWorkStale(chatId, epochAtStart)) return;
     await runRechargeRetry(chatId, statusMsg.message_id, { automatic: true });
   }

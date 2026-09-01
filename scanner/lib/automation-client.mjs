@@ -103,6 +103,24 @@ export async function automationHealth() {
   return res.json();
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Aguarda nenhuma sessão Edge ativa antes de abrir nova tentativa (auto-retry). */
+export async function waitForAutomationIdle({ timeoutMs = 15000, pollMs = 250 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const health = await automationHealth();
+      if ((health.aliveSessions ?? 0) <= 0) return true;
+    } catch {
+      return false;
+    }
+    await sleep(pollMs);
+  }
+  console.log('[automation-client] waitForAutomationIdle: timeout com sessões ainda abertas');
+  return false;
+}
+
 export function isBrowserRechargeEnabled() {
   return String(process.env.RECHARGE_MODE ?? 'browser').toLowerCase() !== 'api';
 }

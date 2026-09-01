@@ -351,18 +351,10 @@ const finishPaymentSession = async (sessionId, session, paymentResult, { gateMod
   }
 };
 
-/** 3DS/VBV: responde API na hora; demais casos fecham em background no modo fast. */
+/** Aguarda cleanup do cartão e fechamento do Edge antes de liberar a resposta da API. */
 const scheduleFinishPaymentSession = async (sessionId, session, paymentResult, opts = {}) => {
-  const { gateMode = 'browser', fast = false } = opts;
-  if (paymentResult?.status === '3ds_required') {
-    void finishPaymentSession(sessionId, session, paymentResult, { gateMode }).catch((err) => {
-      console.log(`[automation][3ds] finish async: ${String(err?.message || err).slice(0, 100)}`);
-    });
-    return;
-  }
-  void finishPaymentSession(sessionId, session, paymentResult, { gateMode }).catch((err) => {
-    console.log(`[automation] finish async: ${String(err?.message || err).slice(0, 100)}`);
-  });
+  const { gateMode = 'browser' } = opts;
+  await finishPaymentSession(sessionId, session, paymentResult, { gateMode });
 };
 
 const buildPamPayload = (payload) => {
@@ -497,12 +489,8 @@ export const startSessionFromWebLink = async (payload) => {
         return loginUrl;
       }
     })();
-    setImmediate(() => {
-      scheduleFinishPaymentSession(sessionId, session, paymentResult).catch((err) => {
-        console.log(`[automation] finish deferred: ${String(err?.message || err).slice(0, 100)}`);
-      });
-    });
-    console.log('[automation] respondendo API agora — cleanup/Edge em background');
+    console.log('[automation] finalizando sessão (cartão + Edge) antes de responder API…');
+    await scheduleFinishPaymentSession(sessionId, session, paymentResult);
 
     return {
       sessionId,
@@ -771,14 +759,8 @@ export const startSessionFromCheckoutLink = async (payload) => {
             return checkoutUrl;
           }
         })();
-    setImmediate(() => {
-      scheduleFinishPaymentSession(sessionId, session, paymentResult, { gateMode, fast }).catch(
-        (err) => {
-          console.log(`[automation] finish deferred: ${String(err?.message || err).slice(0, 100)}`);
-        },
-      );
-    });
-    console.log('[automation] respondendo API agora — cleanup/Edge em background');
+    console.log('[automation] finalizando sessão (cartão + Edge) antes de responder API…');
+    await scheduleFinishPaymentSession(sessionId, session, paymentResult, { gateMode });
 
     return {
       sessionId,
