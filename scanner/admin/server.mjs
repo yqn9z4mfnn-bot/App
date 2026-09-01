@@ -12,6 +12,9 @@ import {
   countTelegramUsers,
   setTelegramUserAllowed,
   getTelegramUser,
+  setTelegramUserAdmin,
+  getBotPauseState,
+  setBotPaused,
   listRechargeEvents,
   countRechargeEvents,
   countRechargeEventsByStatus,
@@ -33,6 +36,7 @@ import { parseCardInput } from '../lib/card-parse.mjs';
 import { describeProxy, proxyEnabled } from '../lib/proxy.mjs';
 import { repairRechargeRow } from '../lib/recharge-events.mjs';
 import { backfillApprovedRecharges } from '../lib/approved-backfill.mjs';
+import { invalidateBotPauseCache } from '../lib/bot-pause.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
@@ -287,7 +291,25 @@ export function startAdminServer() {
       automation,
       proxy: describeProxy() || (proxyEnabled() ? 'ON' : 'OFF'),
       valueStock: safeCall(() => listValueStock().slice(0, 12), []),
+      botPause: safeCall(() => getBotPauseState(), { paused: false }),
     });
+  });
+
+  app.get('/api/bot/pause', requireAuth, (_req, res) => {
+    res.json(getBotPauseState());
+  });
+
+  app.patch('/api/bot/pause', requireAuth, (req, res) => {
+    if (typeof req.body?.paused !== 'boolean') {
+      return res.status(400).json({ error: 'paused (boolean) required' });
+    }
+    const state = setBotPaused(req.body.paused, {
+      actor: 'admin',
+      reason: req.body.reason ? String(req.body.reason).slice(0, 500) : null,
+    });
+    invalidateBotPauseCache();
+    insertAudit('admin', req.body.paused ? 'bot_pause' : 'bot_resume', 'bot', state);
+    res.json(state);
   });
 
   app.get('/api/numbers', requireAuth, (req, res) => {
@@ -419,6 +441,10 @@ export function startAdminServer() {
     if (typeof req.body?.allowed === 'boolean') {
       setTelegramUserAllowed(chatId, req.body.allowed);
       insertAudit('admin', 'user_allowed', chatId, { allowed: req.body.allowed });
+    }
+    if (typeof req.body?.is_admin === 'boolean') {
+      setTelegramUserAdmin(chatId, req.body.is_admin);
+      insertAudit('admin', 'user_admin', chatId, { is_admin: req.body.is_admin });
     }
     res.json(getTelegramUser(chatId));
   });

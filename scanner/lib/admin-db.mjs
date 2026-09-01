@@ -93,7 +93,16 @@ export function openAdminDb() {
       detail TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
+    CREATE TABLE IF NOT EXISTS bot_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `);
+  const pausedRow = database.prepare('SELECT value FROM bot_settings WHERE key = ?').get('paused');
+  if (!pausedRow) {
+    database.prepare('INSERT INTO bot_settings (key, value, updated_at) VALUES (?, ?, ?)').run('paused', '0', Date.now());
+  }
   const cols = database.prepare('PRAGMA table_info(recharge_events)').all().map((r) => r.name);
   if (!cols.includes('card_bin')) {
     database.exec('ALTER TABLE recharge_events ADD COLUMN card_bin TEXT');
@@ -186,6 +195,68 @@ export function isTelegramUserAllowed(chatId) {
   const row = getTelegramUser(chatId);
   if (!row) return true;
   return row.allowed === 1;
+}
+
+export function isTelegramUserAdmin(chatId) {
+  const row = getTelegramUser(chatId);
+  return row?.is_admin === 1;
+}
+
+export function setTelegramUserAdmin(chatId, isAdmin) {
+  getDb()
+    .prepare('UPDATE telegram_users SET is_admin = ? WHERE chat_id = ?')
+    .run(isAdmin ? 1 : 0, String(chatId));
+}
+
+export function getBotSetting(key) {
+  const row = getDb().prepare('SELECT value FROM bot_settings WHERE key = ?').get(String(key));
+  return row?.value ?? null;
+}
+
+export function setBotSetting(key, value) {
+  const now = Date.now();
+  withBusyRetry(() => {
+    getDb()
+      .prepare(
+        `INSERT INTO bot_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      )
+      .run(String(key), String(value), now);
+  });
+  return now;
+}
+
+export function getBotPauseState() {
+  const paused = getBotSetting('paused') === '1';
+  let meta = null;
+  try {
+    meta = JSON.parse(getBotSetting('paused_meta') || 'null');
+  } catch {
+    meta = null;
+  }
+  return {
+    paused,
+    reason: meta?.reason ?? null,
+    pausedAt: meta?.pausedAt ?? null,
+    pausedBy: meta?.pausedBy ?? null,
+  };
+}
+
+export function setBotPaused(paused, { actor = 'admin', reason = null } = {}) {
+  setBotSetting('paused', paused ? '1' : '0');
+  if (paused) {
+    setBotSetting(
+      'paused_meta',
+      JSON.stringify({
+        reason: reason || null,
+        pausedAt: Date.now(),
+        pausedBy: actor,
+      }),
+    );
+  } else {
+    setBotSetting('paused_meta', '');
+  }
+  return getBotPauseState();
 }
 
 export function listTelegramUsers({ limit = 100, offset = 0 } = {}) {

@@ -205,13 +205,29 @@ function tableWrap(inner, compact = false) {
 
 async function viewDashboard() {
   const d = await api('/dashboard');
+  const paused = d.botPause?.paused;
   const r24 = Object.entries(d.recharges?.last24h || {})
     .map(([k, v]) => `${k}: ${v}`)
     .join(' · ') || '0';
   const stock = (d.valueStock || [])
     .map((v) => `<tr><td>${esc(v.name || fmtBRL(v.value))}</td><td>${v.count}</td></tr>`)
     .join('') || '<tr><td colspan="2" class="empty">Sem estoque</td></tr>';
+  const pauseDetail = paused && d.botPause?.pausedAt
+    ? `<p class="sub" style="margin-top:0.5rem">Desde ${fmtDate(d.botPause.pausedAt)}${d.botPause.pausedBy ? ` · por ${esc(d.botPause.pausedBy)}` : ''}${d.botPause.reason ? ` · ${esc(d.botPause.reason)}` : ''}</p>`
+    : '';
   return `
+    <div class="panel" style="margin-bottom:1rem;border-color:${paused ? 'var(--warn)' : 'var(--ok)'}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+        <div>
+          <h3 style="margin:0">Bot Telegram</h3>
+          <p style="margin:0.35rem 0 0">${badge(paused ? 'pausado' : 'ativo')}</p>
+          ${pauseDetail}
+        </div>
+        <button type="button" class="btn ${paused ? '' : 'secondary'}" data-action="bot-pause" data-paused="${paused ? '0' : '1'}">
+          ${paused ? '▶ Retomar recargas' : '⏸ Pausar recargas'}
+        </button>
+      </div>
+    </div>
     <div class="grid">
       <div class="stat"><div class="label">Números OK</div><div class="value">${d.numbers.ok}</div><div class="sub">total ${d.numbers.total}</div></div>
       <div class="stat"><div class="label">Com valores</div><div class="value">${d.numbers.withValues}</div></div>
@@ -350,18 +366,20 @@ async function viewUsers() {
         <td>${u.message_count}</td>
         <td>${fmtDate(u.last_seen)}</td>
         <td>${badge(u.allowed ? 'ok' : 'bloqueado')}</td>
+        <td>${u.is_admin ? badge('admin') : '—'}</td>
         <td>
           ${u.allowed
             ? `<button type="button" class="btn small danger" data-action="toggle-user" data-chat-id="${esc(u.chat_id)}" data-allowed="0">Bloquear</button>`
             : `<button type="button" class="btn small" data-action="toggle-user" data-chat-id="${esc(u.chat_id)}" data-allowed="1">Liberar</button>`}
+          <button type="button" class="btn small secondary" data-action="toggle-admin" data-chat-id="${esc(u.chat_id)}" data-admin="${u.is_admin ? '0' : '1'}">${u.is_admin ? 'Remover admin' : 'Tornar admin'}</button>
         </td>
       </tr>`).join('')
-    : '<tr><td colspan="7" class="empty">Nenhum usuário ainda — o bot passa a registrar a partir desta versão</td></tr>';
+    : '<tr><td colspan="8" class="empty">Nenhum usuário ainda — o bot passa a registrar a partir desta versão</td></tr>';
   return `
     <div class="panel">
       <h3>Usuários Telegram (${data.total})</h3>
       ${tableWrap(`
-        <thead><tr><th>Chat ID</th><th>Username</th><th>Nome</th><th>Msgs</th><th>Último acesso</th><th>Acesso</th><th></th></tr></thead>
+        <thead><tr><th>Chat ID</th><th>Username</th><th>Nome</th><th>Msgs</th><th>Último acesso</th><th>Acesso</th><th>Admin TG</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       `)}
     </div>`;
@@ -525,7 +543,7 @@ async function viewConfig() {
   const data = await api('/config');
   const keys = [
     'HEADLESS', 'BROWSER_NAME', 'RECHARGE_MODE', 'RECHARGE_BROWSER_FLOW',
-    'PROXY_ENABLED', 'PROXY_ROTATE', 'PROXY_LOG_IP',
+    'PROXY_ENABLED', 'PROXY_PAYMENT_ONLY', 'PROXY_ROTATE', 'PROXY_LOG_IP',
     'THREEDS_CONTINUE_GATE_WAIT', 'THREEDS_UI_WAIT_MS', 'THREEDS_EXTRA_WAIT_MS',
     'MAX_CONCURRENT_SESSIONS', 'CHECKOUT_LINK_FAST', 'CHECKOUT_LINK_HTTP_GATE',
     'AUTOMATION_API_URL', 'ADMIN_PORT',
@@ -653,6 +671,26 @@ async function onContentClick(e) {
       body: JSON.stringify({ allowed: actionEl.dataset.allowed === '1' }),
     });
     toast(actionEl.dataset.allowed === '1' ? 'Usuário liberado' : 'Usuário bloqueado');
+    return renderView();
+  }
+
+  if (action === 'toggle-admin') {
+    await api(`/users/${actionEl.dataset.chatId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_admin: actionEl.dataset.admin === '1' }),
+    });
+    toast(actionEl.dataset.admin === '1' ? 'Admin Telegram ativado' : 'Admin Telegram removido');
+    return renderView();
+  }
+
+  if (action === 'bot-pause') {
+    const willPause = actionEl.dataset.paused === '1';
+    if (willPause && !confirm('Pausar novas recargas no bot Telegram?')) return;
+    await api('/bot/pause', {
+      method: 'PATCH',
+      body: JSON.stringify({ paused: willPause }),
+    });
+    toast(willPause ? 'Bot pausado' : 'Bot retomado');
     return renderView();
   }
 

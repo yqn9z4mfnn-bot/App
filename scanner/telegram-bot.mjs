@@ -79,7 +79,15 @@ import {
 } from './lib/bulk-scan.mjs';
 import { generateLoginMsisdn } from './lib/generate-msisdn.mjs';
 import { purgeAllLoginCardsStrict } from './lib/purge-login-cards.mjs';
-import { upsertTelegramUser, isTelegramUserAllowed } from './lib/admin-db.mjs';
+import { upsertTelegramUser, isTelegramUserAllowed, isTelegramUserAdmin, setBotPaused } from './lib/admin-db.mjs';
+import {
+  isBotPaused,
+  isPauseControlCommand,
+  isReadOnlyWhenPaused,
+  isRechargeCallback,
+  PAUSE_USER_MESSAGE,
+  invalidateBotPauseCache,
+} from './lib/bot-pause.mjs';
 import { logRechargeEvent } from './lib/recharge-events.mjs';
 import { getDataDir } from './lib/data-dir.mjs';
 import { parseQuickCrossRecharge } from './lib/quick-cross-recharge.mjs';
@@ -114,6 +122,40 @@ const chatRechargeMode = new Map();
 const rechargeRetry = new Map();
 /** Saldo/validade do destino — sobrevive ao retry da mesma recarga. */
 const destBalanceByChat = new Map();
+
+function shouldBlockPaused({ text = '', callbackData = '', chatId = null, allowAdminControls = true } = {}) {
+  if (!isBotPaused()) return false;
+  if (allowAdminControls && chatId != null && isTelegramUserAdmin(chatId)) {
+    if (isPauseControlCommand(text)) return false;
+    if (text === '/status' || text.startsWith('/status@')) return false;
+  }
+  if (isReadOnlyWhenPaused(text)) return false;
+  if (callbackData && !isRechargeCallback(callbackData)) return false;
+  return true;
+}
+
+async function handlePauseCommands(chatId, text) {
+  if (!isPauseControlCommand(text)) return false;
+  if (!isTelegramUserAdmin(chatId)) {
+    await send(chatId, '🚫 Apenas administradores podem pausar ou retomar o bot.');
+    return true;
+  }
+  const pause = /^\/(pause|pausar)(@\S+)?(\s|$)/i.test(text);
+  const resume = /^\/(resume|retomar)(@\S+)?(\s|$)/i.test(text);
+  if (pause) {
+    setBotPaused(true, { actor: `tg:${chatId}` });
+    invalidateBotPauseCache();
+    await send(chatId, '⏸ Bot pausado. Novas recargas bloqueadas.\n\nUse /resume para retomar.');
+    return true;
+  }
+  if (resume) {
+    setBotPaused(false, { actor: `tg:${chatId}` });
+    invalidateBotPauseCache();
+    await send(chatId, '▶ Bot retomado. Recargas liberadas.');
+    return true;
+  }
+  return false;
+}
 
 function clearDestBalance(chatId) {
   destBalanceByChat.delete(chatId);
@@ -714,6 +756,10 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
 }
 
 async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
+  if (isBotPaused()) {
+    if (!automatic) await send(chatId, PAUSE_USER_MESSAGE);
+    return;
+  }
   const retry = rechargeRetry.get(chatId);
   if (!retry) {
     await send(chatId, '❌ Nada para tentar de novo. Use /start');
@@ -781,6 +827,10 @@ async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
 }
 
 async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents }) {
+  if (isBotPaused()) {
+    await send(chatId, PAUSE_USER_MESSAGE);
+    return;
+  }
   const target = normalizeBrMobile(targetMsisdn);
   const cents = Number(valueCents);
   if (!target || !cents) {
@@ -979,6 +1029,13 @@ async function onValueSelected(chatId, messageId, productId) {
 }
 
 async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: incomingStatus = null } = {}) {
+  if (isBotPaused()) {
+    const flow = rechargeFlow.get(chatId);
+    const listLine = cardListLine ?? flow?.cardListLine ?? null;
+    if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
+    clearRecharge(chatId);
+    return;
+  }
   const entry = getCache(chatId);
   const flow = rechargeFlow.get(chatId);
   let listLine = cardListLine ?? flow?.cardListLine ?? null;
@@ -1720,6 +1777,15 @@ async function handleCallback(query) {
     }
   }
 
+  if (shouldBlockPaused({ callbackData: data, chatId })) {
+    await tg('answerCallbackQuery', {
+      callback_query_id: query.id,
+      text: 'Bot pausado — recargas suspensas.',
+      show_alert: true,
+    }).catch(() => {});
+    return;
+  }
+
   await tg('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {});
 
   if (data === 'recarga:start') {
@@ -2396,6 +2462,14 @@ async function handleMessage(msg) {
         return;
       }
     }
+
+    if (await handlePauseCommands(chatId, text)) return;
+
+    if (shouldBlockPaused({ text, chatId })) {
+      await send(chatId, PAUSE_USER_MESSAGE);
+      return;
+    }
+
     if (msg.document) {
       await handleTxtDocument(chatId, msg.document);
       return;
@@ -2422,6 +2496,9 @@ async function handleMessage(msg) {
     }
 
     if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@')) {
+      if (isBotPaused()) {
+        await send(chatId, `${PAUSE_USER_MESSAGE}\n\nComandos de consulta ainda funcionam: /status, /lista, /valores, /cartoes_fila`);
+      }
       await promptRechargeMode(chatId);
       return;
     }
@@ -2531,7 +2608,9 @@ async function handleMessage(msg) {
     }
 
     if (text === '/status' || text.startsWith('/status@')) {
-      await send(chatId, `🟢 Online · ${Math.floor(process.uptime())}s`);
+      const pause = isBotPaused();
+      const pauseLine = pause ? '\n⏸ <b>Pausado</b> — recargas suspensas' : '\n▶ Recargas ativas';
+      await send(chatId, `${pause ? '🟡' : '🟢'} Online · ${Math.floor(process.uptime())}s${pauseLine}`);
       return;
     }
 
@@ -2639,7 +2718,8 @@ async function main() {
   const proxy = describeProxy();
   console.log(
     `[bot] @${me.username} online — recarga ${isBrowserRechargeEnabled() ? 'Edge/browser' : 'API'} + banco SQLite` +
-      (proxy ? ` · proxy ${proxy}` : ''),
+      (proxy ? ` · proxy ${proxy}` : '') +
+      (isBotPaused() ? ' · PAUSADO' : ''),
   );
   await tg('deleteWebhook', { drop_pending_updates: false });
   await tg('setMyCommands', {
@@ -2651,6 +2731,8 @@ async function main() {
       { command: 'cartoes_fila', description: '🤖 Fila TXT de cartões' },
       { command: 'cartoes', description: '💳 Cartões da varredura' },
       { command: 'status', description: '🟢 Bot online' },
+      { command: 'pausar', description: '⏸ Pausar recargas (admin)' },
+      { command: 'retomar', description: '▶ Retomar recargas (admin)' },
     ],
   }).catch(() => {});
   poll();

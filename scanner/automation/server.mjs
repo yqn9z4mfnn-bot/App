@@ -12,6 +12,13 @@ import {
   startSessionFromCheckoutLink,
 } from './sessions.mjs';
 import { isBrowserLockedByEnv, normalizeBrowserName } from './browser.mjs';
+import { isBotPaused } from '../lib/bot-pause.mjs';
+
+const rejectIfPaused = (res) => {
+  if (!isBotPaused()) return false;
+  res.status(503).json({ error: 'Bot pausado — novas sessões de pagamento suspensas.' });
+  return true;
+};
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -19,6 +26,7 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
+    paused: isBotPaused(),
     headless: config.headless,
     defaultBrowser: normalizeBrowserName(config.defaultBrowser),
     browserLockedByEnv: isBrowserLockedByEnv(),
@@ -42,6 +50,7 @@ app.get('/api/session/:sessionId', (req, res) => {
 
 /** Abre link JWT minhaclaro_web no Edge e paga (sem SMS). */
 app.post('/api/session/start-web-link', async (req, res) => {
+  if (rejectIfPaused(res)) return;
   try {
     const body = req.body ?? {};
     const result = await startSessionFromWebLink(body);
@@ -53,6 +62,7 @@ app.post('/api/session/start-web-link', async (req, res) => {
 
 /** HTTP prepara checkout → Edge abre só Eldorado e paga. */
 app.post('/api/session/start-checkout-link', async (req, res) => {
+  if (rejectIfPaused(res)) return;
   try {
     const body = req.body ?? {};
     const result = await startSessionFromCheckoutLink(body);
