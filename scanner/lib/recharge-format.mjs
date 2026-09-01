@@ -330,7 +330,7 @@ export function formatRechargeResult(outcome, { footer: extraFooter, attempts, b
 /** Tentativas automáticas por rodada (clique em retry começa rodada nova). */
 export const MAX_AUTO_RECHARGE_RETRIES = Math.max(
   0,
-  Number(process.env.MAX_AUTO_RECHARGE_RETRIES) || 3,
+  Number(process.env.MAX_AUTO_RECHARGE_RETRIES) || 5,
 );
 
 export function isRechargeSuccess(outcome) {

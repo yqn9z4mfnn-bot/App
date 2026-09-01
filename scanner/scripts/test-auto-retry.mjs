@@ -87,22 +87,22 @@ check('automation retry', shouldOfferRechargeRetry(automationFail, null));
 check('throw retry', shouldOfferRechargeRetry(null, new Error('fetch failed')));
 
 check(
-  'auto 1/3',
+  'auto 1/5',
   shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 0, pendingCards: 5 }),
 );
 check(
-  'auto 2/3 ainda vai',
-  shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 2, pendingCards: 5 }),
+  'auto 4/5 ainda vai',
+  shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 4, pendingCards: 5 }),
 );
 check(
-  'auto esgotou na 3',
-  !shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 3, pendingCards: 5 }),
+  'auto esgotou na 5',
+  !shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 5, pendingCards: 5 }),
 );
 check(
   'auto sem fila',
   !shouldScheduleAutoRetry({ outcome: denied, autoRetriesUsed: 0, pendingCards: 0 }),
 );
-check('teto padrao 3', MAX_AUTO_RECHARGE_RETRIES === 3, MAX_AUTO_RECHARGE_RETRIES);
+check('teto padrao 5', MAX_AUTO_RECHARGE_RETRIES === 5, MAX_AUTO_RECHARGE_RETRIES);
 
 const a1 = summarizeRechargeAttempt({
   outcome: {
@@ -166,8 +166,8 @@ const capped = formatRechargeResult(
   },
   { footer: 'Voltou pra fila · 2175 pendente(s)', attempts: seven },
 );
-check('nao lista 7 erros', !/4\)/.test(capped) && !/\*\*\*\*1951/.test(capped), capped);
-check('so os 3 ultimos', /1\) \*\*\*\*9683/.test(capped) && /3\) \*\*\*\*6913/.test(capped), capped);
+check('nao lista 7 erros', !/6\)/.test(capped) && !/\*\*\*\*1951/.test(capped), capped);
+check('so os 5 ultimos', /1\) \*\*\*\*3490/.test(capped) && /5\) \*\*\*\*6913/.test(capped), capped);
 
 const approvedAfterFails = formatRechargeResult(
   {
