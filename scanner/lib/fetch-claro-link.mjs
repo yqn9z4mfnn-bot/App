@@ -3,6 +3,20 @@ import { proxiedFetch, describeProxy, proxyEnabled, getProxyUrl, resetProxyAgent
 import { formatFetchError, isTransientFetchError, sleep } from './transient-fetch.mjs';
 
 const DEFAULT_LINK_API = 'https://sarcastic-pertinaciously-shawnda.ngrok-free.dev';
+const MINHACLARO_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';
+
+/** Força portal minhaclaro_web (substitui controle_web no link ou monta URL a partir do JWT). */
+export function normalizeMinhaClaroWebLink(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^eyJ/i.test(s)) {
+    return `${MINHACLARO_PORTAL}/select-login?t=${s}`;
+  }
+  if (/^https?:\/\//i.test(s)) {
+    return s.replace(/\/controle_web\//gi, '/minhaclaro_web/');
+  }
+  return s;
+}
 
 export function normalizeBrMobile(raw) {
   let digits = String(raw ?? '').replace(/\D/g, '');
@@ -89,7 +103,8 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
       if (!link || (!/[?&]t=/.test(String(link)) && !/^eyJ/.test(String(link)))) {
         throw new Error('Gerador de link não devolveu JWT');
       }
-      return { msisdn: number, link: String(link) };
+      const normalized = normalizeMinhaClaroWebLink(link) || String(link);
+      return { msisdn: number, link: normalized };
     } catch (err) {
       if (err.name === 'AbortError') {
         lastErr = new Error('Timeout ao gerar o link Claro');

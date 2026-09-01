@@ -1,4 +1,5 @@
 import { config, WEB_PORTAL } from './config.mjs';
+import { normalizeMinhaClaroWebLink } from '../lib/fetch-claro-link.mjs';
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -114,17 +115,7 @@ export const selectOutroNumeroClaro = async (page, session, targetMsisdn) => {
 };
 
 /** Normaliza JWT ou URL para select-login minhaclaro_web. */
-export function normalizeMinhaClaroWebLink(raw) {
-  const s = String(raw ?? '').trim();
-  if (!s) return null;
-  if (/^eyJ/i.test(s)) {
-    return `${WEB_PORTAL}/select-login?t=${s}`;
-  }
-  if (/^https?:\/\//i.test(s)) {
-    return s.replace(/\/controle_web\//gi, '/minhaclaro_web/');
-  }
-  return s;
-}
+export { normalizeMinhaClaroWebLink };
 
 export function splitPamInfo(pamInfo) {
   const rawLine = String(pamInfo ?? '')

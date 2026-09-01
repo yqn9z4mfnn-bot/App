@@ -47,7 +47,7 @@ import {
 } from './lib/card-list.mjs';
 import { classifyCardListAction } from './lib/card-outcome.mjs';
 import { confirmClaroReload, applyClaroNokToOutcome } from './lib/claro-reload-confirm.mjs';
-import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile } from './lib/fetch-claro-link.mjs';
+import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile, normalizeMinhaClaroWebLink } from './lib/fetch-claro-link.mjs';
 import { parseLink } from './lib/parse-link.mjs';
 import { describeProxy, resetProxyAgent } from './lib/proxy.mjs';
 import { formatFetchError, isTransientFetchError, sleep } from './lib/transient-fetch.mjs';
@@ -184,12 +184,7 @@ function formatDbRowValores(row) {
 }
 
 function toLoginUrl(linkOrJwt) {
-  const s = String(linkOrJwt ?? '');
-  if (/^https?:\/\//i.test(s)) return s;
-  if (/^eyJ/.test(s)) {
-    return `https://clarorecarga.claro.com.br/minhaclaro_web/select-login?t=${s}`;
-  }
-  return s;
+  return normalizeMinhaClaroWebLink(linkOrJwt) ?? String(linkOrJwt ?? '');
 }
 
 async function tg(method, body = {}, opts = {}) {
