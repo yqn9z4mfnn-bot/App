@@ -16,7 +16,7 @@ export const config = {
     process.env.PAGAMENTO_SUCESSO_URL ??
     'https://clarorecarga.claro.com.br/whatsapp/pagamento-sucesso',
   defaultCvv: process.env.DEFAULT_CVV ?? '0000',
-  defaultCardholderMaxLen: toInt(process.env.DEFAULT_CARDHOLDER_MAX_LEN, 7),
+  defaultCardholderMaxLen: toInt(process.env.DEFAULT_CARDHOLDER_MAX_LEN, 26),
   keepBrowserOpenSeconds: toInt(process.env.KEEP_BROWSER_OPEN_SECONDS, 0),
   /** Após 3DS: 0 = fecha Edge imediatamente (segundos). */
   keepBrowserOpen3dsSeconds: toInt(process.env.KEEP_BROWSER_OPEN_3DS_SECONDS, 0),

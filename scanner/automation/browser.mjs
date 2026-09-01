@@ -1,14 +1,10 @@
-import { platform } from 'node:os';
 import { chromium, firefox, devices } from 'playwright';
 import { config } from './config.mjs';
 import { describeProxy, getPlaywrightProxy, proxyEnabled, proxyPaymentOnly } from '../lib/proxy.mjs';
 
-/** Linux: channel msedge abre o Edge nativo do SO; padrão = Chromium empacotado do Playwright. */
-const useNativeEdgeChannel = () =>
-  String(process.env.BROWSER_USE_NATIVE_EDGE ?? '0').toLowerCase() === '1';
-
-const shouldUseBundledChromiumForEdge = () =>
-  platform() === 'linux' && !useNativeEdgeChannel();
+/** Edge via Playwright: channel msedge + InPrivate (sem perfil do usuário). Chromium bundled só se BROWSER_USE_PLAYWRIGHT_CHROMIUM=1. */
+const usePlaywrightChromium = () =>
+  String(process.env.BROWSER_USE_PLAYWRIGHT_CHROMIUM ?? '0').toLowerCase() === '1';
 
 export const normalizeBrowserName = (raw) => {
   const name = String(raw ?? config.defaultBrowser).trim().toLowerCase();
@@ -48,10 +44,14 @@ export const launchBrowser = async (browserName) => {
     console.warn('[automation] PROXY_ENABLED=1 mas dados do proxy incompletos — Edge sai pelo IP da VPS');
   }
 
+  const edgeArgs = [...launchOpts.args, '--inprivate'];
+
   const launchKind =
-    name === 'edge' && shouldUseBundledChromiumForEdge()
-      ? 'chromium (Playwright bundled — evita Edge nativo no Linux)'
-      : name;
+    name === 'edge' && usePlaywrightChromium()
+      ? 'chromium (Playwright bundled)'
+      : name === 'edge'
+        ? 'edge (Playwright msedge + InPrivate)'
+        : name;
 
   console.log(
     `[automation] launch browser=${launchKind} headless=${headless} proxy=${describeProxy() || (proxyPaymentOnly() ? 'OFF até checkout' : 'OFF (IP da VPS)')}`,
@@ -61,10 +61,10 @@ export const launchBrowser = async (browserName) => {
     return chromium.launch({ ...launchOpts, channel: 'chrome' });
   }
   if (name === 'edge') {
-    if (shouldUseBundledChromiumForEdge()) {
+    if (usePlaywrightChromium()) {
       return chromium.launch(launchOpts);
     }
-    return chromium.launch({ ...launchOpts, channel: 'msedge' });
+    return chromium.launch({ ...launchOpts, channel: 'msedge', args: edgeArgs });
   }
   if (name === 'firefox') {
     return firefox.launch({
