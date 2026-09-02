@@ -54,7 +54,7 @@ echo '{"reservations":[]}' > "\$DATA"/cards-reserved.json
 
 cat > "\$DATA/.env" <<ENV
 TELEGRAM_BOT_TOKEN=\${NEW_TOKEN}
-PROXY_ENABLED=0
+PROXY_ENABLED=1
 AUTOMATION_API_URL=http://127.0.0.1:3000
 AUTOMATION_PORT=3000
 BROWSER_NAME=edge
