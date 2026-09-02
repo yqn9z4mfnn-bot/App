@@ -112,6 +112,9 @@ const mergeHttpPrepContext = (ctx, session) => {
 };
 
 const refreshWalletCredentials = async (session, ctx) => {
+  if (ctx.bemobiToken && ctx.checkoutCode) {
+    return ctx;
+  }
   const prep = session?.httpPrep;
   if (!prep?.claroSessionId || !prep?.product?.id) return ctx;
 

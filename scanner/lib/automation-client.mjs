@@ -141,6 +141,7 @@ export async function runHybridRecharge({
   productValue,
   card,
   browser = process.env.BROWSER_NAME || 'edge',
+  claroSessionId = null,
 }) {
   if (targetMsisdn && normalizeTarget(targetMsisdn) !== normalizeTarget(msisdn)) {
     // recarga cruzada suportada no checkout-link
@@ -158,6 +159,7 @@ export async function runHybridRecharge({
     rechargeValue,
     pamInfo,
     browser,
+    claroSessionId: claroSessionId || undefined,
   });
 
   const pr = data.paymentResult ?? {};

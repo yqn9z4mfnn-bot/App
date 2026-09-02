@@ -563,6 +563,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
       msisdn: accessNumber,
       targetMsisdn: rechargeTargetNumber,
       valueCents,
+      claroSessionId: payload?.claroSessionId ?? payload?.sessionId ?? null,
     });
     prep.httpLatencyMs = Date.now() - httpStarted;
     timings.httpPrepMs = prep.httpLatencyMs;

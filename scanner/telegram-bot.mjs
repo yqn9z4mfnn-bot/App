@@ -1158,6 +1158,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
             targetMsisdn,
             productValue: flow.productValue,
             card,
+            claroSessionId: entry.sessionId,
           })
         : await runBrowserRecharge({
             loginUrl: toLoginUrl(entry.link),

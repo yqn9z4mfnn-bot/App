@@ -12,7 +12,13 @@ import { describeProxy, proxyEnabled, proxyPaymentOnly } from './proxy.mjs';
  * @param {string} [opts.targetMsisdn] — destino da recarga (padrão = msisdn)
  * @param {number} opts.valueCents
  */
-export async function prepareCheckoutViaHttp({ loginUrl, msisdn, targetMsisdn = null, valueCents }) {
+export async function prepareCheckoutViaHttp({
+  loginUrl,
+  msisdn,
+  targetMsisdn = null,
+  valueCents,
+  claroSessionId = null,
+}) {
   const accessNumber = normalizeBrMobile(msisdn);
   const rechargeTarget = normalizeBrMobile(targetMsisdn ?? msisdn);
   if (!accessNumber) throw new Error('msisdn inválido');
@@ -27,7 +33,12 @@ export async function prepareCheckoutViaHttp({ loginUrl, msisdn, targetMsisdn = 
     `[checkout-http] abrindo JWT via API Claro proxy=${proxyPaymentOnly() ? 'OFF (só pagamento)' : describeProxy() || (proxyEnabled() ? 'incompleto' : 'OFF')}`,
   );
 
-  const session = await createSession(parsed.jwt);
+  const session = claroSessionId
+    ? { id: claroSessionId }
+    : await createSession(parsed.jwt);
+  if (claroSessionId) {
+    console.log(`[checkout-http] reutilizando sessão Claro ${String(claroSessionId).slice(0, 8)}…`);
+  }
   const productMsisdn = accessNumber;
   const productsRes = await fetchRechargeProducts(session.id, productMsisdn);
   const products = productsRes.body?.rechargeValues ?? [];
