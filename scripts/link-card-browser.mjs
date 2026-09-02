@@ -64,6 +64,59 @@ const logApi = (host) => {
 
 logApi('claro-recarga-api\\.m4u\\.com\\.br|eldorado\\.m4u\\.com\\.br');
 
+function getSession() {
+  const entry = responses.find((r) => r.url.includes('/sessions/') && r.method === 'POST' && r.status === 200);
+  if (!entry?.body) return null;
+  try { return JSON.parse(entry.body); } catch { return null; }
+}
+
+function creditCardsFromPmBody(body) {
+  try {
+    return JSON.parse(body || '[]').find((x) => x.type === 'credit')?.elements || [];
+  } catch { return []; }
+}
+
+async function linkCardViaApi() {
+  if (!pan || linkedOnly) return false;
+  const session = getSession();
+  if (!session?.id) return false;
+  const auth = { Authorization: `claro ${session.id}`, Channel: 'whatsapp', Accept: 'application/json' };
+  const identifier = session.identifier || phone;
+
+  const pmRes = await fetch(`https://claro-recarga-api.m4u.com.br/customers/${identifier}/payment-methods`, { headers: auth });
+  const pmText = await pmRes.text();
+  responses.push({ method: 'GET', url: pmRes.url, status: pmRes.status, body: pmText });
+  console.log('[api-link] payment-methods', pmRes.status);
+  if (creditCardsFromPmBody(pmText).some((c) => c.lastDigits === last4)) {
+    console.log('[api-link] cartão', last4, 'já vinculado');
+    return true;
+  }
+
+  const ccRes = await fetch('https://eldorado.m4u.com.br/v1/cc', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({ pan, month, year, partner: 'CLARO' }).toString(),
+  });
+  const ccText = await ccRes.text();
+  responses.push({ method: 'POST', url: ccRes.url, status: ccRes.status, body: ccText });
+  console.log('[api-link] tokenize', ccRes.status, ccText.slice(0, 120));
+  if (ccRes.status !== 200) return false;
+  let cc;
+  try { cc = JSON.parse(ccText); } catch { return false; }
+  const cardKey = cc?.card?.key;
+  if (!cardKey) return false;
+
+  const linkRes = await fetch(`https://claro-recarga-api.m4u.com.br/customers/${identifier}/payment-methods`, {
+    method: 'POST',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'credit', data: { token: cardKey } }),
+  });
+  const linkText = await linkRes.text();
+  responses.push({ method: 'POST', url: linkRes.url, status: linkRes.status, body: linkText });
+  console.log('[api-link] vincular', linkRes.status, linkText.slice(0, 200));
+  return linkRes.status >= 200 && linkRes.status < 300;
+}
+
 async function snap(label) {
   console.log(`\n--- ${label} ---`, page.url());
   console.log((await page.locator('body').innerText()).slice(0, 800).replace(/\n+/g, '\n'));
@@ -138,24 +191,27 @@ async function linkNewCardIfNeeded() {
   if (!pan || linkedOnly) return;
 
   const pm = responses.find((r) => r.url.includes('/payment-methods') && r.method === 'GET' && r.status === 200);
-  let hasSaved = false;
-  try {
-    const cards = JSON.parse(pm?.body || '[]').find((x) => x.type === 'credit')?.elements || [];
-    hasSaved = cards.some((c) => c.lastDigits === last4);
-  } catch {}
+  let hasSaved = creditCardsFromPmBody(pm?.body).some((c) => c.lastDigits === last4);
 
   if (hasSaved || (last4 && await page.locator(`text=/${last4}/`).first().isVisible({ timeout: 2000 }).catch(() => false))) {
     console.log('[ui] cartão', last4, 'já vinculado');
     return;
   }
 
+  // Vincular via API (formulário criar-cartao não expõe inputs no Playwright)
+  if (await linkCardViaApi()) {
+    await page.goto('https://clarorecarga.claro.com.br/whatsapp/pagamento-cartao', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
+    return;
+  }
+
   await page.goto('https://clarorecarga.claro.com.br/whatsapp/criar-cartao', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(5000);
   await snap('form-cartão');
 
   const textInputs = page.locator('input:visible:not([type="checkbox"]):not([type="hidden"])');
-  const count = await textInputs.count();
-  for (let i = 0; i < count; i++) {
+  const inputCount = await textInputs.count();
+  for (let i = 0; i < inputCount; i++) {
     const el = textInputs.nth(i);
     const ph = ((await el.getAttribute('placeholder')) || '').toLowerCase();
     const max = Number(await el.getAttribute('maxlength') || 99);
@@ -164,8 +220,8 @@ async function linkNewCardIfNeeded() {
     if (/cart|número|numero|pan/.test(ph) || max >= 16) value = pan;
     else if (/valid|mm|expir|venc/.test(ph)) value = `${month}/${year2}`;
     else if (/cvv|cvc|segur/.test(ph) || max === 3) value = linkCvv;
-    else if (i === 0 && count >= 2) value = pan;
-    else if (i === 1 && count >= 2) value = `${month}/${year2}`;
+    else if (i === 0 && inputCount >= 2) value = pan;
+    else if (i === 1 && inputCount >= 2) value = `${month}/${year2}`;
 
     if (value) {
       await el.click();
@@ -204,12 +260,7 @@ await linkNewCardIfNeeded();
 // Abortar se cartão não vinculado antes de pagar
 const pmPost = responses.filter((r) => r.url.includes('/payment-methods'));
 const linkedOk = pmPost.some((r) => r.method === 'POST' && r.status < 300)
-  || pmPost.some((r) => {
-    try {
-      const cards = JSON.parse(r.body || '[]').find((x) => x.type === 'credit')?.elements || [];
-      return cards.some((c) => c.lastDigits === last4);
-    } catch { return false; }
-  });
+  || pmPost.some((r) => creditCardsFromPmBody(r.body).some((c) => c.lastDigits === last4));
 if (pan && !linkedOk && !linkedOnly) {
   writeFileSync(join(OUT, 'link-card-browser-result.json'), JSON.stringify({
     phone, pan: `${pan.slice(0, 6)}...${last4}`, payCvv, valueCents,
