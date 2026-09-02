@@ -8,12 +8,14 @@ const OUT = join(__dirname, '..', 'output');
 
 const phone = process.argv[2];
 const otp = process.argv[3];
-const pan = process.argv[4];
-const month = process.argv[5];
-const year = process.argv[6];
-const payCvv = process.argv[7] || '0000';
+const payCvv = (process.argv[7] && process.argv[7] !== '_') ? process.argv[7] : '0000';
 const valueCents = /^\d+$/.test(process.argv[8] || '') ? Number(process.argv[8]) : 3500;
 const skipSms = process.argv.includes('--skip-sms');
+const linkedOnly = process.argv.includes('--linked-only');
+const panRaw = linkedOnly ? '' : (process.argv[4] && process.argv[4] !== '_' ? process.argv[4] : '');
+const month = process.argv[5] && process.argv[5] !== '_' ? process.argv[5] : '';
+const year = process.argv[6] && process.argv[6] !== '_' ? process.argv[6] : '';
+const pan = panRaw;
 
 if (!phone || !otp) {
   console.error('Uso: node scripts/link-card-browser.mjs <telefone> <otp> [pan] [mes] [ano] [cvv_pagamento] [valor_centavos] [--skip-sms]');
@@ -164,7 +166,7 @@ const cvvInput = page.locator('input[type="password"], input[type="tel"], input[
 if (await cvvInput.isVisible({ timeout: 8000 }).catch(() => false)) {
   await cvvInput.fill(payCvv);
   await snap('cvv preenchido');
-  await clickIfVisible('Continuar|Confirmar|Pagar|Recarregar', 5000);
+  await clickIfVisible('Concluir|CONCLUIR|Continuar|Confirmar|Pagar|Recarregar', 8000);
   await page.waitForTimeout(15000);
 } else {
   // tentar CVV em qualquer input visível curto
