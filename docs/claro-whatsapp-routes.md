@@ -269,15 +269,17 @@ Content-Type: application/json
 - `422` — sessão encrypted sem token JWT
 - `429 Too Many Requests` — rate limit em `POST /sms-tokens/` ou `POST /sessions/` (aguardar ~1–2 min)
 
-**Resposta de sucesso (`POST /sessions/` com OTP válido):**
+**Resposta de sucesso (`POST /sessions/` com OTP válido) — capturada em 2026-09-02:**
 
 ```json
 {
-  "id": "9ea41a04-23e2-47a4-bbda-2b423a824673",
-  "partnerExternalId": "73eb4bb7-5a87-4038-b5f3-1fc623378d75",
+  "id": "07f0b2e9-587c-4e12-9a68-a2508af1cbf9",
+  "partnerExternalId": "be2ee411-145b-4116-ae81-cbf0f36a8d09",
   "identifier": "27992485949"
 }
 ```
+
+> OTP `53627` validou com sucesso via API. Endpoints `/customers/{identifier}/*` retornaram **503** com `Customer.createFromPayload — object null` (registro de cliente ausente no backend M4U após login API-only; fluxo browser completo pode provisionar o cliente).
 
 | Campo | Uso |
 |-------|-----|

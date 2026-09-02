@@ -20,11 +20,14 @@ const log = [];
 
 async function call(method, path, body, headers = {}) {
   const url = path.startsWith('http') ? path : BASE + path;
-  const res = await fetch(url, {
+  const init = {
     method,
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...headers },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', Channel: 'whatsapp', ...headers },
+  };
+  if (body !== undefined && method !== 'GET' && method !== 'HEAD') {
+    init.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, init);
   const text = await res.text();
   let json = null;
   try { json = JSON.parse(text); } catch {}
@@ -61,7 +64,7 @@ const endpoints = [
   ['GET', `/customers/${identifier}/products`],
   ['GET', `/customers/${identifier}/payment-methods`],
   ['GET', `/customers/${identifier}/recharges`],
-  ['GET', `/customers/${identifier}/recharges`, null, { reloadType: 'recurring' }],
+  ['GET', `/customers/${identifier}/recharges?reloadType=recurring`],
   ['POST', `/customers/${identifier}/smartcheckout/v2/url`, { channel: ['whatsapp', 'CLARO_WHATSAPP'], msisdn: identifier }],
   ['POST', '/recharges/encrypted', { payload: 'placeholder' }],
   ['POST', '/loop/public/events', {
@@ -73,7 +76,12 @@ const endpoints = [
 ];
 
 for (const [method, path, body, extra] of endpoints) {
-  await call(method, path, body, { ...auth, ...(extra || {}) });
+  try {
+    await call(method, path, body, { ...auth, ...(extra || {}) });
+  } catch (err) {
+    log.push({ method, path, error: String(err) });
+    console.error(method, path, err.message);
+  }
 }
 
 writeFileSync(join(OUT_DIR, 'whatsapp-otp-complete.json'), JSON.stringify({
