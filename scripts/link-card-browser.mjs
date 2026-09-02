@@ -98,9 +98,20 @@ await page.locator('input[type="tel"]').first().fill(phone);
 await clickIfVisible('Continuar');
 await page.waitForTimeout(2500);
 
-await page.locator('input[placeholder*="código" i]').first().fill(otp);
+await otpInput.fill(otp);
 await clickIfVisible('Continuar|Confirmar|Avançar');
-await page.waitForTimeout(10000);
+await page.waitForTimeout(8000);
+
+const sessionOk = responses.some((r) => r.url.includes('/sessions/') && r.method === 'POST' && r.status === 200);
+if (!sessionOk) {
+  writeFileSync(join(OUT, 'link-card-browser-result.json'), JSON.stringify({
+    phone, otp, payCvv, valueCents, error: 'session_failed', responses: responses.slice(-5),
+  }, null, 2));
+  console.error('Login OTP falhou — sessão não criada');
+  await browser.close();
+  process.exit(1);
+}
+
 await snap('pós-login');
 
 // Aceitar cookies se bloquear cliques
@@ -114,12 +125,14 @@ if (await creditOpt.isVisible({ timeout: 8000 }).catch(() => false)) {
   console.log('[ui] Cartão de Crédito selecionado');
 }
 
-// Selecionar cartão salvo Elo 6714
-const savedCard = page.getByText(/6714|ELO/i).first();
-if (await savedCard.isVisible({ timeout: 5000 }).catch(() => false)) {
-  await savedCard.click();
-  await page.waitForTimeout(2000);
-  console.log('[ui] cartão salvo selecionado');
+// Selecionar cartão salvo Elo 6714 (somente em contexto de pagamento)
+if (/numero|pagamento|valores|selecionar-valor/.test(page.url())) {
+  const savedCard = page.locator('text=/6714/').first();
+  if (await savedCard.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await savedCard.click();
+    await page.waitForTimeout(2000);
+    console.log('[ui] cartão 6714 selecionado');
+  }
 }
 
 await clickIfVisible('Continuar|Confirmar|Avançar|Recarregar', 3000);
