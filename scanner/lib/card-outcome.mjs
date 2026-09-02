@@ -3,6 +3,26 @@ import { normalizeRechargeStatus } from './recharge-events.mjs';
 
 const stopOnVbv = () => String(process.env.THREEDS_STOP_ON_VBV ?? '0').toLowerCase() === '1';
 
+/** 3DS/VBV real (inclui timeout "3DS sem confirmação automática"). */
+export function isThreedsUnconfirmedOutcome(outcome, msg = '') {
+  const result = outcome?.result ?? {};
+  const raw = outcome?.automation?.raw ?? {};
+  const blob = [
+    msg,
+    result.message,
+    result.negativeReason,
+    raw.gateMessage,
+    raw.message,
+    result.threeDsHint,
+    raw.threeDs?.hint,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const st = String(result.status ?? raw.status ?? '').toUpperCase();
+  if (st === '3DS_REQUIRED' || st === '3DS') return true;
+  return /3ds sem confirma[cç][aã]o|3ds_required|valida[cç][aã]o 3ds|\bvbv\b/i.test(blob);
+}
+
 /** Classifica o que fazer com o cartão da fila TXT após a recarga. */
 
 export function classifyCardListAction({ outcome, error } = {}) {
@@ -29,7 +49,12 @@ export function classifyCardListAction({ outcome, error } = {}) {
 
   const status = normalizeRechargeStatus(outcome, error);
   if (status === 'success') return 'approved';
-  if (status === '3ds') return stopOnVbv() ? 'consumed' : 'return';
+  if (
+    status === '3ds' ||
+    ((status === 'fail' || status === 'error') && isThreedsUnconfirmedOutcome(outcome, msg))
+  ) {
+    return stopOnVbv() ? 'consumed' : 'return';
+  }
 
   // INVALID_STATE / Click-to-Pay: devolve à fila (costuma ser SRC/automação, não cartão morto).
   if (gateCode === 'INVALID_STATE' || isUnusableCardMessage(msg)) {
@@ -86,7 +111,11 @@ export function cardListActionLabel(action, { outcome } = {}) {
   if (action === 'consumed') {
     const st = String(outcome?.result?.status ?? '').toUpperCase();
     const rawSt = String(outcome?.automation?.raw?.status ?? '').toLowerCase();
-    if (st === '3DS_REQUIRED' || rawSt === '3ds_required') {
+    if (
+      st === '3DS_REQUIRED' ||
+      rawSt === '3ds_required' ||
+      isThreedsUnconfirmedOutcome(outcome, outcome?.result?.message ?? '')
+    ) {
       return '🔐 3DS acionado → salvo em cards-consumed.txt';
     }
     return '🚫 negado na gate → salvo em cards-consumed.txt';

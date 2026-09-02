@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classifyCardListAction } from '../lib/card-outcome.mjs';
+import { classifyCardListAction, isThreedsUnconfirmedOutcome } from '../lib/card-outcome.mjs';
 import { mapAutomationPaymentStatus } from '../lib/automation-client.mjs';
 import { createCardListStore } from '../lib/card-list.mjs';
 import { formatCardMask } from '../lib/card-parse.mjs';
@@ -123,6 +123,26 @@ const cases = [
     name: '3DS volta pra fila (sem parar no VBV)',
     input: { outcome: outcome('3DS_REQUIRED', { rawStatus: '3ds_required' }) },
     expected: 'return',
+    env: { THREEDS_STOP_ON_VBV: '0' },
+  },
+  {
+    name: '3DS consome da fila (THREEDS_STOP_ON_VBV=1)',
+    input: { outcome: outcome('3DS_REQUIRED', { rawStatus: '3ds_required' }) },
+    expected: 'consumed',
+    env: { THREEDS_STOP_ON_VBV: '1' },
+  },
+  {
+    name: '3DS sem confirmação automática consome',
+    input: {
+      outcome: outcome('AUTOMATION_FAIL', {
+        rawStatus: 'error',
+        gateCode: 'ok',
+        message: '3DS sem confirmação automática',
+        gateMessage: '3DS sem confirmação automática',
+      }),
+    },
+    expected: 'consumed',
+    env: { THREEDS_STOP_ON_VBV: '1' },
   },
   {
     name: '3DS + checkout/success é aprovado',
@@ -225,11 +245,30 @@ if (formatCardMask('1234') !== '****1234') {
 }
 
 for (const c of cases) {
+  const saved = {};
+  for (const [k, v] of Object.entries(c.env ?? {})) {
+    saved[k] = process.env[k];
+    process.env[k] = v;
+  }
   const got = classifyCardListAction(c.input);
+  for (const k of Object.keys(saved)) {
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
+  }
   if (got !== c.expected) {
     failed += 1;
     console.error('FAIL classify', c.name, { expected: c.expected, got });
   }
+}
+
+if (
+  !isThreedsUnconfirmedOutcome(
+    outcome('AUTOMATION_FAIL', { message: '3DS sem confirmação automática' }),
+    '3DS sem confirmação automática',
+  )
+) {
+  failed += 1;
+  console.error('FAIL isThreedsUnconfirmedOutcome detecta timeout 3DS');
 }
 
 for (const c of mapCases) {
