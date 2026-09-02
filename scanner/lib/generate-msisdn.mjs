@@ -1,5 +1,9 @@
-import { listDistinctDdds, pickRandomMsisdnByDdd } from './numbers-db.mjs';
-import { fetchClaroLoginLink, normalizeBrMobile } from './fetch-claro-link.mjs';
+import { listDistinctDdds, pickRandomMsisdnByDdd, pickRandomStoredLogin } from './numbers-db.mjs';
+import {
+  fetchClaroLoginLink,
+  normalizeBrMobile,
+  normalizeMinhaClaroWebLink,
+} from './fetch-claro-link.mjs';
 import { getPaymentProxyUrl, proxyEnabled, proxyAllTraffic } from './proxy.mjs';
 import { isTransientFetchError, sleep } from './transient-fetch.mjs';
 
@@ -63,6 +67,16 @@ export async function generateLoginMsisdn({
       }
     }
   }
+
+  const stored = pickRandomStoredLogin();
+  if (stored?.link) {
+    const link = normalizeMinhaClaroWebLink(stored.link) || String(stored.link);
+    console.warn(
+      `[generate-msisdn] API falhou (${lastErr?.message || 'sem detalhe'}) — usando login do banco ${stored.msisdn}`,
+    );
+    return { msisdn: stored.msisdn, link, attempt: 0, source: 'db_stored' };
+  }
+
   throw new Error(
     `Não consegui gerar número com link após ${maxAttempts} tentativas: ${lastErr?.message || lastErr}`,
   );

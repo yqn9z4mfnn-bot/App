@@ -246,6 +246,36 @@ export function pickRandomMsisdnByDdd(ddd) {
   return row?.msisdn ?? null;
 }
 
+/** Login aleatório já salvo no banco (status ok + link JWT/URL). */
+export function pickRandomStoredLogin({ excludeMsisdns = [] } = {}) {
+  const exclude = [
+    ...new Set(
+      (excludeMsisdns || [])
+        .map((n) => String(n ?? '').replace(/\D/g, ''))
+        .filter(Boolean),
+    ),
+  ];
+  const row = exclude.length
+    ? getDb()
+        .prepare(
+          `SELECT msisdn, link FROM numbers
+           WHERE status = 'ok'
+             AND link IS NOT NULL
+             AND msisdn NOT IN (${exclude.map(() => '?').join(', ')})
+           ORDER BY RANDOM() LIMIT 1`,
+        )
+        .get(...exclude)
+    : getDb()
+        .prepare(
+          `SELECT msisdn, link FROM numbers
+           WHERE status = 'ok' AND link IS NOT NULL
+           ORDER BY RANDOM() LIMIT 1`,
+        )
+        .get();
+  if (!row?.msisdn || !row?.link) return null;
+  return { msisdn: row.msisdn, link: row.link };
+}
+
 export function pickLinkForValue(valueCents, { excludeMsisdn, excludeMsisdns } = {}) {
   const cents = Number(valueCents);
   if (!Number.isFinite(cents) || cents <= 0) return null;
