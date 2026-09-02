@@ -218,9 +218,36 @@ sequenceDiagram
 
 ---
 
-## 7. Próximo passo para mapeamento completo autenticado
+## 7. Fluxo OTP (número + SMS) — confirmado
 
-Para capturar **todas** as requests do fluxo até pagamento, é necessário um **link JWT válido** (`select-login?t=...`) ou número real com OTP. Com isso dá para mapear:
+Fluxo testado com número real na landing WhatsApp:
+
+1. Selecionar valor → clicar **Recarregar** (ex.: R$ 20)
+2. Informar número no campo **"Digite seu nº claro"**
+3. Clicar **Continuar**
+4. API dispara SMS:
+
+```http
+POST https://claro-recarga-api.m4u.com.br/sms-tokens/
+Content-Type: application/json
+
+{"msisdn":"27992485949"}
+```
+
+**Resposta:** `204 No Content` (SMS enviado)
+
+5. UI exibe campo **"Digite o código"** (OTP)
+6. Após validar OTP → sessão autenticada → `/products`, `/payment-methods`, etc.
+
+Script para captura autenticada:
+
+```bash
+node scripts/capture-whatsapp-otp.mjs 27992485949 <CODIGO_SMS>
+```
+
+## 8. Próximo passo
+
+Com o **código SMS** dá para mapear:
 
 - resposta de `/products` (valores e IDs)
 - `/payment-methods` (cartões vinculados)
