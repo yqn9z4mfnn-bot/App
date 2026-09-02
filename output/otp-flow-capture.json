@@ -1,0 +1,195 @@
+{
+  "phone": "27992485949",
+  "uiBefore": {
+    "url": "https://clarorecarga.claro.com.br/whatsapp/landing",
+    "text": "Recarregue e ganhe bônus\n\nEscolha o valor da sua recarga e aproveite bônus exclusivos!\n\nR$\n20\n\nVálido por 30 dias\n\nRecarregar\nR$\n25\n\n+1GB de bônus\n\nVálido por 30 dias\n\nRecarregar\nR$\n30\n\n+2GB de bônus\n\nVálido por 60 dias\n\nRecarregar\nR$\n35\n\n+3GB de bônus\n\nVálido por 90 dias\n\nRecarregar\nVer mais valores\nClaro TV Pré-pago\n\nProgramação do seu jeito, sem mensalidade e sem fidelidade.\n\nInicial\n\n+ de 40 canais\n\nCanais inclusos\n\nRecargas de 30, 60, 90 e 180 dias\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n20\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMelhor opção\n\nLight\n\n+ de 90 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n60\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMix\n\n+ de 130 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n90\n,00\n\nValidade 30 dias\n\nRecarregar\n\nTop\n\n+ de 150 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n110\n,00\n\nValidade 30 dias\n\nRecarregar\n\nInicial\n\n+ de 40 canais\n\nCanais inclusos\n\nRecargas de 30, 60, 90 e 180 dias\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n20\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMelhor opção\n\nLight\n\n+ de 90 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n60\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMix\n\n+ de 130 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n90\n,00\n\nValidade 30 dias\n\nRecarregar\n\nTop\n\n+ de 150 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n110\n,00\n\nValidade 30 dias\n\nRecarregar\n\nInicial\n\n+ de 40 canais\n\nCanais inclusos\n\nRecargas de 30, 60, 90 e 180 dias\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n20\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMelhor opção\n\nLight\n\n+ de 90 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n60\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMix\n\n+ de 130 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n90\n,00\n\nValidade 30 dias\n\nRecarregar\n\nTop\n\n+ de 150 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n110\n,00\n\nValidade 30 dias\n\nRecarregar\nOutras ofertas para você\nMinha Claro App\n\nBaixe o Minha Claro App e receba até 10GB de internet. Aproveite para gerenciar tudo em um só lugar.\n\nEu quero\nPrezão Claro\n\nPeça seu chip Claro sem sair de casa, com frete grátis em todas as ofertas!\n\nOfertas a partir de:\nR$\n20\n,99\nno cartão de crédito ou Pix\nEu quero\nVem ser Flex\n\nSeu plano móvel 100% digital. Gerencie tudo pelo app e escolha como pagar: cartão de crédito, Pix ou recarga.\n\nEu quero\nOferta Exclusiva Para Cliente Pré\n\nClaro controle perfeito para o seu d",
+    "buttons": [
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Ver mais valores",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Eu quero",
+      "Eu quero",
+      "Eu quero"
+    ],
+    "inputs": [
+      {
+        "type": "tel",
+        "placeholder": "Digite seu nº claro",
+        "value": "(27) 99248-5949"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "text",
+        "placeholder": "Pesquisar...",
+        "value": ""
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      }
+    ]
+  },
+  "uiAfter": {
+    "url": "https://clarorecarga.claro.com.br/whatsapp/landing",
+    "text": "Recarregue e ganhe bônus\n\nEscolha o valor da sua recarga e aproveite bônus exclusivos!\n\nR$\n20\n\nVálido por 30 dias\n\nRecarregar\nR$\n25\n\n+1GB de bônus\n\nVálido por 30 dias\n\nRecarregar\nR$\n30\n\n+2GB de bônus\n\nVálido por 60 dias\n\nRecarregar\nR$\n35\n\n+3GB de bônus\n\nVálido por 90 dias\n\nRecarregar\nVer mais valores\nClaro TV Pré-pago\n\nProgramação do seu jeito, sem mensalidade e sem fidelidade.\n\nInicial\n\n+ de 40 canais\n\nCanais inclusos\n\nRecargas de 30, 60, 90 e 180 dias\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n20\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMelhor opção\n\nLight\n\n+ de 90 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n60\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMix\n\n+ de 130 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n90\n,00\n\nValidade 30 dias\n\nRecarregar\n\nTop\n\n+ de 150 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n110\n,00\n\nValidade 30 dias\n\nRecarregar\n\nInicial\n\n+ de 40 canais\n\nCanais inclusos\n\nRecargas de 30, 60, 90 e 180 dias\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n20\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMelhor opção\n\nLight\n\n+ de 90 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n60\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMix\n\n+ de 130 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n90\n,00\n\nValidade 30 dias\n\nRecarregar\n\nTop\n\n+ de 150 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n110\n,00\n\nValidade 30 dias\n\nRecarregar\n\nInicial\n\n+ de 40 canais\n\nCanais inclusos\n\nRecargas de 30, 60, 90 e 180 dias\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n20\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMelhor opção\n\nLight\n\n+ de 90 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n60\n,00\n\nValidade 30 dias\n\nRecarregar\n\nMix\n\n+ de 130 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n90\n,00\n\nValidade 30 dias\n\nRecarregar\n\nTop\n\n+ de 150 canais\n\nCanais inclusos\n\nRecarregue quando quiser\n\nValor mensal\n\nR$\n110\n,00\n\nValidade 30 dias\n\nRecarregar\nOutras ofertas para você\nMinha Claro App\n\nBaixe o Minha Claro App e receba até 10GB de internet. Aproveite para gerenciar tudo em um só lugar.\n\nEu quero\nPrezão Claro\n\nPeça seu chip Claro sem sair de casa, com frete grátis em todas as ofertas!\n\nOfertas a partir de:\nR$\n20\n,99\nno cartão de crédito ou Pix\nEu quero\nVem ser Flex\n\nSeu plano móvel 100% digital. Gerencie tudo pelo app e escolha como pagar: cartão de crédito, Pix ou recarga.\n\nEu quero\nOferta Exclusiva Para Cliente Pré\n\nClaro controle perfeito para o seu d",
+    "buttons": [
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Ver mais valores",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Recarregar",
+      "Eu quero",
+      "Eu quero",
+      "Eu quero"
+    ],
+    "inputs": [
+      {
+        "type": "tel",
+        "placeholder": "Digite o código",
+        "value": ""
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "text",
+        "placeholder": "Pesquisar...",
+        "value": ""
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      },
+      {
+        "type": "checkbox",
+        "placeholder": "",
+        "value": "on"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/loop/public/events",
+      "postData": "{\"type\":\"pageview\",\"msisdn\":\"21999999999\",\"session_id\":\"e2a5ba78-515a-422a-885d-9d539fd94bc5\",\"tags\":{\"channel\":\"web\",\"portal\":\"claro_whatsapp\",\"realm\":\"claro_recarga\",\"utm_source\":\"frontend_claro_recarga\",\"page_name\":\"landing_page\"}}",
+      "type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/loop/public/events",
+      "postData": "{\"type\":\"click\",\"msisdn\":\"21999999999\",\"session_id\":\"e2a5ba78-515a-422a-885d-9d539fd94bc5\",\"tags\":{\"channel\":\"web\",\"portal\":\"claro_whatsapp\",\"realm\":\"claro_recarga\",\"utm_source\":\"frontend_claro_recarga\",\"page_name\":\"landing_page\",\"action\":\"select-recharge-value\",\"transaction_amount\":\"2000\"}}",
+      "type": "xhr"
+    },
+    {
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/sms-tokens/",
+      "postData": "{\"msisdn\":\"27992485949\"}",
+      "type": "xhr"
+    }
+  ],
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://vc.hotjar.io/sessions/1335869?s=0.25&r=0.09403350369281382",
+      "status": 204,
+      "body": ""
+    },
+    {
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/loop/public/events",
+      "status": 201,
+      "body": "{\"status\":\"Event sent\"}"
+    },
+    {
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/loop/public/events",
+      "status": 201,
+      "body": "{\"status\":\"Event sent\"}"
+    },
+    {
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/sms-tokens/",
+      "status": 204,
+      "body": ""
+    }
+  ]
+}
