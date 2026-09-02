@@ -9,6 +9,9 @@ const OUT = join(__dirname, '..', 'output');
 const phone = process.argv[2];
 const otp = process.argv[3];
 const payCvv = (process.argv[7] && process.argv[7] !== '_') ? process.argv[7] : '0000';
+const linkCvv = (process.argv.includes('--link-cvv') && process.argv[process.argv.indexOf('--link-cvv') + 1])
+  || process.env.CARD_LINK_CVV
+  || '999';
 const valueCents = /^\d+$/.test(process.argv[8] || '') ? Number(process.argv[8]) : 3500;
 const skipSms = process.argv.includes('--skip-sms');
 const linkedOnly = process.argv.includes('--linked-only');
@@ -21,7 +24,7 @@ const year2 = year.length === 4 ? year.slice(-2) : year;
 
 if (!phone || !otp) {
   console.error('Uso: node scripts/link-card-browser.mjs <telefone> <otp> [pan] [mes] [ano] [cvv_pagamento] [valor_centavos] [--skip-sms]');
-  console.error('  Sem pan: usa cartão já vinculado. Com pan: cadastra antes de pagar.');
+  console.error('  Vincular cartão: CVV 999 (cadastro). Pagamento: CVV 0000 (confirmação).');
   process.exit(1);
 }
 
@@ -160,7 +163,7 @@ async function linkNewCardIfNeeded() {
     let value = null;
     if (/cart|número|numero|pan/.test(ph) || max >= 16) value = pan;
     else if (/valid|mm|expir|venc/.test(ph)) value = `${month}/${year2}`;
-    else if (/cvv|cvc|segur/.test(ph) || max === 3) value = '999';
+    else if (/cvv|cvc|segur/.test(ph) || max === 3) value = linkCvv;
     else if (i === 0 && count >= 2) value = pan;
     else if (i === 1 && count >= 2) value = `${month}/${year2}`;
 
@@ -193,7 +196,7 @@ async function linkNewCardIfNeeded() {
 
   const linked = responses.some((r) => r.url.includes('/payment-methods') && r.method === 'POST' && r.status < 300);
   const tokenized = responses.some((r) => /\/v1\/cc\b/.test(r.url) && r.status === 200);
-  console.log('[ui] vincular:', { linked, tokenized, last4 });
+  console.log('[ui] vincular:', { linked, tokenized, last4, linkCvv });
 }
 
 await linkNewCardIfNeeded();
@@ -249,7 +252,7 @@ for (let i = 0; i < cvvCount; i++) {
     await el.click();
     await el.fill('');
     await el.pressSequentially(payCvv, { delay: 50 });
-    console.log('[ui] CVV preenchido no input', i, 'maxlength', max, 'valor', payCvv);
+    console.log('[ui] CVV pagamento preenchido no input', i, 'maxlength', max, 'valor', payCvv);
     break;
   }
 }
@@ -278,6 +281,7 @@ for (const route of ['/whatsapp/confirmacao', '/whatsapp/pagamento-sucesso', '/w
 writeFileSync(join(OUT, 'link-card-browser-result.json'), JSON.stringify({
   phone,
   pan: pan ? `${pan.slice(0, 6)}...${pan.slice(-4)}` : null,
+  linkCvv,
   payCvv,
   valueCents,
   finalUrl: page.url(),

@@ -17,7 +17,8 @@ const valueCents = Number(process.argv[8] || 3500);
 const productId = process.argv[9] || '08d6a618-5708-45a6-bb6d-7aaa9d6d107f';
 
 if (!phone || !otp || !pan || !month || !year) {
-  console.error('Uso: node scripts/link-card-and-recharge.mjs <telefone> <otp> <pan> <mes> <ano> [cvv] [valor_centavos]');
+  console.error('Uso: node scripts/link-card-and-recharge.mjs <telefone> <otp> <pan> <mes> <ano> [cvv_pagamento] [valor_centavos]');
+  console.error('  Vincular: token Eldorado (sem CVV). Pagamento: cvv_pagamento padrão 0000.');
   process.exit(1);
 }
 
