@@ -16,6 +16,8 @@ const panRaw = linkedOnly ? '' : (process.argv[4] && process.argv[4] !== '_' ? p
 const month = process.argv[5] && process.argv[5] !== '_' ? process.argv[5] : '';
 const year = process.argv[6] && process.argv[6] !== '_' ? process.argv[6] : '';
 const pan = panRaw;
+const last4 = pan ? pan.slice(-4) : '';
+const year2 = year.length === 4 ? year.slice(-2) : year;
 
 if (!phone || !otp) {
   console.error('Uso: node scripts/link-card-browser.mjs <telefone> <otp> [pan] [mes] [ano] [cvv_pagamento] [valor_centavos] [--skip-sms]');
@@ -67,6 +69,7 @@ async function snap(label) {
 async function clickIfVisible(text, timeout = 5000) {
   const btn = page.getByRole('button', { name: new RegExp(text, 'i') }).first();
   if (await btn.isVisible({ timeout }).catch(() => false)) {
+    if (await btn.isDisabled().catch(() => true)) return false;
     await btn.click();
     await page.waitForTimeout(2000);
     return true;
@@ -98,6 +101,8 @@ await page.locator('input[type="tel"]').first().fill(phone);
 await clickIfVisible('Continuar');
 await page.waitForTimeout(2500);
 
+const otpInput = page.locator('input[placeholder*="código" i]').first();
+await otpInput.waitFor({ state: 'visible', timeout: 20000 });
 await otpInput.fill(otp);
 await clickIfVisible('Continuar|Confirmar|Avançar');
 await page.waitForTimeout(8000);
@@ -125,13 +130,83 @@ if (await creditOpt.isVisible({ timeout: 8000 }).catch(() => false)) {
   console.log('[ui] Cartão de Crédito selecionado');
 }
 
-// Selecionar cartão salvo Elo 6714 (somente em contexto de pagamento)
-if (/numero|pagamento|valores|selecionar-valor/.test(page.url())) {
-  const savedCard = page.locator('text=/6714/').first();
+// Cadastrar novo cartão se PAN informado e ainda não vinculado
+async function linkNewCardIfNeeded() {
+  if (!pan || linkedOnly) return;
+  const saved = last4 && await page.locator(`text=/${last4}/`).first().isVisible({ timeout: 2000 }).catch(() => false);
+  if (saved) {
+    console.log('[ui] cartão', last4, 'já visível');
+    return;
+  }
+
+  await clickIfVisible('Adicionar|Novo cartão|Cadastrar cartão|Outro cartão', 2000);
+  for (const route of ['/whatsapp/criar-cartao', '/whatsapp/novo-credito', '/whatsapp/pagamento-credito']) {
+    if (/criar-cartao|novo-credito|pagamento-credito|pagamento-cartao/.test(page.url())) break;
+    await page.goto(`https://clarorecarga.claro.com.br${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(2000);
+  }
+
+  await snap('form-cartão');
+
+  const textInputs = page.locator('input:visible:not([type="checkbox"]):not([type="hidden"])');
+  const count = await textInputs.count();
+  const filled = [];
+  for (let i = 0; i < count; i++) {
+    const el = textInputs.nth(i);
+    const ph = ((await el.getAttribute('placeholder')) || '').toLowerCase();
+    const max = Number(await el.getAttribute('maxlength') || 99);
+    const type = await el.getAttribute('type') || 'text';
+    let value = null;
+    if (/cart|número|numero|pan/.test(ph) || max >= 16) value = pan;
+    else if (/valid|mm|expir|venc/.test(ph)) value = `${month}/${year2}`;
+    else if (/m[eê]s|^mm$/.test(ph) || (max === 2 && !filled.includes('month'))) { value = month; filled.push('month'); }
+    else if (/ano|aa|yy|aaaa/.test(ph) || (max === 4 && !filled.includes('year'))) { value = year; filled.push('year'); }
+    else if (/cvv|cvc|segur/.test(ph) || max === 3 || max === 4) value = '999';
+    else if (i === 0 && count >= 3) value = pan;
+    else if (i === 1 && count >= 3) value = `${month}/${year2}`;
+
+    if (value) {
+      await el.click();
+      await el.fill('');
+      if (value === pan) await el.pressSequentially(pan, { delay: 30 });
+      else await el.fill(value);
+      await el.blur();
+      console.log('[ui] input', i, ph || type, '←', value === pan ? `${pan.slice(0, 6)}...${last4}` : value);
+    }
+  }
+
+  await page.waitForTimeout(1500);
+  const saveBtn = page.getByRole('button', { name: /Salvar cartão/i });
+  if (await saveBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await saveBtn.waitFor({ state: 'visible', timeout: 10000 });
+    await page.waitForFunction(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => /salvar cart/i.test(x.textContent || ''));
+      return b && !b.disabled;
+    }, { timeout: 15000 }).catch(() => console.log('[ui] Salvar cartão ainda disabled'));
+    if (!(await saveBtn.isDisabled())) {
+      await saveBtn.click();
+      console.log('[ui] Salvar cartão clicado');
+      await page.waitForTimeout(8000);
+    }
+  } else {
+    await clickIfVisible('Continuar|Confirmar|Cadastrar|Avançar', 5000);
+    await page.waitForTimeout(5000);
+  }
+
+  const linked = responses.some((r) => r.url.includes('/payment-methods') && r.method === 'POST' && r.status < 300);
+  const tokenized = responses.some((r) => /v1\/cc|eldorado/.test(r.url) && r.status === 200);
+  console.log('[ui] vincular:', { linked, tokenized, last4 });
+}
+
+await linkNewCardIfNeeded();
+
+// Selecionar cartão salvo pelos últimos 4 dígitos
+if (last4) {
+  const savedCard = page.locator(`text=/${last4}/`).first();
   if (await savedCard.isVisible({ timeout: 5000 }).catch(() => false)) {
     await savedCard.click();
     await page.waitForTimeout(2000);
-    console.log('[ui] cartão 6714 selecionado');
+    console.log('[ui] cartão', last4, 'selecionado');
   }
 }
 
