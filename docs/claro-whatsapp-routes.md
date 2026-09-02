@@ -385,3 +385,117 @@ Script recomendado:
 # 2) Com OTP em mãos, captura completa:
 node scripts/capture-whatsapp-browser-full.mjs 27992999533 <OTP> 2000 --skip-sms
 ```
+
+---
+
+## 9. Fluxo de pagamento — R$ 35,00
+
+Dados do produto capturados em `GET /customers/{id}/products`:
+
+| Campo | Valor |
+|-------|-------|
+| `name` | R$ 35,00 |
+| `value` | **3500** (centavos) |
+| `id` | `08d6a618-5708-45a6-bb6d-7aaa9d6d107f` |
+| `category` | `FIRST_RELOAD` |
+| `reload_validity` | **90 dias** |
+| `isAvailable` | `true` |
+| Bônus (UI) | **+3GB** (regra padrão para 3500) |
+
+> R$ 35,00 é também o **teto diário** (`remaining_spending_limit: 3500`) do perfil `claro_recarga_basic`.
+
+### 9.1 Sequência de telas
+
+```mermaid
+sequenceDiagram
+    participant U as Usuário
+    participant FE as SPA /whatsapp
+    participant API as claro-recarga-api
+
+    U->>FE: Login OTP
+    FE->>API: POST /sessions/
+    U->>FE: /selecionar-valor → escolhe R$ 35
+    FE->>API: POST /loop/public/events (transaction_amount: 3500)
+    FE->>API: GET /customers/{id}/products
+    FE->>API: GET /customers/{id}/payment-methods
+    FE->>API: POST /customer/{id}/events/checkout
+    U->>FE: Escolhe Cartão ou Pix
+
+    alt Cartão de crédito
+        U->>FE: /pagamento-credito (ou /novo-credito)
+        FE->>API: POST /v1/cc (validar PAN)
+        FE->>API: POST /customers/{id}/payment-methods
+        U->>FE: /pagamento-cvv (se necessário)
+        FE->>API: POST /customers/{id}/recharges
+        FE->>U: /pagamento-sucesso ou /confirmacao
+    else Pix
+        U->>FE: /pix
+        FE->>API: POST /customers/{id}/recharges
+        API-->>FE: qrCode + transactionId
+        FE->>U: /confirmacao-pix
+        U->>FE: ponte-pix-claro-recarga.bemobi.com
+        FE->>U: /confirmacao
+    end
+```
+
+### 9.2 Requests após selecionar R$ 35
+
+| Ordem | Método | Endpoint | Observação |
+|-------|--------|----------|------------|
+| 1 | `POST` | `/loop/public/events` | `action: select-recharge-value`, `transaction_amount: "3500"` |
+| 2 | `GET` | `/customers/{id}/products` | Confirma productId `08d6a618-...` |
+| 3 | `GET` | `/customers/{id}/payment-methods` | `credit` (max 3) + `pix` |
+| 4 | `POST` | `/customer/{id}/events/checkout` | Analytics checkout |
+| 5 | `POST` | `/customers/{id}/recharges` | **Efetiva a recarga** |
+
+Header autenticado: `Authorization: claro {sessionId}` + `device-id` (fingerprint antifraude).
+
+### 9.3 Body de `POST /customers/{id}/recharges`
+
+Campos obrigatórios (erro 400 se faltar):
+
+```json
+{
+  "targetMsisdn": "27992999533",
+  "rechargeValue": {
+    "id": "08d6a618-5708-45a6-bb6d-7aaa9d6d107f",
+    "value": 3500
+  },
+  "paymentMethod": { "type": "credit", "data": { "token": "...", "brandName": "...", "lastDigits": "..." } },
+  "frequency": null,
+  "tags": { "repeatRecharge": "false" }
+}
+```
+
+Para **Pix**, a resposta traz `qrCode` e `transactionId` → navega para `/whatsapp/confirmacao-pix`.
+
+Para **cartão**, após sucesso → `/whatsapp/pagamento-sucesso` ou `/whatsapp/confirmacao`.
+
+### 9.4 Cartão de crédito (sem SmartCheckout)
+
+Feature flag: `smartcheckout: false` → fluxo **nativo**, não iframe Eldorado.
+
+| Etapa | Rota frontend | API |
+|-------|---------------|-----|
+| Informar cartão | `/whatsapp/pagamento-credito` ou `/novo-credito` | `POST /v1/cc` (PAN, mês, ano, `partner: CLARO`) |
+| Salvar cartão | — | `POST /customers/{id}/payment-methods` |
+| CVV | `/whatsapp/pagamento-cvv` | token + cvv no payload |
+| Parcelamento | `/whatsapp/pagamento-parcelamento` | se habilitado |
+| Confirmar | — | `POST /customers/{id}/recharges` |
+| Sucesso | `/whatsapp/pagamento-sucesso` | — |
+| Erro | `/whatsapp/pagamento-erro` | — |
+
+Bandeira pelo BIN: `GET /auth/braspag/brand/{bin}`
+
+### 9.5 Pix
+
+| Etapa | Rota / host |
+|-------|-------------|
+| Tela PIX | `/whatsapp/pix` |
+| QR Code | resposta de `POST /customers/{id}/recharges` |
+| Pagamento externo | `https://ponte-pix-claro-recarga.bemobi.com/pix/` |
+| Confirmação | `/whatsapp/confirmacao-pix` → `/whatsapp/confirmacao` |
+
+### 9.6 Recarga para outro número (R$ 35)
+
+Substituir `targetMsisdn` pelo MSISDN destino (destinatário cadastrado em `/customers/{id}/recipients/{msisdn}`). Valor e productId permanecem os mesmos.
