@@ -8,7 +8,7 @@ const OUT_DIR = join(__dirname, '..', 'output');
 
 const phone = process.argv[2];
 const otp = process.argv[3];
-const loginValue = Number(process.argv[4] || 2000);
+const loginValue = /^\d+$/.test(process.argv[4] || '') ? Number(process.argv[4]) : 2000;
 const skipSms = process.argv.includes('--skip-sms');
 const smsOnly = process.argv.includes('--sms-only');
 
