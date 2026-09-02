@@ -1,0 +1,1843 @@
+{
+  "targetUrl": "https://clarorecarga.claro.com.br/whatsapp/",
+  "capturedAt": "2026-09-02T11:00:38.647Z",
+  "pageTitle": "Claro Recarga",
+  "finalUrl": "https://clarorecarga.claro.com.br/whatsapp/landing",
+  "totalRequests": 95,
+  "appRequests": 49,
+  "analyticsRequests": 42,
+  "routes": [
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/claro/roboto/Roboto-Black.woff2",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/claro/roboto/Roboto-Medium.woff2",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/claro/roboto/Roboto-Regular.woff2",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Black.ttf",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Black.woff",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Black.woff2",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Medium.ttf",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Medium.woff",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Medium.woff2",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Regular.ttf",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Regular.woff",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/fonts/assets/embratel/roboto/Roboto-Regular.woff2",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/icons/mondrian-icons-6.28.0.woff2",
+      "queryKeys": [
+        "t"
+      ],
+      "hits": 1,
+      "sampleQuery": "?t=1724348261536",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "POST",
+      "origin": "https://claro-recarga-api.m4u.com.br",
+      "pathname": "/loop/public/events",
+      "queryKeys": [],
+      "hits": 2,
+      "sampleQuery": "",
+      "samplePostData": "{\"type\":\"click\",\"msisdn\":\"21999999999\",\"session_id\":\"8dc976c1-77da-4c61-8d8a-b5a4080618e2\",\"tags\":{\"channel\":\"web\",\"portal\":\"claro_whatsapp\",\"realm\":\"claro_recarga\",\"utm_source\":\"frontend_claro_recarga\",\"page_name\":\"landing_page\",\"action\":\"select-recharge-value\",\"transaction_amount\":\"2000\"}}",
+      "resourceTypes": [
+        "xhr"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/newrelic.js",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "script"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/css/15.6647933b.chunk.css",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "stylesheet"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/css/20.ba041849.chunk.css",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "stylesheet"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/css/main.a7b94dcb.chunk.css",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "stylesheet"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/js/15.90070263.chunk.js",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "script"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/js/20.72b0194c.chunk.js",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "script"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/js/4.74302e28.chunk.js",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "script"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/js/76.435eee7a.chunk.js",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "script"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/js/main.60a86274.chunk.js",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "script"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/AMX-Bold.44ea25b3.ttf",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/AMX-Medium.9bf1ac53.ttf",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/AMX-Regular.197ef91d.ttf",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/banner_claro_controle.7d8f2169.png",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/banner_claro_flex.7503dff6.png",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/banner_claro_prezao.3257b9c1.png",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/banner_minha_claro_app.c4dd9e34.png",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/Banner-720x180-TelaValores_default.ccabbdc8.png",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/closeicon.6c6fe981.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/elo.72af2dc0.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/hipercard.1de036c2.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/icone-appStore.0f85bec7.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/icone-googlePlay.9899d100.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/icone-minhaClaro.181762e8.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/icone-sms.442d57a4.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/icone-telefone.47ad052f.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/landing_logo_recarga.9e89c7d7.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/mastercard.fd1e0e6e.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/Roboto-Regular.b3d83ac1.ttf",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "font"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/static/media/visa.e9498175.svg",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "image"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/tokens/claro-tokens-latest.custom-properties.css",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "stylesheet"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://claro-recarga-api.m4u.com.br",
+      "pathname": "/v1/features/public",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "xhr"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "stylesheet"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://mondrian.claro.com.br",
+      "pathname": "/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.js",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "script"
+      ]
+    },
+    {
+      "method": "GET",
+      "origin": "https://clarorecarga.claro.com.br",
+      "pathname": "/whatsapp/",
+      "queryKeys": [],
+      "hits": 1,
+      "sampleQuery": "",
+      "samplePostData": null,
+      "resourceTypes": [
+        "document"
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "ts": 1788346826658,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/whatsapp/",
+      "resourceType": "document",
+      "category": "app",
+      "headers": {
+        "accept-language": "pt-BR",
+        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Android\""
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346826968,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/tokens/claro-tokens-latest.custom-properties.css",
+      "resourceType": "stylesheet",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346826968,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+      "resourceType": "stylesheet",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346826968,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/newrelic.js",
+      "resourceType": "script",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346826968,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/css/15.6647933b.chunk.css",
+      "resourceType": "stylesheet",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346826968,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/css/main.a7b94dcb.chunk.css",
+      "resourceType": "stylesheet",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346826968,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.js",
+      "resourceType": "script",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346826968,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/15.90070263.chunk.js",
+      "resourceType": "script",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346826968,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/main.60a86274.chunk.js",
+      "resourceType": "script",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346827712,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/76.435eee7a.chunk.js",
+      "resourceType": "script",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346827966,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Regular.woff2",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346827966,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/Roboto-Regular.b3d83ac1.ttf",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/static/css/main.a7b94dcb.chunk.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346827986,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/4.74302e28.chunk.js",
+      "resourceType": "script",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346827986,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/css/20.ba041849.chunk.css",
+      "resourceType": "stylesheet",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346827986,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/20.72b0194c.chunk.js",
+      "resourceType": "script",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346827987,
+      "method": "GET",
+      "url": "https://claro-recarga-api.m4u.com.br/v1/features/public",
+      "resourceType": "xhr",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "accept-language": "pt-BR",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "sec-ch-ua-mobile": "?0",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "accept": "application/json, text/plain, */*",
+        "channel": "CLARO_WHATSAPP"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828026,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Regular.woff",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828066,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Regular.ttf",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828097,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/claro/roboto/Roboto-Regular.woff2",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828914,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/closeicon.6c6fe981.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/static/css/20.ba041849.chunk.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/AMX-Regular.197ef91d.ttf",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/static/css/main.a7b94dcb.chunk.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/AMX-Bold.44ea25b3.ttf",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/AMX-Medium.9bf1ac53.ttf",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Medium.woff2",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/icons/mondrian-icons-6.28.0.woff2?t=1724348261536",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Black.woff2",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/visa.e9498175.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/mastercard.fd1e0e6e.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/elo.72af2dc0.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/hipercard.1de036c2.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828915,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/Banner-720x180-TelaValores_default.ccabbdc8.png",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/banner_minha_claro_app.c4dd9e34.png",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/banner_claro_prezao.3257b9c1.png",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/banner_claro_flex.7503dff6.png",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/banner_claro_controle.7d8f2169.png",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-googlePlay.9899d100.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-appStore.0f85bec7.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-minhaClaro.181762e8.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-telefone.47ad052f.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-sms.442d57a4.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828924,
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/loop/public/events",
+      "resourceType": "xhr",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "accept-language": "pt-BR",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "sec-ch-ua-mobile": "?0",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "accept": "application/json, text/plain, */*",
+        "channel": "CLARO_WHATSAPP",
+        "content-type": "application/json"
+      },
+      "postData": "{\"type\":\"pageview\",\"msisdn\":\"21999999999\",\"session_id\":\"8dc976c1-77da-4c61-8d8a-b5a4080618e2\",\"tags\":{\"channel\":\"web\",\"portal\":\"claro_whatsapp\",\"realm\":\"claro_recarga\",\"utm_source\":\"frontend_claro_recarga\",\"page_name\":\"landing_page\"}}"
+    },
+    {
+      "ts": 1788346828962,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Medium.woff",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828962,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Black.woff",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346828995,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Black.ttf",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346829019,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Medium.ttf",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346829040,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/claro/roboto/Roboto-Black.woff2",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346829072,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/claro/roboto/Roboto-Medium.woff2",
+      "resourceType": "font",
+      "category": "app",
+      "headers": {
+        "origin": "https://clarorecarga.claro.com.br",
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346835630,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/landing_logo_recarga.9e89c7d7.svg",
+      "resourceType": "image",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept-language": "pt-BR",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": null
+    },
+    {
+      "ts": 1788346835630,
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/loop/public/events",
+      "resourceType": "xhr",
+      "category": "app",
+      "headers": {
+        "sec-ch-ua-platform": "\"Android\"",
+        "referer": "https://clarorecarga.claro.com.br/whatsapp/landing",
+        "accept-language": "pt-BR",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "sec-ch-ua-mobile": "?0",
+        "user-agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "accept": "application/json, text/plain, */*",
+        "channel": "CLARO_WHATSAPP",
+        "content-type": "application/json"
+      },
+      "postData": "{\"type\":\"click\",\"msisdn\":\"21999999999\",\"session_id\":\"8dc976c1-77da-4c61-8d8a-b5a4080618e2\",\"tags\":{\"channel\":\"web\",\"portal\":\"claro_whatsapp\",\"realm\":\"claro_recarga\",\"utm_source\":\"frontend_claro_recarga\",\"page_name\":\"landing_page\",\"action\":\"select-recharge-value\",\"transaction_amount\":\"2000\"}}"
+    }
+  ],
+  "responses": [
+    {
+      "ts": 1788346826964,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/whatsapp/",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346827205,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/css/main.a7b94dcb.chunk.css",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/css",
+      "body": null
+    },
+    {
+      "ts": 1788346827207,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/newrelic.js",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/javascript",
+      "body": "const licenseKey = window.REACT_APP_NR_LICENSE_KEY;\n\n;window.NREUM||(NREUM={});NREUM.init={privacy:{cookies_enabled:true}};\nwindow.NREUM||(NREUM={}),__nr_require=function(t,e,n){function r(n){if(!e[n]){const o=e[n]={exports:{}};t[n][0].call(o.exports,function(e){const o=t[n][1][e];return r(o||e);},o,o.exports);}return e[n].exports;}if(typeof __nr_require===\"function\")return __nr_require;for(let o=0;o<n.length;o++)r(n[o]);return r;}({1:[function(t,e,n){function r(t){try{s.console&&console.log(t);}catch(e){}}let o; const i=t(\"ee\"); const a=t(29); var s={};try{o=localStorage.getItem(\"__nr_flags\").split(\",\"),console&&typeof console.log===\"function\"&&(s.console=!0,o.indexOf(\"dev\")!==-1&&(s.dev=!0),o.indexOf(\"nr_dev\")!==-1&&(s.nrDev=!0));}catch(c){}s.nrDev&&i.on(\"internal-error\",function(t){r(t.stack);}),s.dev&&i.on(\"fn-err\",function(t,e,n){r(n.stack);}),s.dev&&(r(\"NR AGENT IN DEVELOPMENT MODE\"),r(`flags: ${a(s,function(t,e){return t;}).join(\", \")}`));},{}],2:[function(t,e,n){function r(t,e,n,r,s){try{l?l-=1:o(s||new UncaughtException(t,e,n),!0);}catch(f){try{i(\"ierr\",[f,c.now(),!0]);}catch(d){}}return typeof u===\"function\"&&u.apply(this,a(arguments));}function UncaughtException(t,e,n){this.message=t||\"Uncaught error with no additional information\",this.sourceURL=e,this.line=n;}function o(t,e){const n=e?null:c.now();i(\"err\",[t,n]);}var i=t(\"handle\"); var a=t(30); const s=t(\"ee\"); var c=t(\"loader\"); const f=t(\"gos\"); var u=window.onerror; let d=!1; const p=\"nr@seenError\";if(!c.disabled){var l=0;c.features.err=!0,t(1),window.onerror=r;try{throw new Error;}catch(h){\"stack\"in h&&(t(13),t(12),\"addEventListener\"in window&&t(6),c.xhrWrappable&&t(14),d=!0);}s.on(\"fn-start\",function(t,e,n){d&&(l+=1);}),s.on(\"fn-err\",function(t,e,n){d&&!n[p]&&(f(n,p,function(){return!0;}),this.thrown=!0,o(n));}),s.on(\"fn-end\",function(){d&&!this.thrown&&l>0&&(l-=1);}),s.on(\"internal-error\",function(t){i(\"ierr\",[t,c.now(),!0]);});}},{}],3:[function(t,e,n){const r=t(\"loader\");r.disabled||(r.features.…"
+    },
+    {
+      "ts": 1788346827210,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/css/15.6647933b.chunk.css",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/css",
+      "body": null
+    },
+    {
+      "ts": 1788346827238,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/tokens/claro-tokens-latest.custom-properties.css",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/css",
+      "body": null
+    },
+    {
+      "ts": 1788346827239,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/css",
+      "body": null
+    },
+    {
+      "ts": 1788346827262,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/main.60a86274.chunk.js",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/javascript",
+      "body": "(window.webpackJsonp=window.webpackJsonp||[]).push([[12],{1:function(e,t,n){\"use strict\";n.d(t,\"O\",function(){return r}),n.d(t,\"U\",function(){return a}),n.d(t,\"N\",function(){return c}),n.d(t,\"M\",function(){return o}),n.d(t,\"X\",function(){return u}),n.d(t,\"W\",function(){return i}),n.d(t,\"qc\",function(){return s}),n.d(t,\"pc\",function(){return d}),n.d(t,\"b\",function(){return l}),n.d(t,\"a\",function(){return b}),n.d(t,\"oc\",function(){return f}),n.d(t,\"Nb\",function(){return p}),n.d(t,\"Ob\",function(){return m}),n.d(t,\"Q\",function(){return O}),n.d(t,\"R\",function(){return h}),n.d(t,\"y\",function(){return g}),n.d(t,\"P\",function(){return v}),n.d(t,\"S\",function(){return A}),n.d(t,\"Ab\",function(){return j}),n.d(t,\"Bb\",function(){return E}),n.d(t,\"c\",function(){return x}),n.d(t,\"d\",function(){return y}),n.d(t,\"h\",function(){return R}),n.d(t,\"ab\",function(){return C}),n.d(t,\"bb\",function(){return S}),n.d(t,\"Z\",function(){return k}),n.d(t,\"cb\",function(){return I}),n.d(t,\"f\",function(){return T}),n.d(t,\"Ub\",function(){return w}),n.d(t,\"xb\",function(){return L}),n.d(t,\"vb\",function(){return M}),n.d(t,\"yb\",function(){return P}),n.d(t,\"wb\",function(){return _}),n.d(t,\"Db\",function(){return N}),n.d(t,\"Cb\",function(){return D}),n.d(t,\"Lb\",function(){return B}),n.d(t,\"Hb\",function(){return U}),n.d(t,\"Mb\",function(){return V}),n.d(t,\"k\",function(){return F}),n.d(t,\"x\",function(){return H}),n.d(t,\"r\",function(){return G}),n.d(t,\"tc\",function(){return Y}),n.d(t,\"sc\",function(){return W}),n.d(t,\"eb\",function(){return Q}),n.d(t,\"gb\",function(){return J}),n.d(t,\"fb\",function(){return X}),n.d(t,\"uc\",function(){return q}),n.d(t,\"nb\",function(){return Z}),n.d(t,\"mb\",function(){return K}),n.d(t,\"ob\",function(){return z}),n.d(t,\"pb\",function(){return $}),n.d(t,\"qb\",function(){return ee}),n.d(t,\"db\",function(){return te}),n.d(t,\"fc\",function(){return ne}),n.d(t,\"bc\",function(){return re}),n.d(t,\"cc\",function(){return ae}),n.d(t,\"H\",function(){return ce}),n.d(t,\"ec\",function(){return oe}),n.d(t,\"dc\",f…"
+    },
+    {
+      "ts": 1788346827355,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.js",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/javascript",
+      "body": "/*!\n* Mondrian Vanilla Claro 6.22.5-alpha\n* Build do dia 12/09/2024 - 11:13:41 GTM-0300\n*\n* https://mondrian.claro.com.br\n* Copyright (c) 2019 - 2022 Claro <designopsoficial@globalhitss.com.br>\n* Todos os direitos reservados.\n*\n* A redistribuicao ou alteracao sem a permissao dos proprietarios do software e proibida.\n*/\n!function(e,t){\"object\"==typeof exports&&\"object\"==typeof module?module.exports=t():\"function\"==typeof define&&define.amd?define([],t):\"object\"==typeof exports?exports[\"mondrian-vanilla\"]=t():e[\"mondrian-vanilla\"]=t()}(window,(function(){return function(e){var t={};function n(r){if(t[r])return t[r].exports;var i=t[r]={i:r,l:!1,exports:{}};return e[r].call(i.exports,i,i.exports,n),i.l=!0,i.exports}return n.m=e,n.c=t,n.d=function(e,t,r){n.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:r})},n.r=function(e){\"undefined\"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:\"Module\"}),Object.defineProperty(e,\"__esModule\",{value:!0})},n.t=function(e,t){if(1&t&&(e=n(e)),8&t)return e;if(4&t&&\"object\"==typeof e&&e&&e.__esModule)return e;var r=Object.create(null);if(n.r(r),Object.defineProperty(r,\"default\",{enumerable:!0,value:e}),2&t&&\"string\"!=typeof e)for(var i in e)n.d(r,i,function(t){return e[t]}.bind(null,i));return r},n.n=function(e){var t=e&&e.__esModule?function(){return e.default}:function(){return e};return n.d(t,\"a\",t),t},n.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},n.p=\"\",n(n.s=12)}([function(e,t){\n/*!\n* Mondrian Tokens Claro 2.4.2\n* Build do dia 23/02/2024 as 15:12:19 GTM-0300 \n*\n* https://mondrian.claro.com.br\n* Copyright (c) 2019 - 2022 Claro <designopsoficial@globalhitss.com.br>\n* Todos os direitos reservados.\n*\n* A redistribuicao ou alteracao sem a permissao dos proprietarios do software e proibida.\n*/\ne.exports={borderStyleDefault:\"solid\",borderWidthNone:\"0\",borderWidthThin:\"1px\",borderWidthMedium:\"2px\",borderWidthThick:\"4px\",borderRadiusNone:\"0\",borderRadiusXxs:\"4px\",borderRadiusXs:…"
+    },
+    {
+      "ts": 1788346827748,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/15.90070263.chunk.js",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/javascript",
+      "body": "(window.webpackJsonp=window.webpackJsonp||[]).push([[15],[function(t,e,n){\"use strict\";n(20),n(29);var r=n(13),i=n(7),o=(n(169),function(t){return{done:!0,value:t}}),a={};function c(t){return Object(r.b)(t)?\"channel\":Object(r.l)(t)?String(t):Object(r.d)(t)?t.name:String(t)}function u(t,e,n){var r,c,u,s=e;function f(e,n){if(s===a)return o(e);if(n&&!c)throw s=a,n;r&&r(e);var i=n?t[c](n):t[s]();return s=i.nextState,u=i.effect,r=i.stateUpdater,c=i.errorState,s===a?o(e):u}return Object(i.Q)(f,function(t){return f(null,t)},n)}function s(t,e){for(var n=arguments.length,r=new Array(n>2?n-2:0),o=2;o<n;o++)r[o-2]=arguments[o];var a,s,f={done:!1,value:Object(i.k)(t)},l=function(t){return{done:!1,value:i.l.apply(void 0,[e].concat(r,[t]))}},h=function(t){return{done:!1,value:Object(i.m)(t)}},d=function(t){return a=t},p=function(t){return s=t};return u({q1:function(){return{nextState:\"q2\",effect:f,stateUpdater:p}},q2:function(){return a?{nextState:\"q3\",effect:h(a)}:{nextState:\"q1\",effect:l(s),stateUpdater:d}},q3:function(){return{nextState:\"q1\",effect:l(s),stateUpdater:d}}},\"q1\",\"takeLatest(\"+c(t)+\", \"+e.name+\")\")}function f(t,e){for(var n=arguments.length,r=new Array(n>2?n-2:0),o=2;o<n;o++)r[o-2]=arguments[o];return i.l.apply(void 0,[s,t,e].concat(r))}n.d(e,\"a\",function(){return i.y}),n.d(e,\"b\",function(){return i.n}),n.d(e,\"c\",function(){return i.u}),n.d(e,\"d\",function(){return i.w}),n.d(e,\"e\",function(){return i.x}),n.d(e,\"f\",function(){return i.A}),n.d(e,\"g\",function(){return f})},,function(t,e,n){\"use strict\";t.exports=n(488)},function(t,e,n){\"use strict\";n.d(e,\"a\",function(){return o});var r=n(292);function i(t,e){var n=Object.keys(t);if(Object.getOwnPropertySymbols){var r=Object.getOwnPropertySymbols(t);e&&(r=r.filter(function(e){return Object.getOwnPropertyDescriptor(t,e).enumerable})),n.push.apply(n,r)}return n}function o(t){for(var e=1;e<arguments.length;e++){var n=null!=arguments[e]?arguments[e]:{};e%2?i(Object(n),!0).forEach(function(e){Object(r.a)(t,e,n[e])}):Object.…"
+    },
+    {
+      "ts": 1788346827973,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/76.435eee7a.chunk.js",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/javascript",
+      "body": "(window.webpackJsonp=window.webpackJsonp||[]).push([[76],{1490:function(e,t,n){\"use strict\";n.r(t);var c=n(2),a=n.n(c),o=n(34),b=n(37),r=n(33),s=n(58),u=n(14);t.default=function(){var e=Object(o.d)(),t=Object(u.q)();return Object(c.useEffect)(function(){e(Object(s.g)()),e(Object(r.b)()),e(Object(b.d)(\"../\".concat(sessionStorage.getItem(\"channelPath\"),\"/landing\")))},[t]),a.a.createElement(a.a.Fragment,null)}}}]);\n//# sourceMappingURL=76.435eee7a.chunk.js.map"
+    },
+    {
+      "ts": 1788346828025,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Regular.woff2",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346828065,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Regular.woff",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346828096,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Regular.ttf",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346828140,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/claro/roboto/Roboto-Regular.woff2",
+      "status": 200,
+      "category": "app",
+      "contentType": "font/woff2",
+      "body": null
+    },
+    {
+      "ts": 1788346828224,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/css/20.ba041849.chunk.css",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/css",
+      "body": null
+    },
+    {
+      "ts": 1788346828400,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/Roboto-Regular.b3d83ac1.ttf",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/font-sfnt",
+      "body": null
+    },
+    {
+      "ts": 1788346828460,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/4.74302e28.chunk.js",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/javascript",
+      "body": "(window.webpackJsonp=window.webpackJsonp||[]).push([[4],{1022:function(e,t,n){\"use strict\";var r=n(817);e.exports=r&&!Symbol.sham&&\"symbol\"==typeof Symbol.iterator},1023:function(e,t,n){\"use strict\";var r=n(716),a=n(711),i=n(718),o=TypeError;e.exports=function(e,t){var n,s;if(\"string\"===t&&a(n=e.toString)&&!i(s=r(n,e)))return s;if(a(n=e.valueOf)&&!i(s=r(n,e)))return s;if(\"string\"!==t&&a(n=e.toString)&&!i(s=r(n,e)))return s;throw new o(\"Can't convert object to primitive value\")}},1024:function(e,t,n){\"use strict\";var r=n(717),a=n(687),i=n(887);e.exports=!r&&!a(function(){return 7!==Object.defineProperty(i(\"div\"),\"a\",{get:function(){return 7}}).a})},1025:function(e,t,n){\"use strict\";var r=n(717),a=n(687);e.exports=r&&a(function(){return 42!==Object.defineProperty(function(){},\"prototype\",{value:42,writable:!1}).prototype})},1026:function(e,t,n){\"use strict\";var r=n(689),a=n(687),i=n(711),o=n(719),s=n(717),l=n(888).CONFIGURABLE,u=n(933),d=n(787),c=d.enforce,m=d.get,f=String,p=Object.defineProperty,h=r(\"\".slice),v=r(\"\".replace),g=r([].join),b=s&&!a(function(){return 8!==p(function(){},\"length\",{value:8}).length}),y=String(String).split(\"String\"),x=e.exports=function(e,t,n){\"Symbol(\"===h(f(t),0,7)&&(t=\"[\"+v(f(t),/^Symbol\\(([^)]*)\\).*$/,\"$1\")+\"]\"),n&&n.getter&&(t=\"get \"+t),n&&n.setter&&(t=\"set \"+t),(!o(e,\"name\")||l&&e.name!==t)&&(s?p(e,\"name\",{value:t,configurable:!0}):e.name=t),b&&n&&o(n,\"arity\")&&e.length!==n.arity&&p(e,\"length\",{value:n.arity});try{n&&o(n,\"constructor\")&&n.constructor?s&&p(e,\"prototype\",{writable:!1}):e.prototype&&(e.prototype=void 0)}catch(a){}var r=c(e);return o(r,\"source\")||(r.source=g(y,\"string\"==typeof t?t:\"\")),e};Function.prototype.toString=x(function(){return i(this)&&m(this).source||u(this)},\"toString\")},1027:function(e,t,n){\"use strict\";var r=n(719),a=n(1028),i=n(882),o=n(736);e.exports=function(e,t,n){for(var s=a(t),l=o.f,u=i.f,d=0;d<s.length;d++){var c=s[d];r(e,c)||n&&r(n,c)||l(e,c,u(t,c))}}},1028:function(e,t,n){\"use strict\";var r=n(741),a=…"
+    },
+    {
+      "ts": 1788346828947,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/js/20.72b0194c.chunk.js",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/javascript",
+      "body": "(window.webpackJsonp=window.webpackJsonp||[]).push([[20],{1445:function(A,g){A.exports=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAGKADAAQAAAABAAAAGAAAAADB/VeXAAAEi0lEQVRIDcVVTWhcVRQ+5943M28ymcxMxiZtE2tCU6EkxMQ0P0M1RRAXmjYUqiuhKAhJNS6Ci+qiZCFY/+iuigiKCxe6sClVVCoBsbQhzQ9iFOmkKcnkR2tnJplkMu/nvuu5D944pknajXgW7557z893z7nnnAfwHxPej38JoN1q0Wt9fj0CEtCyCtn8VGGxEcC8l/22ANON4I+FI00W8KMc4LBE0MkZYbkfJM5gEq4KEMPmnZVfDiTB2ApsS4DZOtC13bF3EfFJ6cCHYiN/0QqW3dEX0latBjJZXennZj7mDwSfBsABQr1iL6cH6m9BYTPIXQCLXeUHBfrP0Q1/F1bhbN14fmmzUel+tj20mzH/IDLWIR3j1EOja7+Wyv8FcKMBAoFdlcMo5chqLnOucfreOVbOrreBr9oX7QNkPfZSurc0kiKAynl5OPaeMljLZV5TzocAWF9z+QMbbM2sn4Kskm1HlCa2kKh83wGoEEvplz0Q5hlEg9FGhvgUGsZZz/mLnbF+MxSY5Hr88lJr+S5Pd6uVbur4beNtBOzmVbF2T6cIIDR4Rkr4aN9kflEJX+iMtCKyV7ltn6SSmTP8vNsz2m6tGltfBmm/gwx6PB0XYITqnJw9LkX+gicAyQ5RuGM1YyuXHSHOc64dL8p2YLi18hW1yqPXAXxKzQV4uD24h/hgOSv7q2iLsE5hV41QyTLO2qhcc0XZDsz6CuTIqYy36DVKzQVwHD1KvMyztOXZMhCjiPJgfTyaAMRj4IjvPNlOa0MSBD247XY9KboAPtWXm6h2dHWGjt/kPjbgCPkWcjY4dyjWpNRmKar59uiRm02h6k1m/2wpT2qjqY/NC1SCQTDNmB8gs6HOVFVMr2Y+CYfjLRqDY0Li96jhx6lE9Lwj+YM0Onq1MCvMdQUuCGF8Xq8emCjZADxA+bdpXqm9G8GN0Q0lzGvMiatDj1S5GoZxhpxRCuV+adlnyKSHUveYJcznwTJPkYPjGvc969mEIhBWfN1UYUGtLsATFISU+BNj/Kg6LKUDk2u3DTP9EkW0ij7ttENdjrbxOjP5n0j5I/AIFcC8ZyN4ZS8iTJK++54ugBIyR1wChv3J5vIqT9lb94/DytVr6UFNGq8gsMNS0y9pujZBo+Frcv5Zbj37jdKday3bKzm8QZcY9mzdN1AbgcyiGSR0HYUnLF2fIxWgQfYFrJ3s7ojsM5DVMCaW911bnSE9OUR3ZAF9UIC84ixnxkttXT7VGTmR6qr89C7BfRwMkfNUV7w/lYj/oCqs1KQYgYM8gY5TDE3ShMyKaCg2lXWrodSolJ9/JFiDweAgvUULB7M45DwdegsANUkrwvFv0TH7LAHM59eOOJKdYAg1lLUPbGF9aWfWMw21lCaiZAo4lkEkUOY+6Gmq6R+txXS/N0GVjkcuwM3OULPGAjSS4DeU8AetP1MpjgsHsshowgJ0UN9wajxbtaREpP8a1R3ICSHsi/J2bmIr5wrEBZhpg0jQX5HQbDHlTkQlKSHyyRc6g3scoUfpAvTzKmT3jm0skbFdovb/sH8DUoDGvU2vrO4AAAAASUVORK5CYII=\"},1446:function(A){A.exports={regulamento:{link:\"/files/Oferta_Acessoria_Recarga_e_Oferta_Recarregue_e_Ganhe_20260303.pdf\"},politicaPrivacidade:{link:\"ht…"
+    },
+    {
+      "ts": 1788346828957,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/icons/mondrian-icons-6.28.0.woff2?t=1724348261536",
+      "status": 200,
+      "category": "app",
+      "contentType": "font/woff2",
+      "body": null
+    },
+    {
+      "ts": 1788346828962,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Medium.woff2",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346828962,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Black.woff2",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346828995,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Black.woff",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346829018,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Medium.woff",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346829028,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Black.ttf",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346829057,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/embratel/roboto/Roboto-Medium.ttf",
+      "status": 200,
+      "category": "app",
+      "contentType": "text/html",
+      "body": null
+    },
+    {
+      "ts": 1788346829082,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/claro/roboto/Roboto-Black.woff2",
+      "status": 200,
+      "category": "app",
+      "contentType": "font/woff2",
+      "body": null
+    },
+    {
+      "ts": 1788346829102,
+      "method": "GET",
+      "url": "https://mondrian.claro.com.br/fonts/assets/claro/roboto/Roboto-Medium.woff2",
+      "status": 200,
+      "category": "app",
+      "contentType": "font/woff2",
+      "body": null
+    },
+    {
+      "ts": 1788346829111,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/closeicon.6c6fe981.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<svg fill=\"#fff\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" xmlns=\"http://www.w3.org/2000/svg\">\n    <path d=\"M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z\"/>\n    <path d=\"M0 0h24v24H0z\" fill=\"none\"/>\n</svg>\n"
+    },
+    {
+      "ts": 1788346829133,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/elo.72af2dc0.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg width=\"300px\" height=\"300px\" viewBox=\"0 0 300 300\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <!-- Generator: Sketch 49.1 (51147) - http://www.bohemiancoding.com/sketch -->\n    <title>Elo/UmaCor</title>\n    <desc>Created with Sketch.</desc>\n    <defs></defs>\n    <g id=\"Elo/UmaCor\" stroke=\"none\" stroke-width=\"1\" fill=\"none\" fill-rule=\"evenodd\">\n        <path d=\"M150.08596,0.257142857 C232.86533,0.257142857 300,67.2 300,149.742857 C300,232.285714 232.86533,299.228571 150.08596,299.228571 C67.3065903,299.228571 0.171919771,232.285714 0.171919771,149.742857 C0.257879656,67.1142857 67.3065903,0.257142857 150.08596,0.257142857 Z M85.7020057,109.628571 C60.2578797,109.628571 39.6275072,130.2 39.6275072,155.571429 C39.6275072,165 42.4641834,173.742857 47.3638968,181.028571 L92.9226361,161.142857 L111.919771,152.828571 L130.487106,144.771429 C125.587393,124.628571 107.449857,109.628571 85.7020057,109.628571 Z M105.472779,138.171429 L59.4842407,157.971429 C59.3982808,157.2 59.3982808,156.342857 59.3982808,155.571429 C59.3982808,141.085714 71.1747851,129.257143 85.7879656,129.257143 C93.6103152,129.257143 100.659026,132.771429 105.472779,138.171429 Z M117.936963,188.4 L104.097421,174.342857 C93.0945559,183 82.1776504,184.028571 71.260745,177.514286 L60.4297994,193.971429 C79.5988539,205.542857 101.432665,204 117.936963,188.4 Z M136.676218,177.085714 C136.676218,185.314286 138.911175,189.171429 145.272206,192 L162.120344,199.114286 L168.567335,182.314286 L154.212034,176.742857 C153.094556,176.314286 153.008596,175.542857 153.008596,174.771429 L153.008596,90.2571429 L136.590258,90.2571429 L136.676218,177.085714 Z M198.825215,175.628571 C192.636103,170.828571 188.681948,163.371429 188.681948,154.971429 C188.681948,147.514286 191.862464,140.742857 196.848138,135.942857 L186.189112,118.714286 C175.444126,127.2 168.567335,140.228571 168.567335,154.971429 C168.567335,170.828571 176.56160…"
+    },
+    {
+      "ts": 1788346829141,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/banner_minha_claro_app.c4dd9e34.png",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/png",
+      "body": null
+    },
+    {
+      "ts": 1788346829144,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-telefone.47ad052f.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Generator: Adobe Illustrator 22.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n<svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\"\n\t viewBox=\"0 0 24 24\" style=\"enable-background:new 0 0 24 24;\" xml:space=\"preserve\">\n<style type=\"text/css\">\n\t.st0{fill:#E33B15;}\n</style>\n<title>ic_Telefone</title>\n<desc>Created with Sketch.</desc>\n<path class=\"st0\" d=\"M17.1,0H6.9C5.8,0,5,0.9,5,2v20c0,1.1,0.8,2,1.9,2h10.3c1,0,1.9-0.9,1.9-2V2C19,0.9,18.2,0,17.1,0z M18,21.5\n\tc0,0.8-0.6,1.5-1.3,1.5H7.3C6.6,23,6,22.3,6,21.5V20h12V21.5z M18,19H6V5h12V19z M18,4H6V2.5C6,1.7,6.6,1,7.3,1h9.4\n\tC17.4,1,18,1.7,18,2.5V4z\"/>\n<g id=\"Fill-1_1_\">\n\t<path class=\"st0\" d=\"M14.1,17c-0.7,0-1.7-0.3-2.7-0.9c-0.3-0.2-1.1-0.8-1.8-1.4c-0.7-0.7-1.3-1.5-1.5-1.8C7.4,11.8,7,10.7,7,10\n\t\tc0-1.3,1.5-2.5,1.9-2.9C9.2,6.9,9.7,7,10,7.3l1.6,2c0.3,0.3,0.2,0.8-0.1,1.1c-0.3,0.3-0.5,0.5-0.7,0.7c0.2,0.2,0.5,0.6,0.9,1\n\t\tc0,0,0,0,0,0c0.5,0.4,0.9,0.7,1.1,0.9c0.1-0.2,0.3-0.4,0.5-0.7c0.1-0.2,0.3-0.3,0.5-0.3s0.4,0,0.6,0.1l2.1,1.5\n\t\tc0.3,0.2,0.4,0.7,0.2,1.1c-0.3,0.5-1.3,2.2-2.5,2.3C14.3,17,14.2,17,14.1,17z M9.4,8.1C8.8,8.5,8,9.4,8,10c0,0.4,0.2,1.2,0.9,2.3\n\t\tl0,0c0.2,0.3,0.8,1,1.4,1.6c0.6,0.6,1.3,1.1,1.6,1.2c0.9,0.5,1.9,0.8,2.4,0.8c0.6-0.1,1.3-1,1.7-1.6l-1.8-1.3\n\t\tc-0.3,0.4-0.7,0.9-0.9,1c-0.1,0.1-0.3,0.1-0.4,0.1c-0.4-0.1-1.1-0.7-1.7-1.2c0,0,0,0-0.1,0c-0.5-0.5-1.2-1.3-1.3-1.6\n\t\tc0-0.1,0-0.3,0-0.4c0.1-0.3,0.6-0.8,0.9-1.1L9.4,8.1z M16,14.2L16,14.2L16,14.2z M14,13C14,13,14,13,14,13L14,13z\"/>\n</g>\n</svg>\n"
+    },
+    {
+      "ts": 1788346829148,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/mastercard.fd1e0e6e.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg width=\"300px\" height=\"300px\" viewBox=\"0 0 300 300\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <!-- Generator: Sketch 49.1 (51147) - http://www.bohemiancoding.com/sketch -->\n    <title>Mastercard/UmaCor</title>\n    <desc>Created with Sketch.</desc>\n    <defs></defs>\n    <g id=\"Mastercard/UmaCor\" stroke=\"none\" stroke-width=\"1\" fill=\"none\" fill-rule=\"evenodd\">\n        <path d=\"M54.6873321,265.260689 L54.6873321,249.802581 C54.6873321,243.876803 51.0781952,240.012426 44.8909747,240.012426 C41.7972143,240.012426 38.4457656,241.042526 36.1256706,244.392153 C34.3212523,241.557877 31.7431687,240.012426 27.8760432,240.012426 C25.2979596,240.012426 22.7201763,240.785001 20.6574691,243.618978 L20.6574691,240.527476 L15.2436136,240.527476 L15.2436136,265.260689 L20.6574691,265.260689 L20.6574691,251.606157 C20.6574691,247.22613 22.9778645,245.165029 26.5870014,245.165029 C30.1961383,245.165029 32.0008569,247.483655 32.0008569,251.606157 L32.0008569,265.260689 L37.4147124,265.260689 L37.4147124,251.606157 C37.4147124,247.22613 39.992796,245.165029 43.3439443,245.165029 C46.9533816,245.165029 48.7577998,247.483655 48.7577998,251.606157 L48.7577998,265.260689 L54.6873321,265.260689 Z M134.863511,240.527476 L126.098507,240.527476 L126.098507,233.055647 L120.684351,233.055647 L120.684351,240.527476 L115.786172,240.527476 L115.786172,245.422254 L120.684351,245.422254 L120.684351,256.75876 C120.684351,262.426713 123.004746,265.77604 129.191967,265.77604 C131.512062,265.77604 134.090146,265.003164 135.894864,263.972464 L134.347834,259.335211 C132.801104,260.365612 130.996686,260.623437 129.707644,260.623437 C127.12956,260.623437 126.098507,259.077386 126.098507,256.500935 L126.098507,245.422254 L134.863511,245.422254 L134.863511,240.527476 Z M180.752138,240.012126 C177.658378,240.012126 175.595971,241.557577 174.307229,243.618978 L174.307229,240.527476 L168.893374,240.527476 L168.893374,26…"
+    },
+    {
+      "ts": 1788346829148,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/visa.e9498175.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg width=\"300px\" height=\"300px\" viewBox=\"0 0 300 300\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <!-- Generator: Sketch 49.1 (51147) - http://www.bohemiancoding.com/sketch -->\n    <title>Visa/UmaCor</title>\n    <desc>Created with Sketch.</desc>\n    <defs></defs>\n    <g id=\"Visa/UmaCor\" stroke=\"none\" stroke-width=\"1\" fill=\"none\" fill-rule=\"evenodd\">\n        <path d=\"M155.052265,133.010453 C154.936121,146.483159 167.131243,154.03252 176.30662,158.562137 C185.714286,163.207898 188.966318,166.110337 188.850174,170.176539 C188.73403,176.448316 181.300813,179.235772 174.332172,179.351916 C162.13705,179.584204 155.052265,176.099884 149.477352,173.428571 L145.063879,193.986063 C150.127758,196.260163 158.962834,198.349593 168.458769,198.864111 L176.181185,198.864111 C199.259001,197.560976 214.16957,185.349593 214.16957,166.924506 C214.285714,142.18583 180.023229,140.792102 180.255517,129.75842 C180.370499,126.390244 183.507549,122.789779 190.592334,121.860627 C194.075494,121.396051 203.600465,121.047619 214.518002,126.041812 L218.815331,106.181185 C213.00813,104.090592 205.458769,102 196.167247,102 C172.124274,102 155.168409,114.777003 155.052265,133.010453 Z M259.698026,103.74216 C255.052265,103.74216 251.103368,106.413473 249.360046,110.594657 L213.00813,197.469222 L238.44367,197.469222 L243.554007,183.416957 L274.680604,183.416957 L277.584204,197.469222 L300,197.469222 L280.487805,103.74216 L259.698026,103.74216 Z M263.182346,129.061556 L270.499419,164.253194 L250.406504,164.253194 L263.182346,129.061556 Z M124.2741,103.74216 L104.180023,197.469222 L128.455285,197.469222 L148.5482,103.74216 L124.2741,103.74216 Z M88.3855981,103.74216 L63.1823461,167.505226 L52.9616725,113.26597 C51.8002323,107.226481 47.0383275,103.74216 41.8118467,103.74216 L0.580720093,103.74216 L0,106.413473 C8.47851336,108.271777 18.1196283,111.175377 23.9256678,114.42741 C27.5261324,116.401858 28.4552846,11…"
+    },
+    {
+      "ts": 1788346829149,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/hipercard.1de036c2.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg width=\"300px\" height=\"300px\" viewBox=\"0 0 300 300\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <!-- Generator: Sketch 49.1 (51147) - http://www.bohemiancoding.com/sketch -->\n    <title>Hipercard/UmaCor</title>\n    <desc>Created with Sketch.</desc>\n    <defs></defs>\n    <g id=\"Hipercard/UmaCor\" stroke=\"none\" stroke-width=\"1\" fill=\"none\" fill-rule=\"evenodd\">\n        <path d=\"M125.315973,215.617315 L0,215.662021 L0,215.360265 C0,215.194295 0.199868557,214.118185 0.444145608,212.968917 C0.68842266,211.819664 1.06820022,209.991614 1.288089,208.906597 C1.50796261,207.82158 1.88391813,205.977809 2.12352425,204.809329 C2.36312991,203.640849 2.76122901,201.694646 3.00819059,200.484435 C3.25515217,199.274223 3.64202781,197.362165 3.86790749,196.235416 C4.09378717,195.108667 4.47089537,193.264897 4.70595098,192.138148 C4.94099143,191.011399 5.34171439,189.065197 5.59645656,187.813254 C5.85118356,186.561311 6.23840803,184.649252 6.45694696,183.564235 C6.67550106,182.479218 7.02280643,180.806167 7.22874172,179.846344 C7.43467701,178.886521 7.69721493,177.589053 7.81214921,176.963081 C7.92709865,176.33711 8.29903496,174.493339 8.63868107,172.865813 C8.97834235,171.238287 9.35331202,169.394516 9.47196218,168.768545 C9.59061233,168.142573 9.96726552,166.298803 10.3089592,164.671277 C10.650668,163.043751 11.0260471,161.19998 11.1431351,160.574009 C11.2602382,159.948037 11.6376953,158.104267 11.9819521,156.476741 C12.3262089,154.849215 12.6977661,153.039588 12.8076346,152.455348 C12.9175032,151.871108 13.2184284,150.368776 13.4763404,149.116833 C13.7342671,147.86489 14.2223207,145.508961 14.56089,143.881435 C14.8994744,142.253909 15.4785897,139.419965 15.8478112,137.583782 C16.2170326,135.747599 16.658251,133.562389 16.8282864,132.727761 C16.998337,131.893132 17.3058294,130.3908 17.511613,129.389246 C17.7173966,128.387692 18.0910771,126.578065 18.3419972,125.367853 C18.5929325,124.157642 …"
+    },
+    {
+      "ts": 1788346829154,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/banner_claro_controle.7d8f2169.png",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/png",
+      "body": null
+    },
+    {
+      "ts": 1788346829155,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/banner_claro_prezao.3257b9c1.png",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/png",
+      "body": null
+    },
+    {
+      "ts": 1788346829161,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-sms.442d57a4.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Generator: Adobe Illustrator 22.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n<svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\"\n\t viewBox=\"0 0 24 24\" style=\"enable-background:new 0 0 24 24;\" xml:space=\"preserve\">\n<style type=\"text/css\">\n\t.st0{fill:#E33B15;}\n</style>\n<title>ic_Sms</title>\n<desc>Created with Sketch.</desc>\n<path class=\"st0\" d=\"M17.1,0H6.9C5.8,0,5,0.9,5,2v20c0,1.1,0.8,2,1.9,2h10.3c1,0,1.9-0.9,1.9-2V2C19,0.9,18.2,0,17.1,0z M18,21.5\n\tc0,0.8-0.6,1.5-1.3,1.5H7.3C6.6,23,6,22.3,6,21.5V20h12V21.5z M18,19H6V5h12V19z M18,4H6V2.5C6,1.7,6.6,1,7.3,1h9.4\n\tC17.4,1,18,1.7,18,2.5V4z\"/>\n<g id=\"Fill-1_1_\">\n\t<path class=\"st0\" d=\"M10.4,17c-0.8,0-1.4-0.6-1.4-1.4v-0.1C7.9,15.2,7,14.1,7,12.9v-2.2C7,9.2,8.2,8,9.7,8h4.6\n\t\tc1.5,0,2.7,1.2,2.7,2.7v2.2c0,1.5-1.2,2.7-2.7,2.7h-1.8l-1.1,1C11.2,16.9,10.8,17,10.4,17z M9.7,9C8.8,9,8,9.7,8,10.7v2.2\n\t\tc0,0.9,0.7,1.6,1.6,1.7l0.5,0v1c0,0.4,0.5,0.5,0.7,0.3l1.3-1.3l0.3,0h2c0.9,0,1.7-0.7,1.7-1.7v-2.2C16,9.7,15.2,9,14.3,9H9.7z\"/>\n</g>\n<g id=\"Fill-1_2_\">\n\t<path class=\"st0\" d=\"M10,13.5c-0.8,0-1.5-0.7-1.5-1.5s0.7-1.5,1.5-1.5s1.5,0.7,1.5,1.5S10.8,13.5,10,13.5z M10,11.5\n\t\tc-0.3,0-0.5,0.2-0.5,0.5s0.2,0.5,0.5,0.5s0.5-0.2,0.5-0.5S10.3,11.5,10,11.5z\"/>\n</g>\n<g id=\"Fill-1-Copy-3\">\n\t<path class=\"st0\" d=\"M14,13.5c-0.8,0-1.5-0.7-1.5-1.5s0.7-1.5,1.5-1.5s1.5,0.7,1.5,1.5S14.8,13.5,14,13.5z M14,11.5\n\t\tc-0.3,0-0.5,0.2-0.5,0.5s0.2,0.5,0.5,0.5s0.5-0.2,0.5-0.5S14.3,11.5,14,11.5z\"/>\n</g>\n</svg>\n"
+    },
+    {
+      "ts": 1788346829162,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-googlePlay.9899d100.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Generator: Adobe Illustrator 22.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n<svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\"\n\t viewBox=\"0 0 135 40\" style=\"enable-background:new 0 0 135 40;\" xml:space=\"preserve\">\n<style type=\"text/css\">\n\t.st0{filter:url(#Adobe_OpacityMaskFilter);}\n\t.st1{fill:#FFFFFF;}\n\t.st2{mask:url(#mask-2_1_);}\n\t.st3{filter:url(#Adobe_OpacityMaskFilter_1_);}\n\t.st4{mask:url(#mask-4_1_);fill:#A6A6A6;}\n\t.st5{filter:url(#Adobe_OpacityMaskFilter_2_);}\n\t.st6{mask:url(#mask-6_1_);fill:#FFFFFF;}\n\t.st7{filter:url(#Adobe_OpacityMaskFilter_3_);}\n\t.st8{mask:url(#mask-6_2_);fill:#00D2FF;}\n\t.st9{filter:url(#Adobe_OpacityMaskFilter_4_);}\n\t.st10{mask:url(#mask-6_3_);fill:#FFE000;}\n\t.st11{filter:url(#Adobe_OpacityMaskFilter_5_);}\n\t.st12{mask:url(#mask-6_4_);fill:#FF3A44;}\n\t.st13{filter:url(#Adobe_OpacityMaskFilter_6_);}\n\t.st14{mask:url(#mask-6_5_);fill:#15CF74;}\n\t.st15{filter:url(#Adobe_OpacityMaskFilter_7_);}\n\t.st16{mask:url(#mask-6_6_);}\n\t.st17{filter:url(#Adobe_OpacityMaskFilter_8_);}\n\t.st18{mask:url(#mask-6_7_);}\n\t.st19{filter:url(#Adobe_OpacityMaskFilter_9_);}\n\t.st20{mask:url(#mask-6_8_);fill:#FFFFFF;}\n\t.st21{filter:url(#Adobe_OpacityMaskFilter_10_);}\n\t.st22{mask:url(#mask-6_9_);fill:none;stroke:#FFFFFF;stroke-width:0.2;}\n\t.st23{filter:url(#Adobe_OpacityMaskFilter_11_);}\n\t.st24{mask:url(#mask-6_10_);fill:#FFFFFF;}\n\t.st25{filter:url(#Adobe_OpacityMaskFilter_12_);}\n\t.st26{mask:url(#mask-6_11_);fill:none;stroke:#FFFFFF;stroke-width:0.2;}\n\t.st27{filter:url(#Adobe_OpacityMaskFilter_13_);}\n\t.st28{mask:url(#mask-6_12_);fill:#FFFFFF;}\n\t.st29{filter:url(#Adobe_OpacityMaskFilter_14_);}\n\t.st30{mask:url(#mask-6_13_);fill:none;stroke:#FFFFFF;stroke-width:0.2;}\n\t.st31{filter:url(#Adobe_OpacityMaskFilter_15_);}\n\t.st32{mask:url(#mask-6_14_);fill:#FFFFFF;}\n\t.st33{filter:url(#Adobe_OpacityMaskFilter_16_);}\n\t.st34{mask:url(#mask-6_15_);fill:none;…"
+    },
+    {
+      "ts": 1788346829162,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-appStore.0f85bec7.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Generator: Adobe Illustrator 22.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n<svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\"\n\t viewBox=\"0 0 120 40\" style=\"enable-background:new 0 0 120 40;\" xml:space=\"preserve\">\n<style type=\"text/css\">\n\t.st0{filter:url(#Adobe_OpacityMaskFilter);}\n\t.st1{fill:#FFFFFF;}\n\t.st2{mask:url(#mask-2_1_);fill:#A9AAA9;}\n\t.st3{fill:#FFFFFE;}\n</style>\n<title>Group</title>\n<desc>Created with Sketch.</desc>\n<g id=\"Symbols\">\n\t<g id=\"Footer_x2F_Desktop\" transform=\"translate(-476.000000, -13.000000)\">\n\t\t<g id=\"Group\" transform=\"translate(476.000000, 13.000000)\">\n\t\t\t<g id=\"Group-3\">\n\t\t\t\t<g id=\"Clip-2\">\n\t\t\t\t</g>\n\t\t\t\t<defs>\n\t\t\t\t\t<filter id=\"Adobe_OpacityMaskFilter\" filterUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"119.7\" height=\"40\">\n\t\t\t\t\t\t<feColorMatrix  type=\"matrix\" values=\"1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0\"/>\n\t\t\t\t\t</filter>\n\t\t\t\t</defs>\n\t\t\t\t<mask maskUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"119.7\" height=\"40\" id=\"mask-2_1_\">\n\t\t\t\t\t<g class=\"st0\">\n\t\t\t\t\t\t<polygon id=\"path-1_1_\" class=\"st1\" points=\"0,0 119.7,0 119.7,40 0,40 \t\t\t\t\t\t\"/>\n\t\t\t\t\t</g>\n\t\t\t\t</mask>\n\t\t\t\t<path id=\"Fill-1\" class=\"st2\" d=\"M110.1,0H9.5C9.2,0,8.8,0,8.4,0C8.1,0,7.8,0,7.5,0c-0.7,0-1.3,0.1-2,0.2\n\t\t\t\t\tC4.8,0.3,4.2,0.5,3.6,0.8C3,1.1,2.5,1.5,2,2C1.5,2.5,1.1,3,0.8,3.6C0.5,4.2,0.3,4.9,0.2,5.5C0.1,6.2,0,6.9,0,7.5\n\t\t\t\t\tc0,0.3,0,0.6,0,0.9c0,0.4,0,0.7,0,1.1v20.9c0,0.4,0,0.7,0,1.1c0,0.3,0,0.6,0,0.9c0,0.7,0.1,1.3,0.2,2c0.1,0.7,0.3,1.3,0.6,1.9\n\t\t\t\t\tC1.1,37,1.5,37.5,2,38c0.5,0.5,1,0.9,1.6,1.2c0.6,0.3,1.2,0.5,1.9,0.6c0.7,0.1,1.3,0.2,2,0.2c0.3,0,0.6,0,0.9,0\n\t\t\t\t\tc0.4,0,0.7,0,1.1,0h100.6c0.4,0,0.7,0,1.1,0c0.3,0,0.6,0,0.9,0c0.7,0,1.3-0.1,2-0.2c0.7-0.1,1.3-0.3,1.9-0.6\n\t\t\t\t\tc0.6-0.3,1.1-0.7,1.6-1.2c0.5-0.5,0.9-1,1.2-1.6c0.3-0.6,0.5-1.2,0.6-1.9c0.1-0.7,0.2-1.3,0.2-2c0-0.3,0-0.6,0-0.9\n\t\t\t\t\tc0-0.4,0-0.7,0-1.1V9.5c0-0.4,0-0.7,0-1.1c0-0.3,0-0.6,0-0.9c0-0.7-0.1-1.3-0.2-2c-0.…"
+    },
+    {
+      "ts": 1788346829166,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/AMX-Regular.197ef91d.ttf",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/font-sfnt",
+      "body": null
+    },
+    {
+      "ts": 1788346829167,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/Banner-720x180-TelaValores_default.ccabbdc8.png",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/png",
+      "body": null
+    },
+    {
+      "ts": 1788346829174,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/icone-minhaClaro.181762e8.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Generator: Adobe Illustrator 22.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n<svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\"\n\t viewBox=\"0 0 24 24\" style=\"enable-background:new 0 0 24 24;\" xml:space=\"preserve\">\n<style type=\"text/css\">\n\t.st0{fill:#E33B15;}\n</style>\n<title>ic_MinhaClaro</title>\n<desc>Created with Sketch.</desc>\n<g>\n\t<path class=\"st0\" d=\"M17.1,0H6.9C5.8,0,5,0.9,5,2v20c0,1.1,0.8,2,1.9,2h10.3c1,0,1.9-0.9,1.9-2V2C19,0.9,18.2,0,17.1,0z M18,21.5\n\t\tc0,0.8-0.6,1.5-1.3,1.5H7.3C6.6,23,6,22.3,6,21.5V20h12V21.5z M18,19H6V5h12V19z M18,4H6V2.5C6,1.7,6.6,1,7.3,1h9.4\n\t\tC17.4,1,18,1.7,18,2.5V4z\"/>\n\t<path id=\"Fill-4\" class=\"st0\" d=\"M9.1,14.2c0,0,0.6,1.2,1.1,1.9c0.7,0.9,1.2,1.4,1.5,1.6c0.3,0.2,0.6,0.3,0.8,0.3h1.6\n\t\tc0.3,0,0.5-0.1,0.7-0.4l0.3-0.4c0.6-0.8,0.9-1.9,0.9-2.9v-1.2c0-0.3-0.3-0.6-0.6-0.7c-0.4-0.1-0.7,0.3-0.7,0.6v-0.3\n\t\tc0-0.3-0.2-0.6-0.6-0.7c-0.4-0.1-0.7,0.3-0.7,0.6v-0.3c0-0.3-0.2-0.6-0.6-0.7c-0.4-0.1-0.7,0.3-0.7,0.6V9.6c0-0.4-0.3-0.6-0.6-0.6\n\t\tc-0.4,0-0.6,0.3-0.6,0.6v4.9c0,0.1-0.1,0.1-0.1,0c-0.2-0.4-0.5-1-0.5-1c-0.1-0.3-0.5-0.4-0.8-0.3C9,13.5,8.9,13.9,9.1,14.2\"/>\n\t<g id=\"Fill-6\">\n\t\t<path class=\"st0\" d=\"M9.8,9.9C9.4,9.5,9.2,8.9,9.2,8.4c0-1.2,1-2.2,2.3-2.2c1.3,0,2.3,1,2.3,2.2c0,0.5-0.2,1.1-0.6,1.5l0.1,0.1\n\t\t\tC13.8,9.6,14,9,14,8.4C14,7.1,12.9,6,11.5,6S9,7.1,9,8.4C9,9,9.2,9.6,9.6,10L9.8,9.9z\"/>\n\t\t<path class=\"st0\" d=\"M13.4,10.5c-0.1,0-0.2,0-0.3-0.1l-0.1-0.1c-0.1-0.1-0.2-0.2-0.2-0.4c0-0.1,0-0.3,0.1-0.4\n\t\t\tc0.3-0.3,0.4-0.7,0.4-1.1c0-0.9-0.8-1.7-1.8-1.7S9.7,7.5,9.7,8.4c0,0.4,0.2,0.8,0.4,1.1c0.1,0.1,0.1,0.2,0.1,0.4\n\t\t\tc0,0.1-0.1,0.3-0.2,0.4L10,10.4c-0.2,0.2-0.5,0.2-0.7,0C8.8,9.8,8.5,9.1,8.5,8.4c0-1.6,1.3-2.9,3-2.9s3,1.3,3,2.9\n\t\t\tc0,0.7-0.3,1.4-0.8,1.9C13.6,10.4,13.5,10.5,13.4,10.5z\"/>\n\t</g>\n</g>\n</svg>\n"
+    },
+    {
+      "ts": 1788346829178,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/banner_claro_flex.7503dff6.png",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/png",
+      "body": null
+    },
+    {
+      "ts": 1788346829179,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/AMX-Bold.44ea25b3.ttf",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/font-sfnt",
+      "body": null
+    },
+    {
+      "ts": 1788346829192,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/AMX-Medium.9bf1ac53.ttf",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/font-sfnt",
+      "body": null
+    },
+    {
+      "ts": 1788346829642,
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/loop/public/events",
+      "status": 201,
+      "category": "app",
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"status\":\"Event sent\"}"
+    },
+    {
+      "ts": 1788346829688,
+      "method": "GET",
+      "url": "https://claro-recarga-api.m4u.com.br/v1/features/public",
+      "status": 200,
+      "category": "app",
+      "contentType": "application/json; charset=utf-8",
+      "body": "{}"
+    },
+    {
+      "ts": 1788346835879,
+      "method": "GET",
+      "url": "https://clarorecarga.claro.com.br/static/media/landing_logo_recarga.9e89c7d7.svg",
+      "status": 200,
+      "category": "app",
+      "contentType": "image/svg+xml",
+      "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"180.929\" height=\"35.802\" viewBox=\"0 0 180.929 35.802\">\n  <defs>\n    <clipPath id=\"clip-path\">\n      <path id=\"Path_4501\" data-name=\"Path 4501\" d=\"M76.912-54.225l2.661,2.675-9.419,9.475-2.66-2.676Zm-5.021,19.46v-3.761H81.948v3.761ZM47.669-26.733H43.8V-42.152l3.7-.008v2.029a7.543,7.543,0,0,1,2.764-2.285,6.546,6.546,0,0,1,1.485-.4,8.511,8.511,0,0,1,1.033-.053l.01,3.913-.708-.048-.475-.013a4.2,4.2,0,0,0-3.5,2.218,6.158,6.158,0,0,0-.461,2.732ZM34.663-36.412a6.33,6.33,0,0,0,1.6-.357,1.218,1.218,0,0,0,.864-1.151,1.351,1.351,0,0,0-.666-1.309,3.98,3.98,0,0,0-1.923-.37,2.5,2.5,0,0,0-2.023.712,2.977,2.977,0,0,0-.566,1.422H28.058a5.97,5.97,0,0,1,1.131-3.344q1.6-2.048,5.489-2.049a9.705,9.705,0,0,1,4.5,1.011q1.965,1.01,1.965,3.812l-.015,11.3H37.274l0-1.575a8.005,8.005,0,0,1-5.018,1.575,4.248,4.248,0,0,1-3.163-1.058,4.124,4.124,0,0,1-1.357-3.315,4.429,4.429,0,0,1,2.192-4.14,8.693,8.693,0,0,1,3.368-1Zm2.448,1.891a4.46,4.46,0,0,1-.779.4,6.591,6.591,0,0,1-1.06.27l-.906.17a5.869,5.869,0,0,0-1.825.555,1.859,1.859,0,0,0-.933,1.721,1.846,1.846,0,0,0,.566,1.507,2.2,2.2,0,0,0,1.4.457,4.062,4.062,0,0,0,2.392-.769,3.277,3.277,0,0,0,1.147-2.8ZM21.626-26.733h3.865V-46.818H21.626Zm39.53-3.829A4.258,4.258,0,0,0,65.4-34.835a4.259,4.259,0,0,0-4.247-4.273,4.261,4.261,0,0,0-4.248,4.273,4.26,4.26,0,0,0,4.248,4.273Zm.144-12.39a8.1,8.1,0,0,1,8.073,8.118A8.1,8.1,0,0,1,61.3-26.716a8.093,8.093,0,0,1-8.07-8.118,8.093,8.093,0,0,1,8.07-8.118ZM9.98-46.807a10,10,0,0,1,9.628,7.382H15.522A6.134,6.134,0,0,0,9.98-42.943,6.156,6.156,0,0,0,3.842-36.77,6.156,6.156,0,0,0,9.98-30.6a6.133,6.133,0,0,0,5.542-3.518h4.086A9.994,9.994,0,0,1,9.98-26.733,10.008,10.008,0,0,1,0-36.77,10.008,10.008,0,0,1,9.98-46.807Zm148.6,4.191a5.044,5.044,0,0,1,3.9,1.86v-1.663h3.033v15.313q-.058,3.538-1.963,5.2A6.676,6.676,0,0,1,158.95-20.2a6.812,6.812,0,0,1-5.234-2.625l2.357-1.947a5.749,5.749,0,0,0,1.338.958,3.456,3.456,0,0,0,1.6.471,3.489,3.489,0,0,0,2.5…"
+    },
+    {
+      "ts": 1788346836227,
+      "method": "POST",
+      "url": "https://claro-recarga-api.m4u.com.br/loop/public/events",
+      "status": 201,
+      "category": "app",
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"status\":\"Event sent\"}"
+    }
+  ]
+}

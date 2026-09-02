@@ -1,0 +1,207 @@
+{
+  "source": "https://clarorecarga.claro.com.br/whatsapp/",
+  "apiBaseUrls": [
+    "https://cc-brand.plat-m4u.io",
+    "https://eldorado.m4u.com.br"
+  ],
+  "apiHosts": [
+    "https://blyhax9weg.execute-api.us-east-1.amazonaws.com",
+    "https://claro-recarga-api.m4u.com.br",
+    "https://clarorecarga.claro.com.br",
+    "https://controle.claro.com.br",
+    "https://eldorado.m4u.com.br",
+    "https://flex.claro.com.br/midias",
+    "https://flex.claro.com.br/new-register-confirm",
+    "https://mondrian.claro.com.br/brands/horizontal/inverse",
+    "https://mondrian.claro.com.br/brands/horizontal/inverse/claro.svg",
+    "https://mondrian.claro.com.br/brands/nosvg/assinatura-claro.png",
+    "https://mondrian.claro.com.br/channels/default/arte1.svg",
+    "https://mondrian.claro.com.br/tokens/claro-tokens-latest.custom-properties.css",
+    "https://mondrian.claro.com.br/vanilla/mondrian-vanilla-latest.json",
+    "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.css",
+    "https://mondrian.claro.com.br/vanilla/pre-release/6_0_0/mondrian-vanilla-latest.js",
+    "https://planoscelular.claro.com.br/claro/pt/offer-plan/externalUri",
+    "https://ponte-eldorado.frontend-cdn.m4u.com.br",
+    "https://ponte-eldorado.frontend-cdn.m4u.com.br/img/perguntas.1534e580.svg",
+    "https://ponte-pix-claro-recarga.bemobi.com/pix",
+    "https://portal.claro-tv.m4u.com.br",
+    "https://portal.clarotv.m4u.com.br",
+    "https://smart-checkout.bemobi.com/callback/itp-0009",
+    "https://www.claro.com.br",
+    "https://www.claro.com.br/app-minha-claro",
+    "https://www.claro.com.br/busca",
+    "https://www.claro.com.br/privacidade",
+    "https://www.claro.com.br/privacidade/politica-de-privacidade"
+  ],
+  "frontendRoutes": [
+    "/:channel",
+    "/:channel(tv)/*",
+    "/:channel/*login",
+    "/:channel/confirm-repeat",
+    "/:channel/confirmacao",
+    "/:channel/confirmacao-beneficio",
+    "/:channel/confirmacao-pix",
+    "/:channel/criar-cartao",
+    "/:channel/debitocef",
+    "/:channel/exclusao-confirmacao",
+    "/:channel/falha",
+    "/:channel/gerenciar-programadas",
+    "/:channel/gerenciar-recarga-programada",
+    "/:channel/historico",
+    "/:channel/home",
+    "/:channel/landing",
+    "/:channel/logout",
+    "/:channel/maintenance",
+    "/:channel/meus-dados",
+    "/:channel/minhas-recargas",
+    "/:channel/novo-credito",
+    "/:channel/novo-debitocef",
+    "/:channel/numero",
+    "/:channel/pagamento-cartao",
+    "/:channel/pagamento-credito",
+    "/:channel/pagamento-cvv",
+    "/:channel/pagamento-debitocef",
+    "/:channel/pagamento-debitocef-codigo",
+    "/:channel/pagamento-erro",
+    "/:channel/pagamento-googlepay",
+    "/:channel/pagamento-mercadopago",
+    "/:channel/pagamento-parcelamento",
+    "/:channel/pagamento-paypal",
+    "/:channel/pagamento-sucesso",
+    "/:channel/paypal",
+    "/:channel/pendencia",
+    "/:channel/pix",
+    "/:channel/saldo",
+    "/:channel/selecionar-valor",
+    "/:channel/smartcheckout",
+    "/:channel/valores-mobile"
+  ],
+  "staticPaths": [
+    "/api/",
+    "/auth/braspag/brand/",
+    "/customer/",
+    "/customer/offer",
+    "/customers/",
+    "/events/checkout",
+    "/files/Oferta_Acessoria_Recarga_e_Oferta_Recarregue_e_Ganhe_20260303.pdf",
+    "/login",
+    "/loop/events",
+    "/loop/public/events",
+    "/payment",
+    "/payment-methods",
+    "/payment-methods/",
+    "/payment-methods/paypal/accounts",
+    "/payment-methods/paypal/accounts/",
+    "/payment-methods/paypal/authorize",
+    "/products",
+    "/recharge/balance",
+    "/recharges",
+    "/recharges/encrypted",
+    "/recharges/recurrence/result/",
+    "/recharges/result/",
+    "/scheduled-recharges",
+    "/scheduled-recharges/",
+    "/sessions/",
+    "/sessions/revalidate",
+    "/smartcheckout/recurrence/url",
+    "/smartcheckout/v2/url",
+    "/sms-tokens/",
+    "/tmp/token",
+    "/v1/brand",
+    "/v1/cc",
+    "/v1/features/",
+    "/v1/features/group/",
+    "/v1/features/public"
+  ],
+  "apiRoutesWithMethods": [
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/braspag/brand/"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/customer/"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/customer/offer"
+    },
+    {
+      "methods": [
+        "DELETE",
+        "GET",
+        "POST",
+        "PUT"
+      ],
+      "path": "/customers/"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/loop/public/events"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/recharges/encrypted"
+    },
+    {
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/sessions/"
+    },
+    {
+      "methods": [
+        "POST",
+        "PUT"
+      ],
+      "path": "/sessions/revalidate"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/sms-tokens/"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/v1/brand"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/v1/cc"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/v1/features/"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/v1/features/group/"
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/v1/features/public"
+    }
+  ]
+}
