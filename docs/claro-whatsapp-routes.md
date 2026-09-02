@@ -264,22 +264,62 @@ Content-Type: application/json
 
 **Respostas observadas:**
 - `204` — SMS enviado (`POST /sms-tokens/`)
-- `400 Bad Request` — OTP inválido/expirado
+- `200` — sessão criada (OTP válido)
+- `400 Bad Request` — OTP inválido, expirado ou **já consumido** (uso único)
 - `422` — sessão encrypted sem token JWT
+- `429 Too Many Requests` — rate limit em `POST /sms-tokens/` (aguardar ~1 min)
 
-7. Após sessão OK → `/products`, `/payment-methods`, `/recharges/encrypted`
+**Resposta de sucesso (`POST /sessions/` com OTP válido):**
 
-Script para captura autenticada:
+```json
+{
+  "id": "9ea41a04-23e2-47a4-bbda-2b423a824673",
+  "partnerExternalId": "73eb4bb7-5a87-4038-b5f3-1fc623378d75",
+  "identifier": "27992485949"
+}
+```
+
+| Campo | Uso |
+|-------|-----|
+| `id` | Token de sessão — header `Authorization: claro {id}` |
+| `identifier` | MSISDN do cliente — prefixo em `/customers/{identifier}/...` |
+| `partnerExternalId` | ID externo do parceiro (WhatsApp) |
+
+### 7.1 Autenticação pós-OTP
+
+Header obrigatório nas rotas autenticadas:
+
+```http
+Authorization: claro {session.id}
+Channel: whatsapp
+```
+
+Endpoints escopados por cliente (extraídos do bundle JS):
+
+| Método | Endpoint |
+|--------|----------|
+| `GET` | `/customers/{identifier}/products` |
+| `GET` | `/customers/{identifier}/payment-methods` |
+| `GET` | `/customers/{identifier}/recharges` |
+| `POST` | `/customers/{identifier}/payment-methods` |
+| `POST` | `/customers/{identifier}/smartcheckout/v2/url` |
+| `GET` | `/customers/{identifier}/recharges/result/{id}` |
+| `GET` | `/sessions/{identifier}/tmp/token` |
+| `POST` | `/recharges/encrypted` (body `{payload: encrypted}`) |
+
+> **Atenção:** cada OTP só pode ser usado **uma vez**. Reenviar SMS (`POST /sms-tokens/`) invalida o código anterior. Enviar o OTP imediatamente após recebê-lo — a sessão expira em poucos minutos.
+
+Script para login OTP + captura autenticada em sequência:
 
 ```bash
-node scripts/capture-whatsapp-otp.mjs 27992485949 <CODIGO_SMS>
+node scripts/capture-whatsapp-otp-complete.mjs 27992485949 <CODIGO_SMS> 2000
 ```
 
 ## 8. Próximo passo
 
-Com o **código SMS** dá para mapear:
+Com um **código SMS novo e ainda não usado**, o script acima captura:
 
-- resposta de `/products` (valores e IDs)
-- `/payment-methods` (cartões vinculados)
-- `/smartcheckout/v2/url` (URL Eldorado)
-- `/recharges/encrypted` (payload final)
+- resposta de `/customers/{identifier}/products` (valores e IDs)
+- `/customers/{identifier}/payment-methods` (cartões vinculados)
+- `/customers/{identifier}/smartcheckout/v2/url` (URL Eldorado)
+- `/recharges/encrypted` (estrutura do payload)
