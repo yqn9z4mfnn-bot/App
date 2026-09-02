@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dirname, '..', 'output');
 const BASE = 'https://claro-recarga-api.m4u.com.br';
+const CC_BASE = 'https://eldorado.m4u.com.br';
 
 const phone = process.argv[2];
 const otp = process.argv[3];
@@ -24,8 +25,8 @@ if (!phone || !otp || !pan || !month || !year || !cvv) {
 mkdirSync(OUT, { recursive: true });
 const log = [];
 
-async function call(method, path, body, headers = {}, formBody) {
-  const url = BASE + path;
+async function call(method, path, body, headers = {}, formBody, base = BASE) {
+  const url = path.startsWith('http') ? path : base + path;
   const h = { Accept: 'application/json', Channel: 'whatsapp', ...headers };
   const init = { method, headers: h };
   if (formBody) {
@@ -68,7 +69,7 @@ const auth = { Authorization: `claro ${token}` };
 await call('GET', `/customers/${identifier}`, undefined, auth);
 
 const ccBody = new URLSearchParams({ pan, month, year, partner: 'CLARO' }).toString();
-const cc = await call('POST', '/v1/cc', undefined, auth, ccBody);
+const cc = await call('POST', '/v1/cc', undefined, auth, ccBody, CC_BASE);
 
 if (cc.status !== 200 || !cc.json?.card?.key) {
   writeFileSync(join(OUT, 'recharge-credit-result.json'), JSON.stringify({ phone, session: session.json, log, error: 'tokenize_failed' }, null, 2));
