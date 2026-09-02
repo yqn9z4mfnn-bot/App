@@ -267,7 +267,7 @@ Content-Type: application/json
 - `200` — sessão criada (OTP válido)
 - `400 Bad Request` — OTP inválido, expirado ou **já consumido** (uso único)
 - `422` — sessão encrypted sem token JWT
-- `429 Too Many Requests` — rate limit em `POST /sms-tokens/` (aguardar ~1 min)
+- `429 Too Many Requests` — rate limit em `POST /sms-tokens/` ou `POST /sessions/` (aguardar ~1–2 min)
 
 **Resposta de sucesso (`POST /sessions/` com OTP válido):**
 
