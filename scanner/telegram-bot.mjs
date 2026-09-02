@@ -1976,6 +1976,8 @@ async function loadSavedNumber(chatId, msisdn, { editMsg = null } = {}) {
   }
 
   busy.add(chatId);
+  const resolvedMode = chatRechargeMode.get(chatId) ?? 'other';
+  chatRechargeMode.set(chatId, resolvedMode);
   let statusMsg = editMsg;
   if (!statusMsg) {
     statusMsg = await send(chatId, `⚡️ Carregando <code>${number}</code> do banco…`);
@@ -2006,23 +2008,45 @@ async function loadSavedNumber(chatId, msisdn, { editMsg = null } = {}) {
     });
     const valores = refreshed.valores ?? [];
     const listed = refreshed.listedProducts ?? 0;
+    const msisdnResolved = session.identifier || number;
 
+    let walletAuth = null;
+    let cardsPurged = 0;
+    if (resolvedMode === 'other' && valores.length) {
+      const purge = await purgeLoginCards(chatId, statusMsg, { login: msisdnResolved }, {
+        sessionId: session.id,
+        msisdn: msisdnResolved,
+        productId: valores[0].id,
+      });
+      walletAuth = purge.walletAuth;
+      cardsPurged = purge.removed ?? 0;
+    }
+
+    clearRecharge(chatId);
     setCache(chatId, {
       link,
-      walletAuth: null,
+      walletAuth,
       cards: [],
       sessionId: session.id,
-      msisdn: session.identifier,
+      msisdn: msisdnResolved,
       valores,
+      rechargeMode: resolvedMode,
+      awaitTargetMsisdn: resolvedMode === 'other',
+      purgedAt: resolvedMode === 'other' ? Date.now() : null,
     });
 
     const lines = [
-      `<b>⚡️ ${session.identifier}</b> (banco)`,
+      `<b>⚡️ ${msisdnResolved}</b> (banco)`,
       '',
       `<b>Valores (${valores.length}):</b> ${formatValoresShort(valores)}`,
     ];
+    if (resolvedMode === 'other') {
+      lines.push('', '<i>Login do banco → depois do valor, envie o número destino.</i>');
+    }
     if (!valores.length && listed > 0) {
       lines.push('', `⚠️ A Claro lista ${listed} valor(es), mas <b>nenhum está disponível</b> para recarga.`);
+    } else if (cardsPurged > 0) {
+      lines.push('', `<i>${cardsPurged} cartão(ões) removido(s) do login.</i>`);
     }
     await tg('editMessageText', {
       chat_id: chatId,
