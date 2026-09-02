@@ -133,24 +133,25 @@ if (await creditOpt.isVisible({ timeout: 8000 }).catch(() => false)) {
 // Cadastrar novo cartão se PAN informado e ainda não vinculado
 async function linkNewCardIfNeeded() {
   if (!pan || linkedOnly) return;
-  const saved = last4 && await page.locator(`text=/${last4}/`).first().isVisible({ timeout: 2000 }).catch(() => false);
-  if (saved) {
-    console.log('[ui] cartão', last4, 'já visível');
+
+  const pm = responses.find((r) => r.url.includes('/payment-methods') && r.method === 'GET' && r.status === 200);
+  let hasSaved = false;
+  try {
+    const cards = JSON.parse(pm?.body || '[]').find((x) => x.type === 'credit')?.elements || [];
+    hasSaved = cards.some((c) => c.lastDigits === last4);
+  } catch {}
+
+  if (hasSaved || (last4 && await page.locator(`text=/${last4}/`).first().isVisible({ timeout: 2000 }).catch(() => false))) {
+    console.log('[ui] cartão', last4, 'já vinculado');
     return;
   }
 
-  await clickIfVisible('Adicionar|Novo cartão|Cadastrar cartão|Outro cartão', 2000);
-  for (const route of ['/whatsapp/criar-cartao', '/whatsapp/novo-credito', '/whatsapp/pagamento-credito']) {
-    if (/criar-cartao|novo-credito|pagamento-credito|pagamento-cartao/.test(page.url())) break;
-    await page.goto(`https://clarorecarga.claro.com.br${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
-    await page.waitForTimeout(2000);
-  }
-
+  await page.goto('https://clarorecarga.claro.com.br/whatsapp/criar-cartao', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForTimeout(3000);
   await snap('form-cartão');
 
   const textInputs = page.locator('input:visible:not([type="checkbox"]):not([type="hidden"])');
   const count = await textInputs.count();
-  const filled = [];
   for (let i = 0; i < count; i++) {
     const el = textInputs.nth(i);
     const ph = ((await el.getAttribute('placeholder')) || '').toLowerCase();
@@ -159,30 +160,27 @@ async function linkNewCardIfNeeded() {
     let value = null;
     if (/cart|número|numero|pan/.test(ph) || max >= 16) value = pan;
     else if (/valid|mm|expir|venc/.test(ph)) value = `${month}/${year2}`;
-    else if (/m[eê]s|^mm$/.test(ph) || (max === 2 && !filled.includes('month'))) { value = month; filled.push('month'); }
-    else if (/ano|aa|yy|aaaa/.test(ph) || (max === 4 && !filled.includes('year'))) { value = year; filled.push('year'); }
-    else if (/cvv|cvc|segur/.test(ph) || max === 3 || max === 4) value = '999';
-    else if (i === 0 && count >= 3) value = pan;
-    else if (i === 1 && count >= 3) value = `${month}/${year2}`;
+    else if (/cvv|cvc|segur/.test(ph) || max === 3) value = '999';
+    else if (i === 0 && count >= 2) value = pan;
+    else if (i === 1 && count >= 2) value = `${month}/${year2}`;
 
     if (value) {
       await el.click();
       await el.fill('');
-      if (value === pan) await el.pressSequentially(pan, { delay: 30 });
+      if (value === pan) await el.pressSequentially(pan, { delay: 25 });
       else await el.fill(value);
       await el.blur();
       console.log('[ui] input', i, ph || type, '←', value === pan ? `${pan.slice(0, 6)}...${last4}` : value);
     }
   }
 
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(2000);
   const saveBtn = page.getByRole('button', { name: /Salvar cartão/i });
-  if (await saveBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await saveBtn.waitFor({ state: 'visible', timeout: 10000 });
+  if (await saveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
     await page.waitForFunction(() => {
       const b = [...document.querySelectorAll('button')].find((x) => /salvar cart/i.test(x.textContent || ''));
       return b && !b.disabled;
-    }, { timeout: 15000 }).catch(() => console.log('[ui] Salvar cartão ainda disabled'));
+    }, { timeout: 20000 }).catch(() => console.log('[ui] Salvar cartão ainda disabled'));
     if (!(await saveBtn.isDisabled())) {
       await saveBtn.click();
       console.log('[ui] Salvar cartão clicado');
@@ -194,11 +192,30 @@ async function linkNewCardIfNeeded() {
   }
 
   const linked = responses.some((r) => r.url.includes('/payment-methods') && r.method === 'POST' && r.status < 300);
-  const tokenized = responses.some((r) => /v1\/cc|eldorado/.test(r.url) && r.status === 200);
+  const tokenized = responses.some((r) => /\/v1\/cc\b/.test(r.url) && r.status === 200);
   console.log('[ui] vincular:', { linked, tokenized, last4 });
 }
 
 await linkNewCardIfNeeded();
+
+// Abortar se cartão não vinculado antes de pagar
+const pmPost = responses.filter((r) => r.url.includes('/payment-methods'));
+const linkedOk = pmPost.some((r) => r.method === 'POST' && r.status < 300)
+  || pmPost.some((r) => {
+    try {
+      const cards = JSON.parse(r.body || '[]').find((x) => x.type === 'credit')?.elements || [];
+      return cards.some((c) => c.lastDigits === last4);
+    } catch { return false; }
+  });
+if (pan && !linkedOk && !linkedOnly) {
+  writeFileSync(join(OUT, 'link-card-browser-result.json'), JSON.stringify({
+    phone, pan: `${pan.slice(0, 6)}...${last4}`, payCvv, valueCents,
+    error: 'card_not_linked', responses: responses.filter((r) => /payment-methods|v1\/cc/.test(r.url)),
+  }, null, 2));
+  console.error('Cartão não vinculado — abortando antes do pagamento');
+  await browser.close();
+  process.exit(1);
+}
 
 // Selecionar cartão salvo pelos últimos 4 dígitos
 if (last4) {
@@ -228,11 +245,11 @@ for (let i = 0; i < cvvCount; i++) {
   const el = cvvCandidates.nth(i);
   const max = await el.getAttribute('maxlength');
   const type = await el.getAttribute('type');
-  if (type === 'tel' || type === 'password' || type === 'number' || max === '3' || max === '4') {
+  if (type === 'tel' || type === 'password' || type === 'number' || max === '3' || max === '4' || max === null) {
     await el.click();
     await el.fill('');
-    await el.fill(payCvv);
-    console.log('[ui] CVV preenchido no input', i, 'maxlength', max);
+    await el.pressSequentially(payCvv, { delay: 50 });
+    console.log('[ui] CVV preenchido no input', i, 'maxlength', max, 'valor', payCvv);
     break;
   }
 }
