@@ -103,82 +103,65 @@ await clickIfVisible('Continuar|Confirmar|Avançar');
 await page.waitForTimeout(10000);
 await snap('pós-login');
 
-// 3) Ir para pagamento / valores
-for (const route of ['/whatsapp/selecionar-valor', '/whatsapp/valores', '/whatsapp/pagamento']) {
-  try {
-    await page.goto(`https://clarorecarga.claro.com.br${route}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await page.waitForTimeout(3000);
-  } catch {}
+// Aceitar cookies se bloquear cliques
+await clickIfVisible('Aceitar cookies', 2000);
+
+// 3) Modal pagamento R$35 — escolher Cartão de Crédito (ficar na página atual)
+const creditOpt = page.getByText('Cartão de Crédito', { exact: true });
+if (await creditOpt.isVisible({ timeout: 8000 }).catch(() => false)) {
+  await creditOpt.click();
+  await page.waitForTimeout(3000);
+  console.log('[ui] Cartão de Crédito selecionado');
 }
 
-// Selecionar R$ 35 se estiver em valores
-await clickIfVisible('R\\$\\s*35|35,00', 3000);
-await clickIfVisible('Recarregar|Continuar|Confirmar', 3000);
-
-// 4) Escolher cartão de crédito
-await clickIfVisible('Cartão|Crédito|credit', 8000);
-
-// 5) Cadastrar cartão novo OU usar vinculado
-if (pan) {
-  await page.goto('https://clarorecarga.claro.com.br/whatsapp/novo-credito', { waitUntil: 'domcontentloaded' }).catch(() => {});
+// Selecionar cartão salvo Elo 6714
+const savedCard = page.getByText(/6714|ELO/i).first();
+if (await savedCard.isVisible({ timeout: 5000 }).catch(() => false)) {
+  await savedCard.click();
   await page.waitForTimeout(2000);
-
-  const inputs = page.locator('input');
-  const n = await inputs.count();
-  for (let i = 0; i < n; i++) {
-    const ph = (await inputs.nth(i).getAttribute('placeholder')) || '';
-    const name = (await inputs.nth(i).getAttribute('name')) || '';
-    const type = (await inputs.nth(i).getAttribute('type')) || '';
-    const label = `${ph} ${name}`.toLowerCase();
-    if (/número|numero|cartão|cartao|card|pan/.test(label) || (type === 'tel' && i === 0)) {
-      await inputs.nth(i).fill(pan);
-    } else if (/mês|mes|month|validade/.test(label)) {
-      await inputs.nth(i).fill(`${month}/${year.slice(-2)}`);
-    } else if (/nome/.test(label)) {
-      await inputs.nth(i).fill('TESTE CLARO');
-    } else if (/cvv|código de segurança|codigo/.test(label)) {
-      await inputs.nth(i).fill('000');
-    }
-  }
-
-  // fallback: fill visible text inputs in order
-  const vis = page.locator('input:visible');
-  const vc = await vis.count();
-  if (vc >= 3 && pan) {
-    await vis.nth(0).fill(pan).catch(() => {});
-    await vis.nth(1).fill(`${month}/${year.slice(-2)}`).catch(() => {});
-    if (vc >= 4) await vis.nth(3).fill('000').catch(() => {});
-  }
-
-  await snap('novo-credito preenchido');
-  await clickIfVisible('Continuar|Confirmar|Salvar|Cadastrar', 5000);
-  await page.waitForTimeout(5000);
-} else {
-  // clicar cartão Elo final 6714 se visível
-  await clickIfVisible('6714|ELO|Elo', 5000);
+  console.log('[ui] cartão salvo selecionado');
 }
 
-// 6) CVV na hora de pagar
-await page.goto('https://clarorecarga.claro.com.br/whatsapp/pagamento-cvv', { waitUntil: 'domcontentloaded' }).catch(() => {});
+await clickIfVisible('Continuar|Confirmar|Avançar|Recarregar', 3000);
+
+// Aguardar navegação natural para CVV (não forçar goto)
+await page.waitForURL(/pagamento-cvv|pagamento-credito|confirmacao/, { timeout: 15000 }).catch(() => {});
 await page.waitForTimeout(2000);
 
-const cvvInput = page.locator('input[type="password"], input[type="tel"], input[maxlength="3"], input[maxlength="4"], input[placeholder*="cvv" i], input[placeholder*="código" i]').first();
-if (await cvvInput.isVisible({ timeout: 8000 }).catch(() => false)) {
-  await cvvInput.fill(payCvv);
-  await snap('cvv preenchido');
-  await clickIfVisible('Concluir|CONCLUIR|Continuar|Confirmar|Pagar|Recarregar', 8000);
-  await page.waitForTimeout(15000);
-} else {
-  // tentar CVV em qualquer input visível curto
-  const short = page.locator('input:visible[maxlength="4"], input:visible[maxlength="3"]');
-  if (await short.count() > 0) {
-    await short.first().fill(payCvv);
-    await clickIfVisible('Continuar|Confirmar|Pagar', 5000);
-    await page.waitForTimeout(15000);
+if (!page.url().includes('pagamento-cvv')) {
+  await page.goto('https://clarorecarga.claro.com.br/whatsapp/pagamento-cvv', { waitUntil: 'domcontentloaded' }).catch(() => {});
+  await page.waitForTimeout(2000);
+}
+
+// 4) CVV
+const cvvCandidates = page.locator('input:visible').filter({ hasNot: page.locator('[type="checkbox"]') });
+const cvvCount = await cvvCandidates.count();
+for (let i = 0; i < cvvCount; i++) {
+  const el = cvvCandidates.nth(i);
+  const max = await el.getAttribute('maxlength');
+  const type = await el.getAttribute('type');
+  if (type === 'tel' || type === 'password' || type === 'number' || max === '3' || max === '4') {
+    await el.click();
+    await el.fill('');
+    await el.fill(payCvv);
+    console.log('[ui] CVV preenchido no input', i, 'maxlength', max);
+    break;
   }
 }
 
-await snap('final');
+await snap('cvv preenchido');
+
+const concluir = page.getByRole('button', { name: /CONCLUIR RECARGA/i });
+if (await concluir.isVisible({ timeout: 5000 }).catch(() => false)) {
+  await concluir.click();
+  console.log('[ui] CONCLUIR RECARGA clicado');
+  await page.waitForTimeout(20000);
+} else {
+  await page.locator('button:has-text("CONCLUIR")').first().click({ timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(20000);
+}
+
+await snap('pós-concluir');
 for (const route of ['/whatsapp/confirmacao', '/whatsapp/pagamento-sucesso', '/whatsapp/pagamento-erro']) {
   try {
     await page.goto(`https://clarorecarga.claro.com.br${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
