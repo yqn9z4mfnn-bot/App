@@ -236,8 +236,38 @@ Content-Type: application/json
 
 **Resposta:** `204 No Content` (SMS enviado)
 
-5. UI exibe campo **"Digite o código"** (OTP)
-6. Após validar OTP → sessão autenticada → `/products`, `/payment-methods`, etc.
+5. UI exibe campo **"Digite o código"** (OTP) — **máximo 5 dígitos** (`maxLength: 5`)
+6. Validar OTP → criar sessão:
+
+```http
+POST https://claro-recarga-api.m4u.com.br/sessions/
+Content-Type: application/json
+
+{
+  "msisdn": "27992485949",
+  "data": "58771",
+  "type": "sms",
+  "channel": ["whatsapp", "CLARO_WHATSAPP"],
+  "origin": "landing",
+  "loading": true,
+  "loginAction": "loginWithRechargeValue",
+  "loginValue": 2000
+}
+```
+
+| Campo | Descrição |
+|-------|-----------|
+| `data` | Código SMS (5 dígitos) |
+| `type` | `"sms"` |
+| `loginAction` | `"loginWithRechargeValue"` quando vem da landing |
+| `loginValue` | Valor em centavos (2000 = R$ 20,00) |
+
+**Respostas observadas:**
+- `204` — SMS enviado (`POST /sms-tokens/`)
+- `400 Bad Request` — OTP inválido/expirado
+- `422` — sessão encrypted sem token JWT
+
+7. Após sessão OK → `/products`, `/payment-methods`, `/recharges/encrypted`
 
 Script para captura autenticada:
 
