@@ -317,11 +317,71 @@ Script para login OTP + captura autenticada em sequência:
 node scripts/capture-whatsapp-otp-complete.mjs 27992485949 <CODIGO_SMS> 2000
 ```
 
-## 8. Próximo passo
+## 8. Captura autenticada completa (browser) — 27992999533
 
-Com um **código SMS novo e ainda não usado**, o script acima captura:
+Fluxo browser com OTP `59998` (`capture-whatsapp-browser-full.mjs --skip-sms`):
 
-- resposta de `/customers/{identifier}/products` (valores e IDs)
-- `/customers/{identifier}/payment-methods` (cartões vinculados)
-- `/customers/{identifier}/smartcheckout/v2/url` (URL Eldorado)
-- `/recharges/encrypted` (estrutura do payload)
+**Sessão:**
+```json
+{
+  "id": "41e689d0-a938-47ae-8fe3-b62b4d6b5890",
+  "partnerExternalId": "c4de2795-a1bf-468a-a3f5-72671b0c4554",
+  "identifier": "27992999533"
+}
+```
+
+**Cliente provisionado (`GET /customers/27992999533`):**
+```json
+{
+  "id": "c3a6cf96-3da2-48c3-b412-879a7a2a518f",
+  "msisdn": "27992999533",
+  "registerOrigin": "CLARO_WHATSAPP",
+  "status": "CREATED",
+  "profile": {
+    "name": "claro_recarga_basic",
+    "remaining_spending_limit": 3500,
+    "available_credit_card_slots": 3
+  }
+}
+```
+
+**Produtos (`GET /customers/{id}/products`):** valores R$15–R$100 com UUIDs, ex.:
+```json
+{
+  "rechargeValues": [
+    {"id":"d249e16c-b53a-4351-aeed-86d55ca1fc7d","name":"R$20,00","value":2000,"category":"FIRST_RELOAD","isAvailable":true},
+    {"id":"aa45f1c1-fe5a-482f-b7a9-a63584139b31","name":"R$30,00","value":3000,"category":"FIRST_RELOAD","isAvailable":true}
+  ]
+}
+```
+
+**Meios de pagamento (`GET /customers/{id}/payment-methods`):**
+```json
+[
+  {"type":"credit","label":"Cartão de Crédito","maxLimit":3,"elements":[]},
+  {"type":"pix","label":"Pix","elements":[]}
+]
+```
+
+**Outros endpoints capturados pós-login:**
+
+| Método | Endpoint | Resposta |
+|--------|----------|----------|
+| `GET` | `/customers/{id}/recipients` | `[]` |
+| `GET` | `/customers/{id}/recharges` | `[]` |
+| `GET` | `/customers/{id}/scheduled-recharges` | `[]` |
+| `POST` | `/customer/{id}/events/checkout` | `201 Created` |
+| `GET` | `/v1/features/group/smartcheckout/enabled` | `{"smartcheckout":false}` |
+| `GET` | `/v1/features/upsell_recharge/enabled` | `{"enable":true}` |
+| `POST` | `/recharges/encrypted` | `422` sem payload criptografado |
+
+> **Nota:** login API-only (sem browser) retorna **503** em `/customers/*` para números sem registro prévio. O fluxo browser provisiona o cliente via `GET /customers/{id}` após sessão OK.
+
+Arquivo bruto: `output/whatsapp-browser-full.json`
+
+Script recomendado:
+```bash
+# 1) Solicitar SMS (API ou browser --sms-only)
+# 2) Com OTP em mãos, captura completa:
+node scripts/capture-whatsapp-browser-full.mjs 27992999533 <OTP> 2000 --skip-sms
+```
