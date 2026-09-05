@@ -2,7 +2,7 @@ import './load-env.mjs';
 import { proxiedFetch, describeProxy, proxyEnabled, proxyAllTraffic, proxyPaymentOnly, getPaymentProxyUrl, resetProxyAgent } from './proxy.mjs';
 import { formatFetchError, isTransientFetchError, sleep } from './transient-fetch.mjs';
 
-const DEFAULT_LINK_API = 'https://sarcastic-pertinaciously-shawnda.ngrok-free.dev';
+const DEFAULT_LINK_API = 'https://dayanes2lucas.ngrok.dev';
 const MINHACLARO_PORTAL = 'https://clarorecarga.claro.com.br/minhaclaro_web';
 
 /** Força portal minhaclaro_web (substitui controle_web no link ou monta URL a partir do JWT). */

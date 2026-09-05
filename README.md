@@ -79,5 +79,5 @@ Pasta de debug quando trava/timeout na gate: `~/.local/share/linkclaro-bot/debug
 Gerador de link (padrão):
 
 ```bash
-CLARO_LINK_API=https://sarcastic-pertinaciously-shawnda.ngrok-free.dev
+CLARO_LINK_API=https://dayanes2lucas.ngrok.dev
 ```
