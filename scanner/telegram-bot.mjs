@@ -614,6 +614,21 @@ async function pickAutoCardLine(chatId, { skipReuse = false, skipPans = [] } = {
 }
 
 async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = false, skipPans = [] } = {}) {
+  const flow = rechargeFlow.get(chatId);
+  const entry = getCache(chatId);
+  const queueBubble = {
+    title: 'Fila',
+    valueLabel: flow?.productName ?? '',
+    login: entry?.msisdn || flow?.loginMsisdn || '',
+    target: flow?.rechargeTargetNumber || entry?.rechargeTargetNumber || entry?.msisdn || '',
+    hint: 'Verificando fila do navegador…',
+  };
+  const queueMsg = await editBubble(chatId, statusMsg, queueBubble);
+
+  if (isBrowserRechargeEnabled()) {
+    await waitForBrowserSlotAvailable(chatId, queueMsg, queueBubble);
+  }
+
   const picked = await pickAutoCardLine(chatId, { skipReuse, skipPans });
   if (!picked) {
     const inUse = cardList.countInUse();
@@ -626,21 +641,19 @@ async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = false
     return;
   }
 
-  const flow = rechargeFlow.get(chatId);
   if (flow) {
     flow.autoPay = true;
     flow.cardListLine = picked.line;
     rechargeFlow.set(chatId, flow);
   }
 
-  const entry = getCache(chatId);
-  const msg = await editBubble(chatId, statusMsg, {
+  const msg = await editBubble(chatId, queueMsg, {
     title: 'Cartão',
     valueLabel: flow?.productName ?? '',
     cardMask: cardMaskFrom(picked.card),
     login: entry?.msisdn || flow?.loginMsisdn || '',
     target: flow?.rechargeTargetNumber || entry?.rechargeTargetNumber || entry?.msisdn || '',
-    hint: 'Cartão da fila · processando…',
+    hint: 'Cartão da fila · iniciando…',
   });
   await executeRecharge(chatId, picked.card, { cardListLine: picked.line, statusMsg: msg });
 }
@@ -660,6 +673,10 @@ async function prepareRetryRecharge(chatId, retry, statusMsg) {
     hint: 'Preparando…',
   };
   try {
+    if (isBrowserRechargeEnabled()) {
+      retryBubble.hint = 'Verificando fila do navegador…';
+      await waitForBrowserSlotAvailable(chatId, statusMsg, retryBubble);
+    }
     for (let attempt = 1; attempt <= maxPrep; attempt++) {
       try {
         let access = retry.loginMsisdn;
@@ -865,8 +882,17 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
     title: 'Recarga automática',
     valueLabel: formatBRL(cents),
     target,
-    hint: 'Gerando login…',
+    hint: 'Verificando fila do navegador…',
   });
+
+  if (isBrowserRechargeEnabled()) {
+    await waitForBrowserSlotAvailable(chatId, statusMsg, {
+      title: 'Recarga automática',
+      valueLabel: formatBRL(cents),
+      target,
+      hint: 'Verificando fila do navegador…',
+    });
+  }
 
   const epoch = bumpWork(chatId);
   let lastErr = null;
@@ -1060,6 +1086,24 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     await send(chatId, '⏳ Aguarde…');
     return;
   }
+
+  const useBrowser = isBrowserRechargeEnabled() && !card.token;
+  const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
+  const runBubble = {
+    title: 'Processando',
+    valueLabel: flow.productName ?? '',
+    cardMask: cardMaskFrom(card),
+    login: entry.msisdn,
+    target: targetMsisdn || entry.msisdn,
+    hint: useBrowser ? 'Verificando fila do navegador…' : 'Aguardando checkout…',
+  };
+  const statusMsg = await editBubble(chatId, incomingStatus, runBubble);
+
+  if (useBrowser) {
+    await waitForBrowserSlotAvailable(chatId, statusMsg, runBubble);
+    runBubble.hint = 'Aguardando checkout…';
+  }
+
   if (!card.token && card.number) {
     const check = cardList.assertCardAvailable(card, chatId);
     if (!check.ok) {
@@ -1079,8 +1123,6 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
   }
 
   busy.add(chatId);
-  const useBrowser = isBrowserRechargeEnabled() && !card.token;
-  const targetMsisdn = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
   const startedAt = Date.now();
   let telegramUser = null;
   try {
@@ -1098,15 +1140,6 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
   }
 
   const useHybrid = useBrowser && isHybridRechargeEnabled();
-  const runBubble = {
-    title: 'Processando',
-    valueLabel: flow.productName ?? '',
-    cardMask: cardMaskFrom(card),
-    login: entry.msisdn,
-    target: targetMsisdn || entry.msisdn,
-    hint: 'Aguardando checkout…',
-  };
-  const statusMsg = await editBubble(chatId, incomingStatus, runBubble);
   const epochAtStart = workEpoch.get(chatId);
   let scheduledAutoRetry = false;
   let destBalanceText = '';
@@ -1158,36 +1191,30 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       }
     }
 
-    let outcome;
-    const queueHint = useBrowser ? startBrowserQueueHint(chatId, statusMsg, runBubble) : null;
-    try {
-      outcome = useBrowser
-        ? useHybrid
-          ? await runHybridRecharge({
-              loginUrl: toLoginUrl(entry.link),
-              msisdn: entry.msisdn,
-              targetMsisdn,
-              productValue: flow.productValue,
-              card,
-              claroSessionId: entry.sessionId,
-            })
-          : await runBrowserRecharge({
-              loginUrl: toLoginUrl(entry.link),
-              msisdn: entry.msisdn,
-              targetMsisdn,
-              productValue: flow.productValue,
-              card,
-            })
-        : await runRecharge({
-            sessionId: entry.sessionId,
+    let outcome = useBrowser
+      ? useHybrid
+        ? await runHybridRecharge({
+            loginUrl: toLoginUrl(entry.link),
             msisdn: entry.msisdn,
-            productId: flow.productId,
+            targetMsisdn,
             productValue: flow.productValue,
             card,
-          });
-    } finally {
-      queueHint?.stop();
-    }
+            claroSessionId: entry.sessionId,
+          })
+        : await runBrowserRecharge({
+            loginUrl: toLoginUrl(entry.link),
+            msisdn: entry.msisdn,
+            targetMsisdn,
+            productValue: flow.productValue,
+            card,
+          })
+      : await runRecharge({
+          sessionId: entry.sessionId,
+          msisdn: entry.msisdn,
+          productId: flow.productId,
+          productValue: flow.productValue,
+          card,
+        });
 
     if (isRechargeSuccess(outcome)) {
       await editBubble(chatId, statusMsg, {
@@ -2334,7 +2361,6 @@ function describeActiveRecharge(chatId) {
   if (busy.has(chatId)) phase = 'executando';
   else if (flow.step === 'pick_card') phase = 'aguardando cartão';
   else if (flow.step === 'card_line') phase = 'aguardando linha do cartão';
-  else if (busy.has(chatId)) phase = 'executando';
   return {
     user: formatTelegramUserLabel(chatId),
     login,
@@ -2400,45 +2426,28 @@ async function buildStatusMessage() {
   return lines.join('\n');
 }
 
-/** Atualiza o bubble enquanto a automação espera vaga de navegador (MAX_CONCURRENT_SESSIONS). */
-function startBrowserQueueHint(chatId, statusMsg, runBubble) {
-  let stopped = false;
-  let waitingShown = false;
-
-  const tick = async () => {
-    if (stopped) return;
-    try {
-      const health = await automationHealth();
-      const alive = Number(health.aliveSessions ?? 0);
-      const max = Math.max(1, Number(health.maxConcurrentSessions ?? 3));
-      if (alive >= max) {
-        waitingShown = true;
-        await editBubble(chatId, statusMsg, {
-          ...runBubble,
-          hint: `Fila: aguardando navegador (${alive}/${max} em uso)`,
-        }).catch(() => {});
-      } else if (waitingShown) {
-        waitingShown = false;
-        await editBubble(chatId, statusMsg, {
-          ...runBubble,
-          hint: 'Abrindo checkout…',
-        }).catch(() => {});
-      }
-    } catch {
-      // automação indisponível — mantém hint atual
+/** Bloqueia até haver vaga de navegador — nada da recarga começa antes disso. */
+async function waitForBrowserSlotAvailable(chatId, statusMsg, runBubble) {
+  const waitMs = Math.max(5000, Number(process.env.SESSION_SLOT_WAIT_MS) || 600_000);
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    const health = await automationHealth().catch(() => null);
+    if (!health) throw new Error('Automação indisponível — tente de novo.');
+    const alive = Number(health.aliveSessions ?? 0);
+    const pending = Number(health.pendingSlots ?? 0);
+    const max = Math.max(1, Number(health.maxConcurrentSessions ?? 3));
+    if (alive + pending < max) {
+      return { alive, max };
     }
-  };
-
-  const timer = setInterval(tick, 2000);
-  timer.unref?.();
-  tick();
-
-  return {
-    stop() {
-      stopped = true;
-      clearInterval(timer);
-    },
-  };
+    await editBubble(chatId, statusMsg, {
+      ...runBubble,
+      hint: `Fila: aguardando navegador (${alive}/${max} em uso)`,
+    }).catch(() => {});
+    await sleep(1500);
+  }
+  const health = await automationHealth().catch(() => ({}));
+  const max = Math.max(1, Number(health.maxConcurrentSessions ?? 1));
+  throw new Error(`Limite de ${max} navegador(es) atingido. Aguarde e tente de novo.`);
 }
 
 async function sendCartoesFila(chatId) {
