@@ -103,6 +103,13 @@ export async function automationHealth() {
   return res.json();
 }
 
+export async function fetchAutomationSessions() {
+  const url = `${DEFAULT_URL.replace(/\/$/, '')}/api/sessions`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Aguarda nenhuma sessão Edge ativa antes de abrir nova tentativa (auto-retry). */

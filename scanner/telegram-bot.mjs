@@ -16,6 +16,8 @@ import {
   isBrowserRechargeEnabled,
   isHybridRechargeEnabled,
   waitForAutomationIdle,
+  automationHealth,
+  fetchAutomationSessions,
 } from './lib/automation-client.mjs';
 import {
   formatTelegramReport,
@@ -79,7 +81,13 @@ import {
 } from './lib/bulk-scan.mjs';
 import { generateLoginMsisdn } from './lib/generate-msisdn.mjs';
 import { purgeAllLoginCardsStrict } from './lib/purge-login-cards.mjs';
-import { upsertTelegramUser, isTelegramUserAllowed, isTelegramUserAdmin, setBotPaused } from './lib/admin-db.mjs';
+import {
+  upsertTelegramUser,
+  getTelegramUser,
+  isTelegramUserAllowed,
+  isTelegramUserAdmin,
+  setBotPaused,
+} from './lib/admin-db.mjs';
 import {
   isBotPaused,
   isPauseControlCommand,
@@ -2292,6 +2300,99 @@ async function tryIngestCardListFromMessage(chatId, text) {
   return false;
 }
 
+function formatTelegramUserLabel(chatId) {
+  const u = getTelegramUser(chatId);
+  if (!u) return `chat <code>${chatId}</code>`;
+  if (u.username) return `@${u.username}`;
+  const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+  return name ? `${name} (<code>${chatId}</code>)` : `<code>${chatId}</code>`;
+}
+
+function maskMsisdn(msisdn) {
+  const d = String(msisdn ?? '').replace(/\D/g, '');
+  if (d.length !== 11) return d || '—';
+  return `${d.slice(0, 2)} ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+function describeActiveRecharge(chatId) {
+  const flow = rechargeFlow.get(chatId);
+  if (!flow) return null;
+  const entry = getCache(chatId);
+  const login = entry?.msisdn || flow.loginMsisdn || null;
+  const target = flow.rechargeTargetNumber || entry?.rechargeTargetNumber || entry?.msisdn || login;
+  const value =
+    flow.productName ||
+    (flow.productValue != null ? formatBRL(flow.productValue) : null) ||
+    '—';
+  let phase = 'em andamento';
+  if (busy.has(chatId)) phase = 'executando';
+  else if (flow.step === 'pick_card') phase = 'aguardando cartão';
+  else if (flow.step === 'card_line') phase = 'aguardando linha do cartão';
+  return {
+    user: formatTelegramUserLabel(chatId),
+    login,
+    target,
+    value,
+    phase,
+  };
+}
+
+function collectActiveRechargeChatIds() {
+  const ids = new Set(rechargeFlow.keys());
+  for (const chatId of busy) {
+    if (rechargeFlow.has(chatId)) ids.add(chatId);
+  }
+  return [...ids];
+}
+
+async function buildStatusMessage() {
+  const pause = isBotPaused();
+  const pauseLine = pause ? '\n⏸ <b>Pausado</b> — recargas suspensas' : '\n▶ Recargas ativas';
+  const lines = [`${pause ? '🟡' : '🟢'} <b>Online</b> · ${Math.floor(process.uptime())}s${pauseLine}`, ''];
+
+  const pending = cardList.countPending();
+  const inUse = cardList.countInUse();
+  lines.push(`💳 <b>Fila de cartões:</b> ${pending} pendente${pending === 1 ? '' : 's'} · ${inUse} em uso`);
+
+  const activeIds = collectActiveRechargeChatIds();
+  if (activeIds.length) {
+    lines.push('', `🔋 <b>Recargas agora (${activeIds.length}):</b>`);
+    for (const id of activeIds) {
+      const r = describeActiveRecharge(id);
+      if (!r) continue;
+      const route =
+        r.login && r.target && r.login !== r.target
+          ? `${maskMsisdn(r.login)} → ${maskMsisdn(r.target)}`
+          : maskMsisdn(r.target || r.login);
+      lines.push(`• ${r.user} — ${route} · ${r.value} · <i>${r.phase}</i>`);
+    }
+  } else {
+    lines.push('', '🔋 <b>Recargas agora:</b> nenhuma');
+  }
+
+  try {
+    const health = await automationHealth();
+    const alive = health.aliveSessions ?? 0;
+    const max = health.maxConcurrentSessions ?? '?';
+    const pendingSlots = health.pendingSlots ?? 0;
+    if (alive > 0 || pendingSlots > 0) {
+      lines.push('', `🖥 <b>Automação:</b> ${alive}/${max} navegador${alive === 1 ? '' : 'es'} ativo${alive === 1 ? '' : 's'}`);
+      if (pendingSlots > 0) lines.push(`   (${pendingSlots} aguardando vaga)`);
+    }
+    const sessionsPayload = await fetchAutomationSessions();
+    const live = (sessionsPayload?.sessions ?? []).filter((s) => s?.browserAlive);
+    for (const s of live.slice(0, 5)) {
+      const num = maskMsisdn(s.rechargeTargetNumber || s.accessNumber);
+      const step = s.stepLabel || s.step || s.status || '—';
+      lines.push(`   · ${num} — <i>${step}</i>`);
+    }
+  } catch {
+    lines.push('', '🖥 <b>Automação:</b> indisponível');
+  }
+
+  return lines.join('\n');
+}
+
 async function sendCartoesFila(chatId) {
   const pending = cardList.countPending();
   const approved = cardList.countApproved();
@@ -2633,9 +2734,7 @@ async function handleMessage(msg) {
     }
 
     if (text === '/status' || text.startsWith('/status@')) {
-      const pause = isBotPaused();
-      const pauseLine = pause ? '\n⏸ <b>Pausado</b> — recargas suspensas' : '\n▶ Recargas ativas';
-      await send(chatId, `${pause ? '🟡' : '🟢'} Online · ${Math.floor(process.uptime())}s${pauseLine}`);
+      await send(chatId, await buildStatusMessage());
       return;
     }
 
