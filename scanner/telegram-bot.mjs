@@ -1158,30 +1158,36 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       }
     }
 
-    let outcome = useBrowser
-      ? useHybrid
-        ? await runHybridRecharge({
-            loginUrl: toLoginUrl(entry.link),
+    let outcome;
+    const queueHint = useBrowser ? startBrowserQueueHint(chatId, statusMsg, runBubble) : null;
+    try {
+      outcome = useBrowser
+        ? useHybrid
+          ? await runHybridRecharge({
+              loginUrl: toLoginUrl(entry.link),
+              msisdn: entry.msisdn,
+              targetMsisdn,
+              productValue: flow.productValue,
+              card,
+              claroSessionId: entry.sessionId,
+            })
+          : await runBrowserRecharge({
+              loginUrl: toLoginUrl(entry.link),
+              msisdn: entry.msisdn,
+              targetMsisdn,
+              productValue: flow.productValue,
+              card,
+            })
+        : await runRecharge({
+            sessionId: entry.sessionId,
             msisdn: entry.msisdn,
-            targetMsisdn,
+            productId: flow.productId,
             productValue: flow.productValue,
             card,
-            claroSessionId: entry.sessionId,
-          })
-        : await runBrowserRecharge({
-            loginUrl: toLoginUrl(entry.link),
-            msisdn: entry.msisdn,
-            targetMsisdn,
-            productValue: flow.productValue,
-            card,
-          })
-      : await runRecharge({
-          sessionId: entry.sessionId,
-          msisdn: entry.msisdn,
-          productId: flow.productId,
-          productValue: flow.productValue,
-          card,
-        });
+          });
+    } finally {
+      queueHint?.stop();
+    }
 
     if (isRechargeSuccess(outcome)) {
       await editBubble(chatId, statusMsg, {
@@ -2328,6 +2334,7 @@ function describeActiveRecharge(chatId) {
   if (busy.has(chatId)) phase = 'executando';
   else if (flow.step === 'pick_card') phase = 'aguardando cartão';
   else if (flow.step === 'card_line') phase = 'aguardando linha do cartão';
+  else if (busy.has(chatId)) phase = 'executando';
   return {
     user: formatTelegramUserLabel(chatId),
     login,
@@ -2391,6 +2398,47 @@ async function buildStatusMessage() {
   }
 
   return lines.join('\n');
+}
+
+/** Atualiza o bubble enquanto a automação espera vaga de navegador (MAX_CONCURRENT_SESSIONS). */
+function startBrowserQueueHint(chatId, statusMsg, runBubble) {
+  let stopped = false;
+  let waitingShown = false;
+
+  const tick = async () => {
+    if (stopped) return;
+    try {
+      const health = await automationHealth();
+      const alive = Number(health.aliveSessions ?? 0);
+      const max = Math.max(1, Number(health.maxConcurrentSessions ?? 3));
+      if (alive >= max) {
+        waitingShown = true;
+        await editBubble(chatId, statusMsg, {
+          ...runBubble,
+          hint: `Fila: aguardando navegador (${alive}/${max} em uso)`,
+        }).catch(() => {});
+      } else if (waitingShown) {
+        waitingShown = false;
+        await editBubble(chatId, statusMsg, {
+          ...runBubble,
+          hint: 'Abrindo checkout…',
+        }).catch(() => {});
+      }
+    } catch {
+      // automação indisponível — mantém hint atual
+    }
+  };
+
+  const timer = setInterval(tick, 2000);
+  timer.unref?.();
+  tick();
+
+  return {
+    stop() {
+      stopped = true;
+      clearInterval(timer);
+    },
+  };
 }
 
 async function sendCartoesFila(chatId) {
