@@ -29,7 +29,7 @@ from facil_group import (
     response_matches_target,
 )
 from group_close import close_order_in_group
-from worker_rules import allowed_group_click, is_reivindicar_label
+from worker_rules import allowed_group_click, decide_next_action, is_reivindicar_label
 
 STATE_FILE = DATA_DIR / "facil-auto-worker.json"
 CURRENT_FILE = DATA_DIR / "worker-current.json"
