@@ -321,11 +321,11 @@ async def bot_state_for_target(tg, bot, target, limit=20):
         if kind == "approved":
             return "approved", text
     for kind, text in kinds:
+        if kind in ("3ds", "denied", "fail", "fail_login"):
+            return kind, text[:120]
+    for kind, text in kinds:
         if kind == "progress":
             return "progress", text[:120]
-    for kind, text in kinds:
-        if is_actionable_response(text):
-            return kind, text[:120]
     return "idle", ""
 
 
@@ -399,6 +399,14 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
                 "at": datetime.now(timezone.utc).isoformat(),
             })
             return "closed" if closed else "needs_confirm"
+
+        if state in ("3ds", "denied", "fail", "fail_login"):
+            log(f"Resultado anterior {state} em {target} — retry mesmo número")
+            action = await _apply_terminal(g, tg, payload, pedido_id, target, state, hint, last_fp)
+            if action == "retry":
+                last_fp = error_fingerprint(state, hint, target)
+                continue
+            return action
 
         if state == "progress":
             log(f"Bot processando {target} — aguardando")

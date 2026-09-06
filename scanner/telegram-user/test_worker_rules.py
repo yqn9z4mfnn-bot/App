@@ -112,6 +112,11 @@ def test_cartao_bloqueado_com_fila_e_progress():
     assert classify_bot_response(t) == "progress"
     t2 = "**✅ APROVADA** 📱 `92999512445` Confirmada em 141s"
     assert classify_bot_response(t2) == "approved"
+    t3 = (
+        "**Validação 3DS** 📱 `31998793327` Confirme no app ou SMS do banco "
+        "Removido da fila · restam 203"
+    )
+    assert classify_bot_response(t3) == "3ds"
 
 
 if __name__ == "__main__":
