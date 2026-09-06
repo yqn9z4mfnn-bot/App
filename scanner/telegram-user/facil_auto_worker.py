@@ -32,6 +32,7 @@ LOCK_FILE = DATA_DIR / "facil-auto-worker.lock"
 MIN_SEND_GAP_SEC = 45
 ATTENDEE = "Lucasfer97"
 IDLE_POLL_SEC = 60
+RESUME_MAX_AGE_SEC = 900  # só retoma PROCESSANDO recente com bot ativo
 
 
 def log(msg):
@@ -79,11 +80,22 @@ async def find_claimable_claro(g, tg, exclude_pedidos=None, limit=300):
     return candidates
 
 
-async def find_my_processing(g, tg, attendee=ATTENDEE):
-    async for m in tg.iter_messages(g, limit=100):
+async def find_my_processing(g, tg, attendee=ATTENDEE, max_age_sec=RESUME_MAX_AGE_SEC):
+    """Só retoma PROCESSANDO recente com botões de ação (pedido em curso)."""
+    now = datetime.now(timezone.utc)
+    async for m in tg.iter_messages(g, limit=80):
         text = m.text or ""
         if "PROCESSANDO" not in text or attendee not in text:
             continue
+        if not m.buttons:
+            continue
+        labels = [getattr(b, "text", "") for row in m.buttons for b in row]
+        if not any(x in lb for lb in labels for x in ("Feita", "Cancelar", "Blacklist")):
+            continue
+        if m.date:
+            age = (now - m.date.replace(tzinfo=timezone.utc)).total_seconds()
+            if age > max_age_sec:
+                continue
         payload = parse_payload(text)
         pedido = parse_pedido_id(text)
         if payload and pedido:
@@ -96,19 +108,25 @@ async def claim_oldest_claro(g, tg, exclude_pedidos=None):
     if not candidates:
         return None, None, None
 
-    _, message, pedido_id = candidates[-1]
-    labels = [getattr(b, "text", "") for row in (message.buttons or []) for b in row]
-    for label in labels:
-        if "Reivindicar" in label:
-            await message.click(text=label)
-            break
-    else:
-        await message.click(0)
+    # Mais antigo primeiro (iter_messages = recente→antigo; candidates[-1] = mais antigo)
+    for _, message, pedido_id in reversed(candidates):
+        labels = [getattr(b, "text", "") for row in (message.buttons or []) for b in row]
+        claim_label = next((lb for lb in labels if "Reivindicar" in lb), None)
+        if not claim_label:
+            continue
 
-    await asyncio.sleep(3)
-    updated = await tg.get_messages(g, ids=message.id)
-    payload = parse_payload(updated.text or "")
-    return payload, pedido_id, message.id
+        await message.click(text=claim_label)
+        await asyncio.sleep(3)
+        updated = await tg.get_messages(g, ids=message.id)
+        text = updated.text or ""
+        payload = parse_payload(text)
+
+        if "PROCESSANDO" in text and payload and ATTENDEE in text:
+            return payload, pedido_id, message.id
+
+        log(f"Reivindicar falhou em {pedido_id} — msg ainda sem PROCESSANDO")
+
+    return None, None, None
 
 
 async def find_processing_msg(g, tg, pedido_id):
@@ -217,18 +235,29 @@ async def bot_state_for_target(tg, bot, target, limit=20):
     return "idle", ""
 
 
-async def acquire_order(g, tg, tried_pedidos):
-    payload, pedido, _ = await find_my_processing(g, tg)
-    if payload:
-        log(f"Retomando PROCESSANDO {pedido} → {payload}")
-        return payload, pedido
-
+async def acquire_order(g, tg, bot, tried_pedidos, resume_processing=False):
+    # 1) Sempre tenta reivindicar pedido NOVO (botão Reivindicar)
     payload, pedido, _ = await claim_oldest_claro(g, tg, exclude_pedidos=tried_pedidos)
     if payload:
         log(f"Reivindicado {pedido} → {payload}")
         return payload, pedido
 
-    return None, None
+    if not resume_processing:
+        return None, None
+
+    # 2) Opcional: retoma só PROCESSANDO recente com bot ainda ativo nesse número
+    payload, pedido, _ = await find_my_processing(g, tg)
+    if not payload:
+        return None, None
+
+    target = payload_target(payload)
+    state, _ = await bot_state_for_target(tg, bot, target)
+    if state not in ("progress", "approved"):
+        log(f"Ignora PROCESSANDO antigo {pedido} ({target}) — bot idle")
+        return None, None
+
+    log(f"Retomando PROCESSANDO ativo {pedido} → {payload}")
+    return payload, pedido
 
 
 async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
@@ -317,7 +346,7 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
     return "failed"
 
 
-async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, idle_poll=IDLE_POLL_SEC):
+async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, idle_poll=IDLE_POLL_SEC, resume_processing=False):
     load_env_file()
     if not acquire_lock():
         log("Outro worker já ativo — abortando")
@@ -337,7 +366,9 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
             current_pedido = pedido_id
 
             if not current_payload:
-                current_payload, current_pedido = await acquire_order(g, tg, tried_pedidos)
+                current_payload, current_pedido = await acquire_order(
+                    g, tg, bot, tried_pedidos, resume_processing=resume_processing
+                )
                 if not current_payload:
                     if not loop:
                         log("Sem pedido Claro disponível")
@@ -379,8 +410,24 @@ def main():
     parser.add_argument("--max-cycles", type=int, default=50)
     parser.add_argument("--loop", action="store_true", help="Processa pedidos continuamente")
     parser.add_argument("--idle-poll", type=int, default=IDLE_POLL_SEC)
+    parser.add_argument(
+        "--resume-processing",
+        action="store_true",
+        help="Se não houver Reivindicar, retoma PROCESSANDO recente com bot ativo",
+    )
     args = parser.parse_args()
-    raise SystemExit(asyncio.run(run_worker(args.payload, args.pedido, args.max_cycles, args.loop, args.idle_poll)))
+    raise SystemExit(
+        asyncio.run(
+            run_worker(
+                args.payload,
+                args.pedido,
+                args.max_cycles,
+                args.loop,
+                args.idle_poll,
+                args.resume_processing,
+            )
+        )
+    )
 
 
 if __name__ == "__main__":
