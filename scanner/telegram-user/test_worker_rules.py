@@ -148,6 +148,15 @@ def test_cartao_bloqueado_com_fila_e_progress():
     assert next_after_bot_result("approved", "n|approved|x", None) == "close"
 
 
+def test_halt_espera_seguir_ou_pedido_fechado():
+    from worker_rules import halt_next_step
+
+    assert halt_next_step(False, True) == "wait"
+    assert halt_next_step(True, True) == "retry_same"
+    assert halt_next_step(False, False) == "next"
+    assert halt_next_step(True, False) == "retry_same"
+
+
 if __name__ == "__main__":
     tests = [v for k, v in list(globals().items()) if k.startswith("test_")]
     for fn in tests:

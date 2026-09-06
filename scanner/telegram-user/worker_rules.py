@@ -64,6 +64,15 @@ def next_after_bot_result(kind, fingerprint, last_fingerprint):
     return "retry"
 
 
+def halt_next_step(seguir_requested, pedido_still_open):
+    """Depois do halt: comando seguir retenta o mesmo; pedido fechado no grupo → próximo."""
+    if seguir_requested:
+        return "retry_same"
+    if not pedido_still_open:
+        return "next"
+    return "wait"
+
+
 def claim_allowed(open_count):
     return open_count == 0
 

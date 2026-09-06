@@ -34,6 +34,7 @@ from worker_rules import (
     allowed_group_click,
     decide_next_action,
     error_fingerprint,
+    halt_next_step,
     is_reivindicar_label,
     next_after_bot_result,
 )
@@ -41,6 +42,7 @@ from worker_rules import (
 STATE_FILE = DATA_DIR / "facil-auto-worker.json"
 CURRENT_FILE = DATA_DIR / "worker-current.json"
 LOCK_FILE = DATA_DIR / "facil-auto-worker.lock"
+SEGUIR_FILE = DATA_DIR / "facil-seguir"
 MIN_SEND_GAP_SEC = 45
 IDLE_POLL_SEC = 60
 RETRY_WAIT_SEC = 60
@@ -101,6 +103,30 @@ def save_current_pedido(pedido_id, payload, msg_id=None):
 
 def clear_current_pedido():
     CURRENT_FILE.unlink(missing_ok=True)
+
+
+def consume_seguir():
+    if SEGUIR_FILE.exists():
+        SEGUIR_FILE.unlink(missing_ok=True)
+        return True
+    return False
+
+
+async def wait_after_halt(g, tg, pedido_id, payload):
+    """Fica vivo após 2x o mesmo erro. `seguir` retenta; pedido fechado no grupo → próximo."""
+    target = payload_target(payload)
+    log(f"PARADO em {target} (mesmo erro 2x). Para retentar: bash /root/App/telegram-user/seguir")
+    log("Ou feche o pedido no grupo — o worker segue sozinho para o próximo")
+    while True:
+        step = halt_next_step(consume_seguir(), await pedido_still_open(g, tg, pedido_id))
+        if step == "retry_same":
+            log(f"SEGUIR: retenta o mesmo número {target}")
+            return "retry_same"
+        if step == "next":
+            log(f"Pedido {pedido_id} não está mais aberto — próximo")
+            clear_current_pedido()
+            return "next"
+        await asyncio.sleep(5)
 
 
 async def pedido_still_open(g, tg, pedido_id):
@@ -497,6 +523,7 @@ async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp
 
 async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, idle_poll=IDLE_POLL_SEC):
     load_env_file()
+    consume_seguir()
     if not acquire_lock():
         log("Outro worker já ativo — abortando")
         return 1
@@ -555,9 +582,15 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
                 continue
 
             if result == "halt_same_error":
-                log("PARADO: não reivindica mais nenhum pedido")
-                exit_code = 2
-                break
+                if not loop:
+                    log("PARADO: mesmo erro 2x — encerrando (sem --loop)")
+                    exit_code = 2
+                    break
+                step = await wait_after_halt(g, tg, current_pedido, current_payload)
+                if step == "retry_same":
+                    payload = current_payload
+                    pedido_id = current_pedido
+                continue
 
             if result == "blocked":
                 log("Envio bloqueado — aguardando grupo limpo")

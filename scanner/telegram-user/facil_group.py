@@ -53,7 +53,7 @@ PROGRESS_RE = re.compile(
     r"Aguardando navegador|Consultando saldo|Limpando cart[oõ]es|"
     r"Pegando cart[aã]o|Cart[aã]o da fila|Lendo saldo|"
     r"Confirmando no hist[oó]rico|Fila: aguardando|Limpeza pulada|"
-    r"Buscando valores|Rede inst[aá]vel",
+    r"Buscando valores|Rede inst[aá]vel|Login pronto|Iniciando recarga",
     re.I,
 )
 
