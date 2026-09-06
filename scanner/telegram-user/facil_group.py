@@ -13,6 +13,21 @@ def parse_payload(text):
     return m.group(1) if m else None
 
 
+def payload_target(payload):
+    return (payload or "").split("|")[0].strip()
+
+
+def response_matches_target(text, target):
+    """Resposta do bot deve mencionar o MSISDN do pedido atual."""
+    if not target:
+        return True
+    digits = re.sub(r"\D", "", str(target))
+    if not digits:
+        return True
+    blob = re.sub(r"\D", "", (text or "").replace("`", ""))
+    return digits in blob
+
+
 def parse_pedido_id(text):
     m = PEDIDO_RE.search(text or "")
     return m.group(1) if m else None

@@ -7,12 +7,12 @@ from pathlib import Path
 from telethon import TelegramClient
 
 from config import DATA_DIR, SESSION_PATH, api_id, api_hash, load_env_file
-from facil_group import BOT_USERNAME, GROUP_ID, classify_bot_response, is_actionable_response
+from facil_group import BOT_USERNAME, GROUP_ID, classify_bot_response, is_actionable_response, payload_target, response_matches_target
 
 LOCK = DATA_DIR / "send.lock"
 
 
-async def wait_bot(tg, bot, after_id, timeout=600):
+async def wait_bot(tg, bot, after_id, target, timeout=600):
     deadline = asyncio.get_event_loop().time() + timeout
     seen, anchor = set(), None
     while asyncio.get_event_loop().time() < deadline:
@@ -32,6 +32,8 @@ async def wait_bot(tg, bot, after_id, timeout=600):
             u = await tg.get_messages(bot, ids=mid)
             text = u.text or ""
             if not text or text in seen:
+                continue
+            if not response_matches_target(text, target):
                 continue
             kind = classify_bot_response(text)
             if kind == "progress":
@@ -95,7 +97,7 @@ async def main():
 
         print(f"ENVIO UNICO: {payload}", flush=True)
         sent = await tg.send_message(bot, payload)
-        kind, _ = await wait_bot(tg, bot, sent.id, 600)
+        kind, _ = await wait_bot(tg, bot, sent.id, payload_target(payload), 600)
         print(f"RESULTADO: {kind}", flush=True)
 
         if kind == "approved":
