@@ -56,12 +56,7 @@ def error_fingerprint(kind, text, target):
 
 
 def next_after_bot_result(kind, fingerprint, last_fingerprint):
-    """
-    approved → close
-    1º erro → retry mesmo número após 60s
-    2º erro igual (mesmo número já está no fingerprint) → halt, não reivindica
-    erro diferente → retry após 60s (streak recomeça)
-    """
+    """Só APROVADA fecha. Qualquer outra coisa: retry ou halt se erro idêntico 2x."""
     if kind == "approved":
         return "close"
     if last_fingerprint and fingerprint == last_fingerprint:

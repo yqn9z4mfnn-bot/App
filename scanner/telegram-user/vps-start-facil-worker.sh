@@ -21,7 +21,7 @@ $TMUX new-session -d -s facil-auto-worker -c "$DIR" -- bash -lc "
   set -a; source '$DIR/.env'; set +a
   export TELEGRAM_USER_DATA='${TELEGRAM_USER_DATA:-/root/.local/share/telegram-user}'
   cd '$DIR'
-  exec '$VENV' facil_auto_worker.py ${EXTRA[*]}
+  exec '$VENV' -u facil_auto_worker.py ${EXTRA[*]} >>/tmp/facil-worker.log 2>&1
 "
 
 echo "Worker Fácil (loop): tmux attach -t facil-auto-worker"

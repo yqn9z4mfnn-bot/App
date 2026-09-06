@@ -297,10 +297,9 @@ async def wait_bot_reply(tg, bot, after_id, target, timeout=600):
                 seen_texts.add(text)
                 log(f"BOT [{kind}] {target}: {text[:220].replace(chr(10), ' | ')}")
                 continue
-            if is_actionable_response(text):
-                seen_texts.add(text)
-                log(f"BOT [{kind}] {target}: {text[:280].replace(chr(10), ' | ')}")
-                return kind, text
+            seen_texts.add(text)
+            log(f"BOT [{kind}] {target}: {text[:280].replace(chr(10), ' | ')}")
+            return kind, text
 
         await asyncio.sleep(2)
 
@@ -382,53 +381,56 @@ async def acquire_order(g, tg, bot):
 
 
 async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
+    """Qualquer coisa ≠ APROVADA: espera 60s e reenvia o mesmo número. Mesmo erro 2x → para."""
     target = payload_target(payload)
     last_fp = None
 
+    state, hint = await bot_state_for_target(tg, bot, target)
+    if state == "approved":
+        log(f"APROVADA {target}")
+        closed = await close_order_in_group(g, tg, pedido_id, log=log)
+        clear_current_pedido()
+        save_state({
+            "result": "closed" if closed else "approved_unconfirmed",
+            "payload": payload,
+            "pedido_id": pedido_id,
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
+        return "closed" if closed else "needs_confirm"
+
+    if state == "progress":
+        log(f"Bot processando {target} — aguardando resultado")
+        kind, text = await wait_bot_reply(tg, bot, 0, target, timeout=600)
+        if kind == "approved":
+            return await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, None)
+        state, hint = kind, text
+
+    if state not in ("idle", "progress", "approved"):
+        last_fp = error_fingerprint(state, hint, target)
+        log(f"{state} em {target} (não APROVADA) — {RETRY_WAIT_SEC}s e reenvia o mesmo número")
+        await asyncio.sleep(RETRY_WAIT_SEC)
+        try:
+            if not tg.is_connected():
+                await tg.connect()
+        except Exception as exc:
+            log(f"Reconnect: {exc}")
+            await tg.connect()
+
     for cycle in range(1, max_cycles + 1):
-        state, hint = await bot_state_for_target(tg, bot, target)
-
-        if state == "approved":
-            log(f"APROVADA {target}")
-            closed = await close_order_in_group(g, tg, pedido_id, log=log)
-            clear_current_pedido()
-            save_state({
-                "result": "closed" if closed else "approved_unconfirmed",
-                "payload": payload,
-                "pedido_id": pedido_id,
-                "at": datetime.now(timezone.utc).isoformat(),
-            })
-            return "closed" if closed else "needs_confirm"
-
-        if state in ("3ds", "denied", "fail", "fail_login"):
-            log(f"Resultado anterior {state} em {target} — retry mesmo número")
-            action = await _apply_terminal(g, tg, payload, pedido_id, target, state, hint, last_fp)
-            if action == "retry":
-                last_fp = error_fingerprint(state, hint, target)
-                continue
-            return action
-
-        if state == "progress":
-            log(f"Bot processando {target} — aguardando")
-            kind, text = await wait_bot_reply(tg, bot, 0, target, timeout=600)
-            action = await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp)
-            if action == "retry":
-                last_fp = error_fingerprint(kind if kind != "timeout" else "timeout", text, target)
-                continue
-            return action
-
-        busy, hint = await bot_has_active_job(tg, bot, exclude_target=target)
+        busy, busy_hint = await bot_has_active_job(tg, bot, exclude_target=target)
         if busy:
-            log(f"Outro job no bot — aguardando 15s ({hint})")
+            log(f"Outro job no bot — aguardando 15s ({busy_hint})")
             await asyncio.sleep(15)
             continue
 
         others = [o for o in await list_open_orders(g, tg) if o[0] != pedido_id]
         if others:
-            log(f"ABORT envio: outro pedido aberto {others[0][0]} — não manda 2 payloads")
+            log(f"ABORT envio: outro pedido aberto {others[0][0]}")
             return "blocked"
 
         log(f"=== Envio {cycle} | pedido={pedido_id} | {payload} ===")
+        if not tg.is_connected():
+            await tg.connect()
         sent = await tg.send_message(bot, payload)
         log(f"Enviado: {payload}")
 
@@ -476,6 +478,12 @@ async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp
 
     log(f"Aguarda {RETRY_WAIT_SEC}s e reenvia o mesmo número {target}")
     await asyncio.sleep(RETRY_WAIT_SEC)
+    try:
+        if not tg.is_connected():
+            await tg.connect()
+    except Exception as exc:
+        log(f"Sessão Telegram caiu no wait, reconectando: {exc}")
+        await tg.connect()
     return "retry"
 
 
