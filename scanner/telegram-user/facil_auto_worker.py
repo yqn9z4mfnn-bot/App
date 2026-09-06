@@ -22,6 +22,7 @@ from facil_group import (
     classify_bot_response,
     is_actionable_response,
     is_feita_final,
+    is_confirm_prompt,
     parse_payload,
     parse_pedido_id,
     payload_target,
@@ -105,24 +106,49 @@ async def pedido_still_open(g, tg, pedido_id):
     return False
 
 
+async def list_open_orders(g, tg, attendee=ATTENDEE):
+    """Todos os pedidos abertos (PROCESSANDO ou confirmação) do atendente."""
+    open_orders = []
+    async for m in tg.iter_messages(g, limit=80):
+        text = m.text or ""
+        if attendee not in text:
+            continue
+        if is_feita_final(text):
+            continue
+        if "PROCESSANDO" not in text and not is_confirm_prompt(text):
+            continue
+        pedido = parse_pedido_id(text)
+        payload = parse_payload(text)
+        if pedido:
+            open_orders.append((pedido, payload, m.id))
+    return open_orders
+
+
+async def processing_pedido_ids(g, tg, limit=200):
+    ids = set()
+    async for m in tg.iter_messages(g, limit=limit):
+        text = m.text or ""
+        if "PROCESSANDO" not in text and not is_feita_final(text):
+            continue
+        pid = parse_pedido_id(text)
+        if pid:
+            ids.add(pid)
+    return ids
+
+
 async def list_stray_processing(g, tg, own_pedido_id=None, attendee=ATTENDEE):
     """PROCESSANDO no nosso nome que NÃO é o pedido ativo do worker."""
     stray = []
-    async for m in tg.iter_messages(g, limit=80):
-        text = m.text or ""
-        if attendee not in text or "PROCESSANDO" not in text:
+    for pedido, payload, msg_id in await list_open_orders(g, tg, attendee):
+        if pedido == own_pedido_id:
             continue
-        pedido = parse_pedido_id(text)
-        if not pedido or pedido == own_pedido_id or is_feita_final(text):
-            continue
-        payload = parse_payload(text)
-        if payload:
-            stray.append((pedido, payload, m.id))
+        stray.append((pedido, payload, msg_id))
     return stray
 
 
 async def find_claimable_claro(g, tg, exclude_pedidos=None, limit=300):
     exclude = set(exclude_pedidos or [])
+    already_processing = await processing_pedido_ids(g, tg)
     candidates = []
     async for m in tg.iter_messages(g, limit=limit):
         text = m.text or ""
@@ -134,7 +160,7 @@ async def find_claimable_claro(g, tg, exclude_pedidos=None, limit=300):
         if not any("Reivindicar" in lb for lb in labels):
             continue
         pid = parse_pedido_id(text)
-        if pid and pid in exclude:
+        if pid and (pid in exclude or pid in already_processing):
             continue
         candidates.append((m.date, m, pid))
     return candidates
@@ -161,9 +187,18 @@ async def claim_one_claro(g, tg):
         return None, None, None
 
     _, message, pedido_id = candidates[-1]
+
+    # Revalida msg imediatamente antes do clique
+    message = await tg.get_messages(g, ids=message.id)
     labels = [getattr(b, "text", "") for row in (message.buttons or []) for b in row]
     claim_label = next((lb for lb in labels if "Reivindicar" in lb), None)
     if not claim_label:
+        log(f"Sem botão Reivindicar em {pedido_id} (msg {message.id}) — abortando")
+        return None, None, None
+
+    text_pre = message.text or ""
+    if "PROCESSANDO" in text_pre:
+        log(f"Pedido {pedido_id} já PROCESSANDO antes do clique — abortando")
         return None, None, None
 
     await message.click(text=claim_label)
@@ -261,18 +296,26 @@ async def bot_state_for_target(tg, bot, target, limit=20):
 
 async def acquire_order(g, tg, bot):
     current = load_current_pedido()
+    open_orders = await list_open_orders(g, tg)
+
     if current:
         pedido = current["pedido_id"]
         payload = current["payload"]
-        if await pedido_still_open(g, tg, pedido):
+        if any(o[0] == pedido for o in open_orders):
             log(f"Retomando pedido do worker {pedido} → {payload}")
             return payload, pedido
         clear_current_pedido()
         log(f"Pedido ativo {pedido} já fechado — limpando registro")
 
-    stray = await list_stray_processing(g, tg)
+    own_pedido = current["pedido_id"] if current else None
+    stray = await list_stray_processing(g, tg, own_pedido_id=own_pedido)
     for pedido, payload, msg_id in stray:
-        log(f"Ignorando já reivindicado (não foi este worker): {pedido} → {payload} (msg {msg_id})")
+        log(f"Pedido aberto (não iniciado por este worker): {pedido} → {payload} (msg {msg_id})")
+
+    # Não reivindica novo enquanto existir QUALQUER pedido aberto no grupo
+    if open_orders:
+        log(f"BLOQUEADO: {len(open_orders)} pedido(s) aberto(s) — feche no grupo antes de novo Reivindicar")
+        return None, None
 
     busy, hint = await bot_has_active_job(tg, bot)
     if busy:
