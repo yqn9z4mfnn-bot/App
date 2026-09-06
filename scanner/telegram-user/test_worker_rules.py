@@ -125,6 +125,23 @@ def test_cartao_bloqueado_com_fila_e_progress():
         "__Limpando cartões do login…__"
     )
     assert classify_bot_response(t5) == "progress"
+    t6 = (
+        "**Recarga automática** | 💰 **R$30,00** | 🔑 `11991003621` → 📱 `69992568665` | "
+        "__Pegando cartão da fila…__"
+    )
+    assert classify_bot_response(t6) == "progress"
+    t7 = (
+        "**Conferindo saldo** | 💰 **R$30,00** | 🔑 `11991000872` → 📱 `69992568665` | "
+        "__Lendo saldo e validade após a recarga…__"
+    )
+    assert classify_bot_response(t7) == "progress"
+    from facil_group import is_actionable_response, is_terminal_kind
+
+    assert not is_actionable_response(t6)
+    assert not is_actionable_response(t7)
+    assert is_terminal_kind("approved")
+    assert not is_terminal_kind("progress")
+    assert not is_terminal_kind("other")
     assert next_after_bot_result("3ds", "n|3ds|x", None) == "retry"
     assert next_after_bot_result("other", "n|other|x", None) == "retry"
     assert next_after_bot_result("timeout", "n|timeout|x", None) == "retry"

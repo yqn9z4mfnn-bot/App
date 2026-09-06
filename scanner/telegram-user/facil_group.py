@@ -43,6 +43,21 @@ def is_feita_final(text):
     return bool(re.search(r"Status:\s*✅\s*\*\*Feita\*\*|Status:\s*✅\s*Feita", t, re.I))
 
 
+TERMINAL_KINDS = frozenset({"approved", "denied", "3ds", "fail", "fail_login"})
+
+# Títulos/hints que o bot edita enquanto a recarga ainda corre — NÃO são erro.
+PROGRESS_RE = re.compile(
+    r"Preparando|Processando|Recarga autom[aá]tica|Conferindo|"
+    r"Nova tentativa|__Processando__|"
+    r"Gerando login|Verificando fila|Aguardando checkout|"
+    r"Aguardando navegador|Consultando saldo|Limpando cart[oõ]es|"
+    r"Pegando cart[aã]o|Cart[aã]o da fila|Lendo saldo|"
+    r"Confirmando no hist[oó]rico|Fila: aguardando|Limpeza pulada|"
+    r"Buscando valores|Rede inst[aá]vel",
+    re.I,
+)
+
+
 def classify_bot_response(text):
     t = text or ""
     if re.search(r"✅\s*\*\*APROVADA\*\*|APROVADA", t, re.I):
@@ -53,26 +68,18 @@ def classify_bot_response(text):
         return "denied"
     if re.search(r"Não iniciou|NAO iniciou", t, re.I):
         return "fail_login"
-    if re.search(r"❌|FALH|ERRO", t, re.I) and not re.search(
-        r"aguardando checkout|aguardando navegador|gerando login|consultando saldo",
-        t,
-        re.I,
-    ):
+    if re.search(r"Fila vazia|Valor indisponível|Sem valores", t, re.I):
         return "fail"
-    if re.search(
-        r"Gerando login|Verificando fila do navegador|Aguardando checkout|"
-        r"Aguardando navegador|Consultando saldo|__Processando__|"
-        r"Fila: aguardando|Limpando cart[oõ]es|Preparando",
-        t,
-        re.I,
-    ):
-        return "progress"
-    if re.search(r"Recarga automática", t, re.I) and re.search(
-        r"Gerando login|Verificando fila|Aguardando|Processando", t, re.I
-    ):
+    if re.search(r"❌|FALH|ERRO", t, re.I) and not PROGRESS_RE.search(t):
+        return "fail"
+    if PROGRESS_RE.search(t):
         return "progress"
     return "other"
 
 
+def is_terminal_kind(kind):
+    return kind in TERMINAL_KINDS
+
+
 def is_actionable_response(text):
-    return classify_bot_response(text) != "progress"
+    return is_terminal_kind(classify_bot_response(text))

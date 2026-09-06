@@ -23,6 +23,7 @@ from facil_group import (
     is_actionable_response,
     is_feita_final,
     is_confirm_prompt,
+    is_terminal_kind,
     parse_payload,
     parse_pedido_id,
     payload_target,
@@ -252,15 +253,10 @@ async def bot_has_active_job(tg, bot, exclude_target=None, limit=15):
         text = m.text or ""
         if exclude_target and response_matches_target(text, exclude_target):
             continue
-        if classify_bot_response(text) == "approved":
+        kind = classify_bot_response(text)
+        if kind == "approved":
             continue
-        if re.search(
-            r"Gerando login|Aguardando checkout|Aguardando navegador|"
-            r"Verificando fila do navegador|Consultando saldo|"
-            r"Limpando cart[oõ]es|Preparando",
-            text,
-            re.I,
-        ):
+        if kind == "progress":
             return True, text[:100]
     return False, ""
 
@@ -294,12 +290,10 @@ async def wait_bot_reply(tg, bot, after_id, target, timeout=600):
             if not response_matches_target(text, target):
                 continue
             kind = classify_bot_response(text)
-            if kind == "progress":
-                seen_texts.add(text)
-                log(f"BOT [{kind}] {target}: {text[:220].replace(chr(10), ' | ')}")
-                continue
             seen_texts.add(text)
-            log(f"BOT [{kind}] {target}: {text[:280].replace(chr(10), ' | ')}")
+            log(f"BOT [{kind}] {target}: {text[:220].replace(chr(10), ' | ')}")
+            if not is_terminal_kind(kind):
+                continue
             return kind, text
 
         await asyncio.sleep(2)
@@ -423,6 +417,19 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
             log(f"Outro job no bot — aguardando 15s ({busy_hint})")
             await asyncio.sleep(15)
             continue
+
+        state, hint = await bot_state_for_target(tg, bot, target)
+        if state == "approved":
+            log(f"APROVADA {target} — não reenvia")
+            return await _apply_terminal(g, tg, payload, pedido_id, target, "approved", hint, last_fp)
+        if state == "progress":
+            log(f"Ainda processando {target} — espera resultado, sem reenviar")
+            kind, text = await wait_bot_reply(tg, bot, 0, target, timeout=600)
+            action = await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp)
+            if action == "retry":
+                last_fp = error_fingerprint(kind if kind != "timeout" else "timeout", text, target)
+                continue
+            return action
 
         others = [o for o in await list_open_orders(g, tg) if o[0] != pedido_id]
         if others:
