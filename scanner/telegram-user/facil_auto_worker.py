@@ -95,7 +95,26 @@ async def mark_feita(g, tg, pedido_id):
             if "Feita" in getattr(b, "text", ""):
                 await msg.click(text=b.text)
                 log(f"Clicou Feita no pedido {pedido_id}")
-                return True
+                await asyncio.sleep(2)
+                break
+    else:
+        return False
+
+    for _ in range(12):
+        async for m in tg.iter_messages(g, limit=30):
+            t = m.text or ""
+            if pedido_id not in t or "Tem certeza" not in t or not m.buttons:
+                continue
+            for row in m.buttons:
+                for b in row:
+                    if "Confirmar" in getattr(b, "text", ""):
+                        await m.click(text=b.text)
+                        log(f"Clicou Confirmar no pedido {pedido_id} (msg {m.id})")
+                        await asyncio.sleep(2)
+                        return True
+        await asyncio.sleep(1)
+
+    log(f"Confirmar não encontrado para pedido {pedido_id}")
     return False
 
 
