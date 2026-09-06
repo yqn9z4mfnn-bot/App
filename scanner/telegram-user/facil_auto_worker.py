@@ -30,6 +30,7 @@ from facil_group import (
 from group_close import close_order_in_group, find_processing_msg
 
 STATE_FILE = DATA_DIR / "facil-auto-worker.json"
+CURRENT_FILE = DATA_DIR / "worker-current.json"
 LOCK_FILE = DATA_DIR / "facil-auto-worker.lock"
 MIN_SEND_GAP_SEC = 45
 IDLE_POLL_SEC = 60
@@ -62,6 +63,64 @@ def release_lock():
     LOCK_FILE.unlink(missing_ok=True)
 
 
+def load_current_pedido():
+    if not CURRENT_FILE.exists():
+        return None
+    try:
+        return json.loads(CURRENT_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def save_current_pedido(pedido_id, payload, msg_id=None):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    CURRENT_FILE.write_text(
+        json.dumps(
+            {
+                "pedido_id": pedido_id,
+                "payload": payload,
+                "msg_id": msg_id,
+                "claimed_at": datetime.now(timezone.utc).isoformat(),
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def clear_current_pedido():
+    CURRENT_FILE.unlink(missing_ok=True)
+
+
+async def pedido_still_open(g, tg, pedido_id):
+    async for m in tg.iter_messages(g, limit=100):
+        text = m.text or ""
+        if pedido_id not in text:
+            continue
+        if is_feita_final(text):
+            return False
+        if "PROCESSANDO" in text or "Tem certeza" in text:
+            return True
+    return False
+
+
+async def list_stray_processing(g, tg, own_pedido_id=None, attendee=ATTENDEE):
+    """PROCESSANDO no nosso nome que NÃO é o pedido ativo do worker."""
+    stray = []
+    async for m in tg.iter_messages(g, limit=80):
+        text = m.text or ""
+        if attendee not in text or "PROCESSANDO" not in text:
+            continue
+        pedido = parse_pedido_id(text)
+        if not pedido or pedido == own_pedido_id or is_feita_final(text):
+            continue
+        payload = parse_payload(text)
+        if payload:
+            stray.append((pedido, payload, m.id))
+    return stray
+
+
 async def find_claimable_claro(g, tg, exclude_pedidos=None, limit=300):
     exclude = set(exclude_pedidos or [])
     candidates = []
@@ -82,20 +141,16 @@ async def find_claimable_claro(g, tg, exclude_pedidos=None, limit=300):
 
 
 async def find_my_open_processing(g, tg, attendee=ATTENDEE):
-    """Pedido PROCESSANDO nosso ainda não Feita."""
-    async for m in tg.iter_messages(g, limit=80):
-        text = m.text or ""
-        if attendee not in text:
-            continue
-        pedido = parse_pedido_id(text)
-        if not pedido:
-            continue
-        if is_feita_final(text):
-            continue
-        if "PROCESSANDO" in text or "Tem certeza" in text:
-            payload = parse_payload(text)
-            if payload:
-                return payload, pedido, m.id
+    """Deprecated: use load_current_pedido + pedido_still_open."""
+    current = load_current_pedido()
+    if not current:
+        return None, None, None
+    pedido = current.get("pedido_id")
+    payload = current.get("payload")
+    if pedido and payload and await pedido_still_open(g, tg, pedido):
+        return payload, pedido, current.get("msg_id")
+    if pedido and not await pedido_still_open(g, tg, pedido):
+        clear_current_pedido()
     return None, None, None
 
 
@@ -120,6 +175,7 @@ async def claim_one_claro(g, tg):
         text = updated.text or ""
         payload = parse_payload(text)
         if "PROCESSANDO" in text and payload and ATTENDEE in text:
+            save_current_pedido(pedido_id, payload, message.id)
             return payload, pedido_id, message.id
         if "Reivindicar" not in str([getattr(b, "text", "") for row in (updated.buttons or []) for b in row]):
             if "PROCESSANDO" in text and ATTENDEE not in text:
@@ -204,17 +260,26 @@ async def bot_state_for_target(tg, bot, target, limit=20):
 
 
 async def acquire_order(g, tg, bot):
-    open_payload, open_pedido, _ = await find_my_open_processing(g, tg)
-    if open_payload:
-        log(f"Pedido aberto no grupo {open_pedido} → {open_payload} (não reivindica novo)")
-        return open_payload, open_pedido
+    current = load_current_pedido()
+    if current:
+        pedido = current["pedido_id"]
+        payload = current["payload"]
+        if await pedido_still_open(g, tg, pedido):
+            log(f"Retomando pedido do worker {pedido} → {payload}")
+            return payload, pedido
+        clear_current_pedido()
+        log(f"Pedido ativo {pedido} já fechado — limpando registro")
+
+    stray = await list_stray_processing(g, tg)
+    for pedido, payload, msg_id in stray:
+        log(f"Ignorando já reivindicado (não foi este worker): {pedido} → {payload} (msg {msg_id})")
 
     busy, hint = await bot_has_active_job(tg, bot)
     if busy:
         log(f"Bot ocupado — aguardando antes de reivindicar ({hint})")
         return None, None
 
-    payload, pedido, _ = await claim_one_claro(g, tg)
+    payload, pedido, msg_id = await claim_one_claro(g, tg)
     if payload:
         log(f"Reivindicado {pedido} → {payload}")
     return payload, pedido
@@ -232,6 +297,7 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
         if state == "approved":
             log(f"APROVADA {target}")
             closed = await close_order_in_group(g, tg, pedido_id, log=log)
+            clear_current_pedido()
             save_state({
                 "result": "closed" if closed else "approved_unconfirmed",
                 "payload": payload,
@@ -245,6 +311,7 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
             kind, _ = await wait_bot_reply(tg, bot, 0, target, timeout=600)
             if kind == "approved":
                 closed = await close_order_in_group(g, tg, pedido_id, log=log)
+                clear_current_pedido()
                 save_state({
                     "result": "closed" if closed else "approved_unconfirmed",
                     "payload": payload,
@@ -257,6 +324,23 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
             continue
 
         if sent_once:
+            term, _hint = await bot_state_for_target(tg, bot, target)
+            if term == "approved":
+                log(f"APROVADA {target}")
+                closed = await close_order_in_group(g, tg, pedido_id, log=log)
+                clear_current_pedido()
+                save_state({
+                    "result": "closed" if closed else "approved_unconfirmed",
+                    "payload": payload,
+                    "pedido_id": pedido_id,
+                    "at": datetime.now(timezone.utc).isoformat(),
+                })
+                return "closed" if closed else "needs_confirm"
+            if term in ("fail", "fail_login", "denied", "3ds"):
+                log(f"Bot respondeu {term} — encerra pedido {pedido_id}")
+                clear_current_pedido()
+                save_state({"result": term, "payload": payload, "pedido_id": pedido_id, "at": datetime.now(timezone.utc).isoformat()})
+                return "failed"
             log("Já enviado 1x neste pedido — aguardando bot")
             await asyncio.sleep(20)
             continue
@@ -277,6 +361,7 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
         if kind == "approved":
             log("APROVADA!")
             closed = await close_order_in_group(g, tg, pedido_id, log=log)
+            clear_current_pedido()
             save_state({
                 "result": "closed" if closed else "approved_unconfirmed",
                 "payload": payload,
@@ -304,6 +389,7 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
 
         log(f"Erro={err_key} streak={same_streak}")
         if same_streak >= 2:
+            clear_current_pedido()
             save_state({"result": err_key, "payload": payload, "pedido_id": pedido_id, "at": datetime.now(timezone.utc).isoformat()})
             return "failed"
 
