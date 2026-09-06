@@ -28,7 +28,8 @@ from facil_group import (
     payload_target,
     response_matches_target,
 )
-from group_close import close_order_in_group, find_processing_msg
+from group_close import close_order_in_group
+from worker_rules import decide_next_action
 
 STATE_FILE = DATA_DIR / "facil-auto-worker.json"
 CURRENT_FILE = DATA_DIR / "worker-current.json"
@@ -182,6 +183,11 @@ async def find_my_open_processing(g, tg, attendee=ATTENDEE):
 
 async def claim_one_claro(g, tg):
     """Reivindica UM pedido (o mais antigo). Nunca tenta o próximo se falhar."""
+    still_open = await list_open_orders(g, tg)
+    if still_open:
+        log(f"ABORT claim: {len(still_open)} pedido(s) ainda aberto(s)")
+        return None, None, None
+
     candidates = await find_claimable_claro(g, tg)
     if not candidates:
         return None, None, None
@@ -197,8 +203,13 @@ async def claim_one_claro(g, tg):
         return None, None, None
 
     text_pre = message.text or ""
-    if "PROCESSANDO" in text_pre:
-        log(f"Pedido {pedido_id} já PROCESSANDO antes do clique — abortando")
+    if "PROCESSANDO" in text_pre or ATTENDEE in text_pre:
+        log(f"Pedido {pedido_id} já reivindicado/PROCESSANDO — abortando")
+        return None, None, None
+
+    still_open = await list_open_orders(g, tg)
+    if still_open:
+        log(f"ABORT claim pré-clique: grupo não está limpo")
         return None, None, None
 
     await message.click(text=claim_label)
@@ -294,27 +305,41 @@ async def bot_state_for_target(tg, bot, target, limit=20):
     return "idle", ""
 
 
+async def bot_active_targets(tg, bot, limit=20):
+    targets = set()
+    async for m in tg.iter_messages(bot, limit=limit):
+        if m.out:
+            continue
+        text = m.text or ""
+        kind = classify_bot_response(text)
+        if kind not in ("progress", "approved"):
+            continue
+        digits = re.findall(r"\d{10,11}", text.replace("`", ""))
+        targets.update(digits)
+    return targets
+
+
 async def acquire_order(g, tg, bot):
     current = load_current_pedido()
-    open_orders = await list_open_orders(g, tg)
+    open_raw = await list_open_orders(g, tg)
+    open_orders = [{"pedido_id": p, "payload": pay, "msg_id": mid} for p, pay, mid in open_raw]
+    current_id = current["pedido_id"] if current else None
+    bot_targets = await bot_active_targets(tg, bot)
 
-    if current:
-        pedido = current["pedido_id"]
-        payload = current["payload"]
-        if any(o[0] == pedido for o in open_orders):
-            log(f"Retomando pedido do worker {pedido} → {payload}")
-            return payload, pedido
-        clear_current_pedido()
-        log(f"Pedido ativo {pedido} já fechado — limpando registro")
+    action, resume_id = decide_next_action(open_orders, current_id, bot_targets)
 
-    own_pedido = current["pedido_id"] if current else None
-    stray = await list_stray_processing(g, tg, own_pedido_id=own_pedido)
-    for pedido, payload, msg_id in stray:
-        log(f"Pedido aberto (não iniciado por este worker): {pedido} → {payload} (msg {msg_id})")
+    if action == "resume":
+        row = next((o for o in open_orders if o["pedido_id"] == resume_id), None)
+        if not row:
+            return None, None
+        save_current_pedido(row["pedido_id"], row["payload"], row["msg_id"])
+        log(f"Retomando {row['pedido_id']} → {row['payload']} (sem novo Reivindicar)")
+        return row["payload"], row["pedido_id"]
 
-    # Não reivindica novo enquanto existir QUALQUER pedido aberto no grupo
-    if open_orders:
-        log(f"BLOQUEADO: {len(open_orders)} pedido(s) aberto(s) — feche no grupo antes de novo Reivindicar")
+    if action == "block":
+        for o in open_orders:
+            log(f"Aberto: {o['pedido_id']} → {o['payload']} (msg {o['msg_id']})")
+        log(f"BLOQUEADO: {len(open_orders)} pedido(s) aberto(s) — NÃO reivindica novo")
         return None, None
 
     busy, hint = await bot_has_active_job(tg, bot)
@@ -322,8 +347,12 @@ async def acquire_order(g, tg, bot):
         log(f"Bot ocupado — aguardando antes de reivindicar ({hint})")
         return None, None
 
-    payload, pedido, msg_id = await claim_one_claro(g, tg)
+    payload, pedido, _msg_id = await claim_one_claro(g, tg)
     if payload:
+        after = await list_open_orders(g, tg)
+        if len(after) > 1:
+            log(f"ALERTA: {len(after)} abertos após Reivindicar — não envia, bloqueia")
+            return None, None
         log(f"Reivindicado {pedido} → {payload}")
     return payload, pedido
 
@@ -393,6 +422,11 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
             log(f"Outro job no bot — aguardando 15s ({hint})")
             await asyncio.sleep(15)
             continue
+
+        others = [o for o in await list_open_orders(g, tg) if o[0] != pedido_id]
+        if others:
+            log(f"ABORT envio: outro pedido aberto {others[0][0]} — não manda 2 payloads")
+            return "blocked"
 
         log(f"=== Ciclo {cycle} | pedido={pedido_id} | {payload} ===")
         sent = await tg.send_message(bot, payload)
@@ -494,6 +528,11 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
 
             if result == "needs_confirm":
                 pending_confirm = (current_pedido, current_payload)
+                continue
+
+            if result == "blocked":
+                log("Envio bloqueado — aguardando grupo limpo")
+                await asyncio.sleep(idle_poll)
                 continue
 
             if not loop:
