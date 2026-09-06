@@ -29,7 +29,7 @@ from facil_group import (
     response_matches_target,
 )
 from group_close import close_order_in_group
-from worker_rules import decide_next_action
+from worker_rules import allowed_group_click, is_reivindicar_label
 
 STATE_FILE = DATA_DIR / "facil-auto-worker.json"
 CURRENT_FILE = DATA_DIR / "worker-current.json"
@@ -160,6 +160,8 @@ async def find_claimable_claro(g, tg, exclude_pedidos=None, limit=300):
         labels = [getattr(b, "text", "") for row in (m.buttons or []) for b in row]
         if not any("Reivindicar" in lb for lb in labels):
             continue
+        if any("Cancelar" in lb for lb in labels) and not any("Reivindicar" in lb for lb in labels):
+            continue
         pid = parse_pedido_id(text)
         if pid and (pid in exclude or pid in already_processing):
             continue
@@ -197,7 +199,7 @@ async def claim_one_claro(g, tg):
     # Revalida msg imediatamente antes do clique
     message = await tg.get_messages(g, ids=message.id)
     labels = [getattr(b, "text", "") for row in (message.buttons or []) for b in row]
-    claim_label = next((lb for lb in labels if "Reivindicar" in lb), None)
+    claim_label = next((lb for lb in labels if is_reivindicar_label(lb)), None)
     if not claim_label:
         log(f"Sem botão Reivindicar em {pedido_id} (msg {message.id}) — abortando")
         return None, None, None
@@ -212,6 +214,9 @@ async def claim_one_claro(g, tg):
         log(f"ABORT claim pré-clique: grupo não está limpo")
         return None, None, None
 
+    if not allowed_group_click(claim_label):
+        log(f"RECUSADO clique '{claim_label}'")
+        return None, None, None
     await message.click(text=claim_label)
     log(f"Clicou Reivindicar em {pedido_id} (msg {message.id})")
 

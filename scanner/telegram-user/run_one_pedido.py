@@ -7,7 +7,8 @@ from telethon import TelegramClient
 
 from config import SESSION_PATH, api_id, api_hash, load_env_file
 from facil_group import BOT_USERNAME, GROUP_ID, classify_bot_response, is_actionable_response
-from facil_auto_worker import claim_oldest_claro
+from group_close import close_order_in_group
+from facil_auto_worker import claim_one_claro
 
 
 async def wait_bot(tg, bot, after_id, timeout=600):
@@ -45,35 +46,6 @@ async def wait_bot(tg, bot, after_id, timeout=600):
     return "timeout", ""
 
 
-async def mark_feita_confirm(tg, g, pedido):
-    proc = None
-    async for m in tg.iter_messages(g, limit=100):
-        t = m.text or ""
-        if pedido in t and "PROCESSANDO" in t:
-            proc = m
-            break
-    if proc and proc.buttons:
-        for row in proc.buttons:
-            for b in row:
-                if "Feita" in getattr(b, "text", ""):
-                    await proc.click(text=b.text)
-                    print("Clicou Feita")
-                    await asyncio.sleep(2)
-                    break
-
-    async for m in tg.iter_messages(g, limit=25):
-        t = m.text or ""
-        if "Tem certeza" in t and m.buttons:
-            for row in m.buttons:
-                for b in row:
-                    if "Confirmar" in getattr(b, "text", ""):
-                        await m.click(text=b.text)
-                        print("Clicou Confirmar")
-                        await asyncio.sleep(2)
-                        return True
-    return False
-
-
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--payload")
@@ -91,7 +63,7 @@ async def main():
     payload = args.payload
     pedido = args.pedido
     if args.claim or not payload:
-        payload, pedido, _ = await claim_oldest_claro(g, tg)
+        payload, pedido, _ = await claim_one_claro(g, tg)
         if not payload:
             print("Sem pedido Claro disponível")
             await tg.disconnect()
@@ -104,7 +76,7 @@ async def main():
     print("RESULTADO:", kind)
 
     if kind == "approved" and pedido:
-        await mark_feita_confirm(tg, g, pedido)
+        await close_order_in_group(g, tg, pedido)
         print("Fechado no grupo")
 
     await tg.disconnect()

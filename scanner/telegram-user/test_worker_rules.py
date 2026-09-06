@@ -52,6 +52,23 @@ def test_nao_resume_dois_no_bot():
     assert decide_next_action(opens, None, {"111", "222"}) == ("block", None)
 
 
+def test_nunca_cancela_botoes_do_grupo():
+    botoes = ["✅ Confirmar", "✅ Cancelar", "✅ Cancelar", "❌ Cancelar", "🚫 Blacklist"]
+    from worker_rules import allowed_group_click, is_cancel_label, is_confirm_label
+
+    assert is_confirm_label("✅ Confirmar")
+    assert not is_confirm_label("✅ Cancelar")
+    assert not is_confirm_label("❌ Cancelar")
+    for b in botoes:
+        if "Cancelar" in b:
+            assert is_cancel_label(b)
+            assert not allowed_group_click(b)
+    assert allowed_group_click("✅ Confirmar")
+    assert allowed_group_click("✅ Feita")
+    assert allowed_group_click("📌 Reivindicar")
+    assert not allowed_group_click("🚫 Blacklist")
+
+
 if __name__ == "__main__":
     tests = [v for k, v in list(globals().items()) if k.startswith("test_")]
     for fn in tests:

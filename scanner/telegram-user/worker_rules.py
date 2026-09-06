@@ -41,3 +41,36 @@ def decide_next_action(open_orders, current_pedido_id, bot_active_targets=None):
 
 def claim_allowed(open_count):
     return open_count == 0
+
+
+def is_cancel_label(label):
+    t = (label or "").strip()
+    return "cancelar" in t.lower()
+
+
+def is_confirm_label(label):
+    t = (label or "").strip()
+    if is_cancel_label(t):
+        return False
+    return t == "✅ Confirmar" or t.endswith("Confirmar")
+
+
+def is_feita_label(label):
+    t = (label or "").strip()
+    if is_cancel_label(t):
+        return False
+    return "Feita" in t
+
+
+def is_reivindicar_label(label):
+    t = (label or "").strip()
+    if is_cancel_label(t):
+        return False
+    return "Reivindicar" in t
+
+
+def allowed_group_click(label):
+    """Únicos cliques permitidos no grupo. Nunca Cancelar."""
+    if is_cancel_label(label):
+        return False
+    return is_confirm_label(label) or is_feita_label(label) or is_reivindicar_label(label)

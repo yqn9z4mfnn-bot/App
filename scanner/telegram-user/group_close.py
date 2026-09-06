@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
-"""Fechar pedido no grupo: Feita → Confirmar (2 passos)."""
+"""Fechar pedido no grupo: Feita → Confirmar (2 passos). Nunca Cancelar."""
 import asyncio
-import re
 
-from facil_group import is_confirm_prompt, is_feita_final, parse_pedido_id
+from facil_group import is_confirm_prompt, is_feita_final
+from worker_rules import allowed_group_click, is_confirm_label, is_feita_label
 
 
 def _btn_labels(msg):
     return [getattr(b, "text", "") for row in (msg.buttons or []) for b in row]
+
+
+async def safe_click(msg, label, log=print):
+    if is_cancel_label_or_blocked(label):
+        log(f"RECUSADO clique em '{label}' (nunca cancela)")
+        return False
+    await msg.click(text=label)
+    return True
+
+
+def is_cancel_label_or_blocked(label):
+    return not allowed_group_click(label)
 
 
 async def find_processing_msg(g, tg, pedido_id, limit=120):
@@ -35,19 +47,14 @@ async def find_confirm_msg(g, tg, pedido_id=None, anchor_msg_id=None, limit=30):
     return None
 
 
-async def click_confirm(msg, pedido_id="?"):
+async def click_confirm(msg, pedido_id="?", log=print):
+    if not msg.buttons:
+        return False
     for row in msg.buttons:
         for b in row:
             label = getattr(b, "text", "")
-            if re.match(r"^✅\s*Confirmar$", label.strip()) or label.strip() == "✅ Confirmar":
-                await msg.click(text=label)
-                return True
-    for row in msg.buttons:
-        for b in row:
-            label = getattr(b, "text", "")
-            if "Confirmar" in label and "Cancelar" not in label:
-                await msg.click(text=label)
-                return True
+            if is_confirm_label(label):
+                return await safe_click(msg, label, log=log)
     return False
 
 
@@ -60,13 +67,14 @@ async def close_order_in_group(g, tg, pedido_id, log=print):
 
     anchor_id = msg.id if msg else None
 
-    if msg and msg.buttons and any("Feita" in lb for lb in _btn_labels(msg)):
+    if msg and msg.buttons:
         for row in msg.buttons:
             for b in row:
-                if "Feita" in getattr(b, "text", ""):
-                    await msg.click(text=b.text)
-                    log(f"Clicou Feita pedido {pedido_id} (msg {msg.id})")
-                    anchor_id = msg.id
+                label = getattr(b, "text", "")
+                if is_feita_label(label):
+                    if await safe_click(msg, label, log=log):
+                        log(f"Clicou Feita pedido {pedido_id} (msg {msg.id})")
+                        anchor_id = msg.id
                     break
 
     # Diálogo "Tem certeza…" aparece na MESMA msg (editada) — sem pedido_id no texto
@@ -80,7 +88,7 @@ async def close_order_in_group(g, tg, pedido_id, log=print):
                     log(f"Grupo fechado {pedido_id} (msg {anchor_id})")
                     return True
                 if is_confirm_prompt(updated.text) and updated.buttons:
-                    if await click_confirm(updated, pedido_id):
+                    if await click_confirm(updated, pedido_id, log=log):
                         log(f"Clicou Confirmar pedido {pedido_id} (msg {anchor_id})")
                         await asyncio.sleep(1.5)
                         final = await tg.get_messages(g, ids=anchor_id)
@@ -90,7 +98,7 @@ async def close_order_in_group(g, tg, pedido_id, log=print):
 
         confirm = await find_confirm_msg(g, tg, pedido_id=None, limit=15)
         if confirm and confirm.buttons:
-            if await click_confirm(confirm, pedido_id):
+            if await click_confirm(confirm, pedido_id, log=log):
                 log(f"Clicou Confirmar pedido {pedido_id} (msg {confirm.id})")
                 await asyncio.sleep(1.5)
                 check = await tg.get_messages(g, ids=confirm.id)

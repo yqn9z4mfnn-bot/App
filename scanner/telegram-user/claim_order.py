@@ -51,13 +51,15 @@ async def main():
     for label in labels:
         if "Reivindicar" in label:
             try:
+                if "Cancelar" in label:
+                    continue
                 await message.click(text=label)
                 clicked = True
                 break
             except Exception:
                 pass
     if not clicked:
-        await message.click(0)
+        print("Não clicou Reivindicar (nunca usa click(0) — evitaria Cancelar)")
 
     await asyncio.sleep(3)
     updated = await tg.get_messages(g, ids=message.id)
