@@ -148,6 +148,34 @@ def test_cartao_bloqueado_com_fila_e_progress():
     assert next_after_bot_result("approved", "n|approved|x", None) == "close"
 
 
+def test_login_429_nao_e_resultado_final():
+    from facil_group import classify_bot_response, is_actionable_response, pick_bot_state
+
+    login_429 = (
+        "**Erro** 🔑 `11991009444` → 📱 `81993931753` "
+        "Falha no login (429): Too Many Requests"
+    )
+    assert classify_bot_response(login_429) == "progress"
+    assert not is_actionable_response(login_429)
+
+    card_fail = (
+        "**Falha na automação** 💰 R$ 30,00 🔑 `11991003526` → 📱 `81993931753` "
+        "12 - ERRO NO CARTAO Voltou pra fila"
+    )
+    assert classify_bot_response(card_fail) == "fail"
+    assert is_actionable_response(card_fail)
+
+    nao_iniciou = "**Não iniciou** 💰 R$ 30,00 📱 `81993931753` Falha no login (429)"
+    assert classify_bot_response(nao_iniciou) == "fail_login"
+
+    # Erro antigo não manda reenviar se a mensagem mais nova ainda é progresso
+    rows = [
+        ("progress", login_429),
+        ("fail", card_fail),
+    ]
+    assert pick_bot_state(rows) == ("progress", login_429)
+
+
 def test_halt_espera_seguir_ou_pedido_fechado():
     from worker_rules import halt_next_step
 

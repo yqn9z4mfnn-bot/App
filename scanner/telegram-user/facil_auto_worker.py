@@ -27,6 +27,7 @@ from facil_group import (
     parse_payload,
     parse_pedido_id,
     payload_target,
+    pick_bot_state,
     response_matches_target,
 )
 from group_close import close_order_in_group, pedido_ja_feita
@@ -288,39 +289,34 @@ async def bot_has_active_job(tg, bot, exclude_target=None, limit=15):
 
 
 async def wait_bot_reply(tg, bot, after_id, target, timeout=600):
+    """Espera o resultado FINAL da mensagem mais nova deste número. Ignora erro antigo."""
     deadline = asyncio.get_event_loop().time() + timeout
-    seen_texts = set()
-    anchor_id = None
+    last_logged = None
 
     while asyncio.get_event_loop().time() < deadline:
-        ids_to_check = []
-        if anchor_id:
-            ids_to_check.append(anchor_id)
-        async for m in tg.iter_messages(bot, limit=10):
+        newest_id = None
+        async for m in tg.iter_messages(bot, limit=15):
             if m.out:
                 continue
             if after_id and m.id <= after_id:
                 continue
-            if anchor_id is None:
-                anchor_id = m.id
-            if m.id not in ids_to_check:
-                ids_to_check.append(m.id)
-
-        for mid in ids_to_check:
-            updated = await tg.get_messages(bot, ids=mid)
-            if not updated:
-                continue
-            text = updated.text or ""
-            if not text.strip() or text in seen_texts:
-                continue
+            text = m.text or ""
             if not response_matches_target(text, target):
                 continue
-            kind = classify_bot_response(text)
-            seen_texts.add(text)
-            log(f"BOT [{kind}] {target}: {text[:220].replace(chr(10), ' | ')}")
-            if not is_terminal_kind(kind):
-                continue
-            return kind, text
+            newest_id = m.id
+            break
+
+        if newest_id:
+            updated = await tg.get_messages(bot, ids=newest_id)
+            text = (updated.text or "") if updated else ""
+            if text.strip():
+                kind = classify_bot_response(text)
+                blob = text[:220].replace("\n", " | ")
+                if blob != last_logged:
+                    log(f"BOT [{kind}] {target}: {blob}")
+                    last_logged = blob
+                if is_terminal_kind(kind):
+                    return kind, text
 
         await asyncio.sleep(2)
 
@@ -328,25 +324,17 @@ async def wait_bot_reply(tg, bot, after_id, target, timeout=600):
 
 
 async def bot_state_for_target(tg, bot, target, limit=20):
-    """Prefere APROVADA se existir para o número (não fica preso em negada antiga)."""
-    kinds = []
+    """Estado atual do número: APROVADA se existir; senão a mensagem mais nova."""
+    rows = []
     async for m in tg.iter_messages(bot, limit=limit):
         if m.out:
             continue
         text = m.text or ""
         if not response_matches_target(text, target):
             continue
-        kinds.append((classify_bot_response(text), text))
-    for kind, text in kinds:
-        if kind == "approved":
-            return "approved", text
-    for kind, text in kinds:
-        if kind in ("3ds", "denied", "fail", "fail_login"):
-            return kind, text[:120]
-    for kind, text in kinds:
-        if kind == "progress":
-            return "progress", text[:120]
-    return "idle", ""
+        rows.append((classify_bot_response(text), text))
+    kind, text = pick_bot_state(rows)
+    return kind, (text or "")[:120]
 
 
 async def bot_active_targets(tg, bot, limit=20):

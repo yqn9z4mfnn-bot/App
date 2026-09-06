@@ -53,7 +53,15 @@ PROGRESS_RE = re.compile(
     r"Aguardando navegador|Consultando saldo|Limpando cart[oõ]es|"
     r"Pegando cart[aã]o|Cart[aã]o da fila|Lendo saldo|"
     r"Confirmando no hist[oó]rico|Fila: aguardando|Limpeza pulada|"
-    r"Buscando valores|Rede inst[aá]vel|Login pronto|Iniciando recarga",
+    r"Buscando valores|Rede inst[aá]vel|Login pronto|Iniciando recarga|"
+    r"Falha no login|Too Many Requests",
+    re.I,
+)
+
+# Só estes erros encerram a espera. 429 / Falha no login o bot ainda retenta.
+FINAL_FAIL_RE = re.compile(
+    r"Falha na automa[cç][aã]o|Erro na recarga|Erro no retry|"
+    r"Fila vazia|Valor indisponível|Sem valores",
     re.I,
 )
 
@@ -68,12 +76,12 @@ def classify_bot_response(text):
         return "denied"
     if re.search(r"Não iniciou|NAO iniciou", t, re.I):
         return "fail_login"
-    if re.search(r"Fila vazia|Valor indisponível|Sem valores", t, re.I):
-        return "fail"
-    if re.search(r"❌|FALH|ERRO", t, re.I) and not PROGRESS_RE.search(t):
+    if FINAL_FAIL_RE.search(t):
         return "fail"
     if PROGRESS_RE.search(t):
         return "progress"
+    if re.search(r"❌|FALH|ERRO", t, re.I):
+        return "fail"
     return "other"
 
 
@@ -83,3 +91,13 @@ def is_terminal_kind(kind):
 
 def is_actionable_response(text):
     return is_terminal_kind(classify_bot_response(text))
+
+
+def pick_bot_state(rows):
+    """rows: mensagens do alvo, mais recente primeiro. APROVADA vence; senão a mais nova."""
+    for kind, text in rows:
+        if kind == "approved":
+            return kind, text
+    if rows:
+        return rows[0]
+    return "idle", ""
