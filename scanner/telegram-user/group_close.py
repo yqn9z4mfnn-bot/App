@@ -22,6 +22,14 @@ def is_cancel_label_or_blocked(label):
     return not allowed_group_click(label)
 
 
+async def pedido_ja_feita(g, tg, pedido_id, limit=150):
+    async for m in tg.iter_messages(g, limit=limit):
+        text = m.text or ""
+        if pedido_id in text and is_feita_final(text):
+            return True
+    return False
+
+
 async def find_processing_msg(g, tg, pedido_id, limit=120):
     async for m in tg.iter_messages(g, limit=limit):
         text = m.text or ""
@@ -60,10 +68,11 @@ async def click_confirm(msg, pedido_id="?", log=print):
 
 async def close_order_in_group(g, tg, pedido_id, log=print):
     """Clica Feita + Confirmar. Retorna True só com status final Feita."""
-    msg = await find_processing_msg(g, tg, pedido_id)
-    if msg and is_feita_final(msg.text or ""):
+    if await pedido_ja_feita(g, tg, pedido_id):
         log(f"Pedido {pedido_id} já está Feita no grupo")
         return True
+
+    msg = await find_processing_msg(g, tg, pedido_id)
 
     anchor_id = msg.id if msg else None
 

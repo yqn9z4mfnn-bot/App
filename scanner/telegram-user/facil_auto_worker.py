@@ -28,7 +28,7 @@ from facil_group import (
     payload_target,
     response_matches_target,
 )
-from group_close import close_order_in_group
+from group_close import close_order_in_group, pedido_ja_feita
 from worker_rules import (
     allowed_group_click,
     decide_next_action,
@@ -483,12 +483,16 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
                     pending_confirm = None
                     log(f"Grupo OK {pedido_id_retry}")
                 else:
-                    log(f"Confirmar pendente {pedido_id_retry} — não pega novo pedido")
-                    await asyncio.sleep(10)
-                    if loop:
-                        continue
-                    exit_code = 1
-                    break
+                    if await pedido_ja_feita(g, tg, pedido_id_retry):
+                        pending_confirm = None
+                        log(f"Pedido {pedido_id_retry} já Feita — seguindo")
+                    else:
+                        log(f"Confirmar pendente {pedido_id_retry} — não pega novo pedido")
+                        await asyncio.sleep(10)
+                        if loop:
+                            continue
+                        exit_code = 1
+                        break
 
             current_payload = payload
             current_pedido = pedido_id
