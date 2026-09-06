@@ -38,8 +38,17 @@ def client():
     return TelegramClient(str(SESSION_PATH), api_id(), api_hash())
 
 
+async def run_connected(fn):
+    tg = client()
+    await tg.connect()
+    try:
+        return await fn(tg)
+    finally:
+        await tg.disconnect()
+
+
 async def cmd_status():
-    async with client() as tg:
+    async def _run(tg):
         if not await tg.is_user_authorized():
             write_status(authorized=False, message='Sessão não autorizada')
             print('OFF — não logado')
@@ -56,9 +65,11 @@ async def cmd_status():
         print(f'ON — logado como {label} (id {me.id})')
         return 0
 
+    return await run_connected(_run)
+
 
 async def cmd_request_code():
-    async with client() as tg:
+    async def _run(tg):
         if await tg.is_user_authorized():
             me = await tg.get_me()
             label = f'@{me.username}' if me.username else str(me.id)
@@ -77,6 +88,8 @@ async def cmd_request_code():
         print(f'Informe o OTP: python3 auth.py sign-in CODIGO')
         print(f'ou: echo CODIGO > {OTP_FILE}')
         return 0
+
+    return await run_connected(_run)
 
 
 async def cmd_sign_in(code=None, wait_seconds=0):
@@ -101,7 +114,7 @@ async def cmd_sign_in(code=None, wait_seconds=0):
         except json.JSONDecodeError:
             status = {}
 
-    async with client() as tg:
+    async def _run(tg):
         if await tg.is_user_authorized():
             me = await tg.get_me()
             print(f'Já logado como {me.username or me.id}')
@@ -138,6 +151,8 @@ async def cmd_sign_in(code=None, wait_seconds=0):
         print(f'Sessão salva em {SESSION_PATH}.session')
         return 0
 
+    return await run_connected(_run)
+
 
 async def cmd_sign_in_2fa(password=None):
     password = (password or '').strip()
@@ -147,7 +162,7 @@ async def cmd_sign_in_2fa(password=None):
     if not password:
         raise SystemExit('Informe a senha 2FA')
 
-    async with client() as tg:
+    async def _run(tg):
         await tg.sign_in(password=password)
         me = await tg.get_me()
         write_status(
@@ -162,10 +177,14 @@ async def cmd_sign_in_2fa(password=None):
         print(f'2FA OK — logado como {me.username or me.id}')
         return 0
 
+    return await run_connected(_run)
+
 
 async def cmd_logout():
-    async with client() as tg:
+    async def _run(tg):
         await tg.log_out()
+
+    await run_connected(_run)
     for f in (STATUS_FILE, OTP_FILE, PASSWORD_FILE):
         f.unlink(missing_ok=True)
     session_file = Path(f'{SESSION_PATH}.session')
