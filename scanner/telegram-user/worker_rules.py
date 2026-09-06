@@ -1,4 +1,5 @@
 """Regras puras do worker Fácil — testáveis sem Telegram."""
+import re
 
 
 def payload_target(payload):
@@ -37,6 +38,35 @@ def decide_next_action(open_orders, current_pedido_id, bot_active_targets=None):
         return "resume", matches[0]["pedido_id"]
 
     return "block", None
+
+
+def error_fingerprint(kind, text, target):
+    """Chave estável do erro neste MSISDN (não mistura com outro número)."""
+    t = re.sub(r"\s+", " ", (text or ""))
+    t = t.replace("`", "")
+    m = re.search(
+        r"Falha no login \([^)]+\)|Too Many Requests|CART[AÃ]O BLOQUEADO|"
+        r"N[aã]o iniciou|NEGAD\w*|RECUSAD\w*|Validação 3DS",
+        t,
+        re.I,
+    )
+    detail = (m.group(0) if m else kind or "erro").strip().lower()
+    detail = re.sub(r"\s+", " ", detail)[:80]
+    return f"{target}|{kind}|{detail}"
+
+
+def next_after_bot_result(kind, fingerprint, last_fingerprint):
+    """
+    approved → close
+    1º erro → retry mesmo número após 60s
+    2º erro igual (mesmo número já está no fingerprint) → halt, não reivindica
+    erro diferente → retry após 60s (streak recomeça)
+    """
+    if kind == "approved":
+        return "close"
+    if last_fingerprint and fingerprint == last_fingerprint:
+        return "halt"
+    return "retry"
 
 
 def claim_allowed(open_count):

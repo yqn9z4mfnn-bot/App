@@ -29,13 +29,20 @@ from facil_group import (
     response_matches_target,
 )
 from group_close import close_order_in_group
-from worker_rules import allowed_group_click, decide_next_action, is_reivindicar_label
+from worker_rules import (
+    allowed_group_click,
+    decide_next_action,
+    error_fingerprint,
+    is_reivindicar_label,
+    next_after_bot_result,
+)
 
 STATE_FILE = DATA_DIR / "facil-auto-worker.json"
 CURRENT_FILE = DATA_DIR / "worker-current.json"
 LOCK_FILE = DATA_DIR / "facil-auto-worker.lock"
 MIN_SEND_GAP_SEC = 45
 IDLE_POLL_SEC = 60
+RETRY_WAIT_SEC = 60
 ATTENDEE = "Lucasfer97"
 
 
@@ -364,9 +371,7 @@ async def acquire_order(g, tg, bot):
 
 async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
     target = payload_target(payload)
-    sent_once = False
-    last_error = None
-    same_streak = 0
+    last_fp = None
 
     for cycle in range(1, max_cycles + 1):
         state, hint = await bot_state_for_target(tg, bot, target)
@@ -385,42 +390,12 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
 
         if state == "progress":
             log(f"Bot processando {target} — aguardando")
-            kind, _ = await wait_bot_reply(tg, bot, 0, target, timeout=600)
-            if kind == "approved":
-                closed = await close_order_in_group(g, tg, pedido_id, log=log)
-                clear_current_pedido()
-                save_state({
-                    "result": "closed" if closed else "approved_unconfirmed",
-                    "payload": payload,
-                    "pedido_id": pedido_id,
-                    "at": datetime.now(timezone.utc).isoformat(),
-                })
-                return "closed" if closed else "needs_confirm"
-            if kind == "timeout":
-                return "timeout"
-            continue
-
-        if sent_once:
-            term, _hint = await bot_state_for_target(tg, bot, target)
-            if term == "approved":
-                log(f"APROVADA {target}")
-                closed = await close_order_in_group(g, tg, pedido_id, log=log)
-                clear_current_pedido()
-                save_state({
-                    "result": "closed" if closed else "approved_unconfirmed",
-                    "payload": payload,
-                    "pedido_id": pedido_id,
-                    "at": datetime.now(timezone.utc).isoformat(),
-                })
-                return "closed" if closed else "needs_confirm"
-            if term in ("fail", "fail_login", "denied", "3ds"):
-                log(f"Bot respondeu {term} — encerra pedido {pedido_id}")
-                clear_current_pedido()
-                save_state({"result": term, "payload": payload, "pedido_id": pedido_id, "at": datetime.now(timezone.utc).isoformat()})
-                return "failed"
-            log("Já enviado 1x neste pedido — aguardando bot")
-            await asyncio.sleep(20)
-            continue
+            kind, text = await wait_bot_reply(tg, bot, 0, target, timeout=600)
+            action = await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp)
+            if action == "retry":
+                last_fp = error_fingerprint(kind if kind != "timeout" else "timeout", text, target)
+                continue
+            return action
 
         busy, hint = await bot_has_active_job(tg, bot, exclude_target=target)
         if busy:
@@ -433,51 +408,55 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
             log(f"ABORT envio: outro pedido aberto {others[0][0]} — não manda 2 payloads")
             return "blocked"
 
-        log(f"=== Ciclo {cycle} | pedido={pedido_id} | {payload} ===")
+        log(f"=== Envio {cycle} | pedido={pedido_id} | {payload} ===")
         sent = await tg.send_message(bot, payload)
-        sent_once = True
-        log(f"Enviado (único): {payload}")
+        log(f"Enviado: {payload}")
 
         kind, text = await wait_bot_reply(tg, bot, sent.id, target, timeout=600)
-
-        if kind == "approved":
-            log("APROVADA!")
-            closed = await close_order_in_group(g, tg, pedido_id, log=log)
-            clear_current_pedido()
-            save_state({
-                "result": "closed" if closed else "approved_unconfirmed",
-                "payload": payload,
-                "pedido_id": pedido_id,
-                "at": datetime.now(timezone.utc).isoformat(),
-            })
-            return "closed" if closed else "needs_confirm"
-
-        if kind == "timeout":
-            log("Timeout aguardando bot")
-            await asyncio.sleep(30)
+        action = await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp)
+        if action == "retry":
+            last_fp = error_fingerprint(kind if kind != "timeout" else "timeout", text, target)
             continue
-
-        err_key = kind
-        if kind == "denied":
-            m = re.search(r"CARTAO|GATE|ERRO[^\n]*", text, re.I)
-            if m:
-                err_key = f"denied:{m.group(0)[:30]}"
-
-        if err_key == last_error:
-            same_streak += 1
-        else:
-            same_streak = 1
-            last_error = err_key
-
-        log(f"Erro={err_key} streak={same_streak}")
-        if same_streak >= 2:
-            clear_current_pedido()
-            save_state({"result": err_key, "payload": payload, "pedido_id": pedido_id, "at": datetime.now(timezone.utc).isoformat()})
-            return "failed"
-
-        await asyncio.sleep(15)
+        return action
 
     return "failed"
+
+
+async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp):
+    if kind == "approved":
+        log("APROVADA!")
+        closed = await close_order_in_group(g, tg, pedido_id, log=log)
+        clear_current_pedido()
+        save_state({
+            "result": "closed" if closed else "approved_unconfirmed",
+            "payload": payload,
+            "pedido_id": pedido_id,
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
+        return "closed" if closed else "needs_confirm"
+
+    if kind == "timeout":
+        kind = "timeout"
+        text = text or "Timeout"
+
+    fp = error_fingerprint(kind, text, target)
+    decision = next_after_bot_result(kind, fp, last_fp)
+    log(f"Erro {target}: {fp} → {decision}")
+
+    if decision == "halt":
+        log(f"PARADO: mesmo erro 2x no número {target} — não reivindica mais")
+        save_state({
+            "result": "halt_same_error",
+            "payload": payload,
+            "pedido_id": pedido_id,
+            "error": fp,
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
+        return "halt_same_error"
+
+    log(f"Aguarda {RETRY_WAIT_SEC}s e reenvia o mesmo número {target}")
+    await asyncio.sleep(RETRY_WAIT_SEC)
+    return "retry"
 
 
 async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, idle_poll=IDLE_POLL_SEC):
@@ -534,6 +513,11 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
             if result == "needs_confirm":
                 pending_confirm = (current_pedido, current_payload)
                 continue
+
+            if result == "halt_same_error":
+                log("PARADO: não reivindica mais nenhum pedido")
+                exit_code = 2
+                break
 
             if result == "blocked":
                 log("Envio bloqueado — aguardando grupo limpo")

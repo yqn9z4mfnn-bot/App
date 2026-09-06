@@ -69,6 +69,39 @@ def test_nunca_cancela_botoes_do_grupo():
     assert not allowed_group_click("🚫 Blacklist")
 
 
+def test_retry_mesmo_numero_erro_igual_para():
+    from worker_rules import error_fingerprint, next_after_bot_result
+
+    n = "67993286345"
+    t1 = "**Erro** 🔑 `11991007672` → 📱 `67993286345` Falha no login (429): Too Many Requests"
+    t2 = "**Erro** 🔑 `11991000516` → 📱 `67993286345` Falha no login (429): Too Many Requests"
+    k1 = error_fingerprint("fail", t1, n)
+    k2 = error_fingerprint("fail", t2, n)
+    assert k1 == k2
+    assert next_after_bot_result("fail", k1, None) == "retry"
+    assert next_after_bot_result("fail", k2, k1) == "halt"
+
+
+def test_erro_diferente_no_mesmo_numero_retenta():
+    from worker_rules import error_fingerprint, next_after_bot_result
+
+    n = "67993286345"
+    a = error_fingerprint("fail", "Falha no login (429): Too Many Requests", n)
+    b = error_fingerprint("fail_login", "Não iniciou Login 11991000516 falhou", n)
+    assert a != b
+    assert next_after_bot_result("fail_login", b, a) == "retry"
+
+
+def test_erro_igual_em_numero_diferente_nao_para():
+    from worker_rules import error_fingerprint, next_after_bot_result
+
+    t = "Falha no login (429): Too Many Requests"
+    k1 = error_fingerprint("fail", t, "11111111111")
+    k2 = error_fingerprint("fail", t, "22222222222")
+    assert k1 != k2
+    assert next_after_bot_result("fail", k2, k1) == "retry"
+
+
 if __name__ == "__main__":
     tests = [v for k, v in list(globals().items()) if k.startswith("test_")]
     for fn in tests:
