@@ -276,7 +276,7 @@ async def wait_bot_reply(tg, bot, after_id, target, timeout=600):
         async for m in tg.iter_messages(bot, limit=10):
             if m.out:
                 continue
-            if m.id <= after_id and anchor_id is None:
+            if after_id and m.id <= after_id:
                 continue
             if anchor_id is None:
                 anchor_id = m.id
