@@ -120,6 +120,11 @@ def test_cartao_bloqueado_com_fila_e_progress():
     assert classify_bot_response(t3) == "3ds"
     t4 = "Processando Aguardando checkout…"
     assert classify_bot_response(t4) == "progress"
+    t5 = (
+        "**Preparando** |  | 🔑 `11991008848`  →  📱 `31998793327` |  | "
+        "__Limpando cartões do login…__"
+    )
+    assert classify_bot_response(t5) == "progress"
     assert next_after_bot_result("3ds", "n|3ds|x", None) == "retry"
     assert next_after_bot_result("other", "n|other|x", None) == "retry"
     assert next_after_bot_result("timeout", "n|timeout|x", None) == "retry"

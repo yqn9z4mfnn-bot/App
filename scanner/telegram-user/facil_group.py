@@ -62,7 +62,7 @@ def classify_bot_response(text):
     if re.search(
         r"Gerando login|Verificando fila do navegador|Aguardando checkout|"
         r"Aguardando navegador|Consultando saldo|__Processando__|"
-        r"Fila: aguardando",
+        r"Fila: aguardando|Limpando cart[oõ]es|Preparando",
         t,
         re.I,
     ):

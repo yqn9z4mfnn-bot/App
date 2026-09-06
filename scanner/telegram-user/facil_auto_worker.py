@@ -256,7 +256,8 @@ async def bot_has_active_job(tg, bot, exclude_target=None, limit=15):
             continue
         if re.search(
             r"Gerando login|Aguardando checkout|Aguardando navegador|"
-            r"Verificando fila do navegador|Consultando saldo",
+            r"Verificando fila do navegador|Consultando saldo|"
+            r"Limpando cart[oõ]es|Preparando",
             text,
             re.I,
         ):
