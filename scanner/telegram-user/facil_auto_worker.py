@@ -301,17 +301,22 @@ async def wait_bot_reply(tg, bot, after_id, target, timeout=600):
 
 
 async def bot_state_for_target(tg, bot, target, limit=20):
+    """Prefere APROVADA se existir para o número (não fica preso em negada antiga)."""
+    kinds = []
     async for m in tg.iter_messages(bot, limit=limit):
         if m.out:
             continue
         text = m.text or ""
         if not response_matches_target(text, target):
             continue
-        kind = classify_bot_response(text)
+        kinds.append((classify_bot_response(text), text))
+    for kind, text in kinds:
         if kind == "approved":
             return "approved", text
+    for kind, text in kinds:
         if kind == "progress":
             return "progress", text[:120]
+    for kind, text in kinds:
         if is_actionable_response(text):
             return kind, text[:120]
     return "idle", ""

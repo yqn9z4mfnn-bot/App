@@ -102,6 +102,18 @@ def test_erro_igual_em_numero_diferente_nao_para():
     assert next_after_bot_result("fail", k2, k1) == "retry"
 
 
+def test_cartao_bloqueado_com_fila_e_progress():
+    from facil_group import classify_bot_response
+
+    t = (
+        "**Recarga negada** 💰 R$ 30,00 📱 `91985241350` "
+        "78 - CARTAO BLOQUEADO Removido da fila · restam 208"
+    )
+    assert classify_bot_response(t) == "progress"
+    t2 = "**✅ APROVADA** 📱 `92999512445` Confirmada em 141s"
+    assert classify_bot_response(t2) == "approved"
+
+
 if __name__ == "__main__":
     tests = [v for k, v in list(globals().items()) if k.startswith("test_")]
     for fn in tests:

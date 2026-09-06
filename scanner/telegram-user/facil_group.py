@@ -47,6 +47,9 @@ def classify_bot_response(text):
     t = text or ""
     if re.search(r"✅\s*\*\*APROVADA\*\*|APROVADA", t, re.I):
         return "approved"
+    # Cartão recusado mas a fila continua — ainda não é o resultado final
+    if re.search(r"Removido da fila|restam\s+\d+", t, re.I):
+        return "progress"
     if re.search(r"Validação 3DS|3DS", t, re.I):
         return "3ds"
     if re.search(r"NEGAD|RECUSAD|CARTAO BLOQUEADO|CARTÃO BLOQUEADO", t, re.I):
