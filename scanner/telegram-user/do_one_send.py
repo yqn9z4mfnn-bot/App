@@ -8,6 +8,7 @@ from telethon import TelegramClient
 
 from config import DATA_DIR, SESSION_PATH, api_id, api_hash, load_env_file
 from facil_group import BOT_USERNAME, GROUP_ID, classify_bot_response, is_actionable_response, payload_target, response_matches_target
+from group_close import close_order_in_group
 
 LOCK = DATA_DIR / "send.lock"
 
@@ -48,31 +49,7 @@ async def wait_bot(tg, bot, after_id, target, timeout=600):
 
 
 async def close_pedido(tg, g, pedido):
-    async for m in tg.iter_messages(g, limit=120):
-        t = m.text or ""
-        if pedido in t and "PROCESSANDO" in t and m.buttons:
-            for row in m.buttons:
-                for b in row:
-                    if "Feita" in getattr(b, "text", ""):
-                        await m.click(text=b.text)
-                        print("Feita clicada", flush=True)
-                        await asyncio.sleep(2)
-                        break
-    for _ in range(15):
-        async for m in tg.iter_messages(g, limit=40):
-            t = m.text or ""
-            if pedido not in t or "Tem certeza" not in t or not m.buttons:
-                continue
-            for row in m.buttons:
-                for b in row:
-                    if "Confirmar" in getattr(b, "text", ""):
-                        await m.click(text=b.text)
-                        print(f"Confirmar clicado msg_id={m.id}", flush=True)
-                        await asyncio.sleep(2)
-                        return True
-        await asyncio.sleep(1)
-    print("Confirmar não encontrado", flush=True)
-    return False
+    return await close_order_in_group(g, tg, pedido, log=lambda m: print(m, flush=True))
 
 
 async def main():

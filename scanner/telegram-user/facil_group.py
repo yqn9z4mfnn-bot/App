@@ -33,6 +33,16 @@ def parse_pedido_id(text):
     return m.group(1) if m else None
 
 
+def is_confirm_prompt(text):
+    t = text or ""
+    return "Tem certeza" in t and "FEITA" in t.upper()
+
+
+def is_feita_final(text):
+    t = text or ""
+    return bool(re.search(r"Status:\s*✅\s*\*\*Feita\*\*|Status:\s*✅\s*Feita", t, re.I))
+
+
 def classify_bot_response(text):
     t = text or ""
     if re.search(r"✅\s*\*\*APROVADA\*\*|APROVADA", t, re.I):
