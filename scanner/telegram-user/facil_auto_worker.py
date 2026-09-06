@@ -245,15 +245,19 @@ async def claim_one_claro(g, tg):
 
 
 async def bot_has_active_job(tg, bot, exclude_target=None, limit=15):
-    """True se bot está em progress em qualquer número (não conta APROVADA antiga)."""
+    """True se bot está em progress em qualquer número (não conta APROVADA/negada antiga)."""
     async for m in tg.iter_messages(bot, limit=limit):
         if m.out:
             continue
         text = m.text or ""
         if exclude_target and response_matches_target(text, exclude_target):
             continue
-        if classify_bot_response(text) == "progress":
-            return True, text[:100]
+        kind = classify_bot_response(text)
+        if kind != "progress":
+            continue
+        if re.search(r"negad|n[aã]o foi", text, re.I) and not re.search(r"restam\s+\d+", text, re.I):
+            continue
+        return True, text[:100]
     return False, ""
 
 
