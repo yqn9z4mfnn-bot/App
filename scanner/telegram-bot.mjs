@@ -245,7 +245,7 @@ function toLoginUrl(linkOrJwt) {
 
 async function tg(method, body = {}, opts = {}) {
   const maxAttempts = opts.retries ?? 3;
-  const timeoutMs = opts.timeoutMs ?? 20_000;
+  const timeoutMs = opts.timeoutMs ?? (method === 'getUpdates' ? 90_000 : 20_000);
   let lastErr = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -257,11 +257,17 @@ async function tg(method, body = {}, opts = {}) {
       });
       const data = await res.json();
       if (!data.ok) {
-        throw new Error(data.description || `Telegram ${method} failed`);
+        const err = new Error(data.description || `Telegram ${method} failed`);
+        if (data.error_code === 429) {
+          err.retryAfter = Number(data.parameters?.retry_after || 1);
+          throw err;
+        }
+        throw err;
       }
       return data.result;
     } catch (err) {
       lastErr = err;
+      if (err?.retryAfter) throw err;
       if (attempt < maxAttempts && isTransientFetchError(err)) {
         await sleep(400 * attempt);
         continue;
@@ -2544,7 +2550,7 @@ async function handleTxtDocument(chatId, document) {
     const paint = (force = false) => {
       if (finished) return;
       const now = Date.now();
-      if (!force && now - lastPaint < 1500) return;
+      if (!force && now - lastPaint < 30_000) return;
       lastPaint = now;
       const { done, total: tot, skipped, ok: o, fail: f, queued } = snapshot;
       const elapsed = Math.max(1, Math.round((now - t0) / 1000));
@@ -2563,7 +2569,7 @@ async function handleTxtDocument(chatId, document) {
       });
     };
 
-    const beat = setInterval(() => paint(true), 4000);
+    const beat = setInterval(() => paint(true), 30_000);
     let ingest;
     try {
       ingest = await ingestNumbers(numbers, {
@@ -2700,7 +2706,12 @@ async function handleMessage(msg) {
     }
 
     if (text === '/valores' || text.startsWith('/valores@')) {
-      await sendValueStock(chatId);
+      try {
+        await sendValueStock(chatId);
+      } catch (err) {
+        console.error('[valores]', err.message);
+        await send(chatId, `❌ Não consegui listar os valores: ${err.message.replace(/</g, '&lt;')}`);
+      }
       return;
     }
 
@@ -2863,7 +2874,7 @@ async function poll() {
           timeout: 20,
           allowed_updates: ['message', 'callback_query'],
         },
-        { timeoutMs: 45_000, retries: 1 },
+        { timeoutMs: 90_000, retries: 1 },
       );
 
       const now = Date.now();
@@ -2886,6 +2897,9 @@ async function poll() {
       }
     } catch (err) {
       const msg = String(err?.message || err);
+      if (/aborted|timeout/i.test(msg)) {
+        continue;
+      }
       console.error('[bot] poll:', msg);
       await sleep(/409|conflict/i.test(msg) ? 1200 : 2000);
     }
