@@ -5,6 +5,7 @@ export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 DATA_DIR="$XDG_DATA_HOME/linkclaro-bot"
 APP_DIR="${APP_DIR:-$HOME/App/scanner}"
 TMUX="${TMUX_CMD:-tmux -S /tmp/tmux-0/default}"
+mkdir -p /tmp/tmux-0
 
 if [ ! -d "$APP_DIR" ]; then
   echo "APP_DIR não encontrado: $APP_DIR" >&2
