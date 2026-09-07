@@ -32,7 +32,11 @@ export function openNumbersDb(dbPath = defaultDbPath()) {
     );
     CREATE INDEX IF NOT EXISTS idx_nv_value ON number_values(value_cents);
   `);
-  rebuildValueIndex(database);
+  const nv = database.prepare('SELECT COUNT(*) AS n FROM number_values').get().n;
+  const ok = database
+    .prepare("SELECT COUNT(*) AS n FROM numbers WHERE status = 'ok' AND link IS NOT NULL")
+    .get().n;
+  if (nv === 0 && ok > 0) rebuildValueIndex(database);
   return database;
 }
 
@@ -138,7 +142,7 @@ export function listLoginPrefixes() {
     .prepare(
       `SELECT DISTINCT substr(msisdn, 1, 7) AS prefix
        FROM numbers
-       WHERE length(msisdn) = 11 AND msisdn GLOB '__9????*'`,
+       WHERE length(msisdn) = 11 AND msisdn GLOB '??9????*'`,
     )
     .all()
     .map((r) => r.prefix)
