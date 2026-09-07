@@ -1,5 +1,5 @@
 import './load-env.mjs';
-import { proxiedFetch, describeProxy, proxyEnabled, proxyAllTraffic, proxyPaymentOnly, getPaymentProxyUrl, resetProxyAgent } from './proxy.mjs';
+import { proxiedFetch, describeProxy, proxyEnabled, proxyAllTraffic, proxyLink, getPaymentProxyUrl, resetProxyAgent } from './proxy.mjs';
 import { formatFetchError, isTransientFetchError, sleep } from './transient-fetch.mjs';
 
 const DEFAULT_LINK_API = 'https://dayanes2lucas.ngrok.dev';
@@ -38,7 +38,7 @@ export function looksLikeMsisdn(text) {
 }
 
 async function logLinkProxyContext(label, attempt) {
-  if (proxyPaymentOnly() || !proxyEnabled()) {
+  if (!proxyLink()) {
     console.warn(`[link] ${label} attempt=${attempt} — proxy OFF (IP direto)`);
     return null;
   }
@@ -72,7 +72,8 @@ export async function fetchClaroLoginLink(msisdn, { timeoutMs } = {}) {
       await logLinkProxyContext(`msisdn=${number}`, attempt);
 
       const res = await proxiedFetch(url, {
-        rotateIp: attempt > 1,
+        useProxy: proxyLink(),
+        rotateIp: proxyLink() && attempt > 1,
         headers: {
           accept: 'application/json',
           'ngrok-skip-browser-warning': 'true',

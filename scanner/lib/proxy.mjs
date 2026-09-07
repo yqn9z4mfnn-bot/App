@@ -30,6 +30,19 @@ export function proxyAllTraffic() {
   return proxyEnabled() && !proxyPaymentOnly();
 }
 
+/**
+ * Proxy na geração do link JWT.
+ * PROXY_LINK=0 força IP direto; se omitido, segue o tráfego geral.
+ */
+export function proxyLink() {
+  const raw = env('PROXY_LINK');
+  if (raw != null) {
+    const on = ['1', 'true', 'yes'].includes(raw.toLowerCase());
+    return on && proxyEnabled();
+  }
+  return proxyAllTraffic();
+}
+
 const PAYMENT_HTTP_RE =
   /eldorado\.m4u|smart-checkout(?:-dev)?\.bemobi\.com|\/tokenizer\/|\/api-bsc\/api\/v1\/(?:payments|cards|installments)|bemobi\.com\/api\/v1\/session/i;
 
@@ -147,8 +160,9 @@ export function describeProxy() {
   const { host, port } = proxyParts();
   const rotate = proxyRotateDefault() ? ' rotate' : '';
   const scope = proxyPaymentOnly() ? ' payment-only' : '';
-  if (host && port) return `${host}:${port}${scope}${rotate}`;
-  return `proxy${scope}${rotate}`;
+  const link = proxyEnabled() && !proxyLink() ? ' link-direct' : '';
+  if (host && port) return `${host}:${port}${scope}${link}${rotate}`;
+  return `proxy${scope}${link}${rotate}`;
 }
 
 function createProxyAgent(uri, { rotateIp = false } = {}) {
@@ -210,7 +224,7 @@ function assertProxyWhenRequired() {
 
 /** fetch via Smartproxy quando PROXY_* está definido; senão fetch normal. */
 export async function proxiedFetch(url, options = {}) {
-  const { rotateIp = false, ...fetchOpts } = options;
+  const { rotateIp = false, useProxy: _useProxy, ...fetchOpts } = options;
   const useProxy = shouldProxyHttp(url, options);
   const shouldRotate =
     useProxy && (rotateIp === true || (rotateIp !== false && proxyRotateDefault()));
