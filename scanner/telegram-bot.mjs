@@ -2516,7 +2516,7 @@ async function handleTxtDocument(chatId, document) {
     if (!numbers.length) {
       throw new Error('Nenhum número válido no arquivo');
     }
-    const MAX_NUMBERS = 2000;
+    const MAX_NUMBERS = Number(process.env.MAX_NUMBERS_TXT || 50_000);
     if (numbers.length > MAX_NUMBERS) {
       throw new Error(`Arquivo grande demais (${numbers.length}). Máximo ${MAX_NUMBERS} números.`);
     }
