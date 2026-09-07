@@ -245,7 +245,7 @@ function toLoginUrl(linkOrJwt) {
 
 async function tg(method, body = {}, opts = {}) {
   const maxAttempts = opts.retries ?? 3;
-  const timeoutMs = opts.timeoutMs;
+  const timeoutMs = opts.timeoutMs ?? 20_000;
   let lastErr = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -2577,7 +2577,10 @@ async function handleTxtDocument(chatId, document) {
     } finally {
       finished = true;
       clearInterval(beat);
-      await paintQueue.catch(() => {});
+      await Promise.race([
+        paintQueue.catch(() => {}),
+        sleep(8_000),
+      ]);
     }
 
     const { total, skipped, ok, fail, results } = ingest;
