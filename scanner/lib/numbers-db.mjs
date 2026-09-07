@@ -128,6 +128,23 @@ export function listOkMsisdns() {
   );
 }
 
+export function listAllMsisdns() {
+  return new Set(getDb().prepare('SELECT msisdn FROM numbers').all().map((r) => r.msisdn));
+}
+
+/** Prefixos de 7 dígitos (DDD + 5) já vistos no banco. */
+export function listLoginPrefixes() {
+  return getDb()
+    .prepare(
+      `SELECT DISTINCT substr(msisdn, 1, 7) AS prefix
+       FROM numbers
+       WHERE length(msisdn) = 11 AND msisdn GLOB '__9????*'`,
+    )
+    .all()
+    .map((r) => r.prefix)
+    .filter((p) => /^[1-9]\d9\d{4}$/.test(p));
+}
+
 export function getNumber(msisdn) {
   const row = getDb().prepare('SELECT * FROM numbers WHERE msisdn = ?').get(msisdn);
   return mapRow(row);

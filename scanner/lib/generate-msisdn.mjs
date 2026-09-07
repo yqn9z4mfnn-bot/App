@@ -1,4 +1,10 @@
-import { listDistinctDdds, pickRandomMsisdnByDdd, pickRandomStoredLogin } from './numbers-db.mjs';
+import {
+  listDistinctDdds,
+  pickRandomMsisdnByDdd,
+  pickRandomStoredLogin,
+  listAllMsisdns,
+  listLoginPrefixes,
+} from './numbers-db.mjs';
 import {
   fetchClaroLoginLink,
   normalizeBrMobile,
@@ -31,6 +37,33 @@ export function generateMsisdnFromDb() {
   const suffix4 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
   const msisdn = `${ddd}${prefix5}${suffix4}`;
   return normalizeBrMobile(msisdn);
+}
+
+/**
+ * Gera N MSISDNs únicos: prefixo de 7 dígitos do banco + 4 aleatórios.
+ * Não repete número já salvo.
+ */
+export function generateUniqueMsisdnsFromPrefixes(count, { existing = null, prefixes = null } = {}) {
+  const want = Math.max(0, Number(count) || 0);
+  const known = existing ?? listAllMsisdns();
+  const prefs = prefixes ?? listLoginPrefixes();
+  if (!prefs.length) throw new Error('Banco sem prefixos (DDD+5) para gerar números.');
+
+  const used = new Set(known);
+  const out = [];
+  const maxTries = Math.max(want * 40, 10_000);
+  for (let i = 0; i < maxTries && out.length < want; i += 1) {
+    const prefix = prefs[Math.floor(Math.random() * prefs.length)];
+    const suffix4 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    const msisdn = normalizeBrMobile(`${prefix}${suffix4}`);
+    if (!msisdn || used.has(msisdn)) continue;
+    used.add(msisdn);
+    out.push(msisdn);
+  }
+  if (out.length < want) {
+    throw new Error(`Só consegui gerar ${out.length}/${want} números únicos com os prefixos atuais.`);
+  }
+  return out;
 }
 
 /** Gera número e valida tentando obter link JWT na API Claro. */
