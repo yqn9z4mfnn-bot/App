@@ -68,14 +68,16 @@ function replaceValues(database, msisdn, valores) {
   }
 }
 
-function rebuildValueIndex(database) {
-  database.exec('DELETE FROM number_values');
-  const rows = database
+export function rebuildValueIndex(database = null) {
+  const target = database ?? getDb();
+  target.exec('DELETE FROM number_values');
+  const rows = target
     .prepare("SELECT msisdn, valores FROM numbers WHERE status = 'ok' AND link IS NOT NULL")
     .all();
   for (const row of rows) {
-    replaceValues(database, row.msisdn, parseValores(row.valores));
+    replaceValues(target, row.msisdn, parseValores(row.valores));
   }
+  return rows.length;
 }
 
 function mapRow(row) {
@@ -122,10 +124,8 @@ export function listOkMsisdns() {
   return new Set(
     getDb()
       .prepare(
-        `SELECT DISTINCT n.msisdn
-         FROM numbers n
-         INNER JOIN number_values nv ON nv.msisdn = n.msisdn
-         WHERE n.status = 'ok' AND n.link IS NOT NULL`,
+        `SELECT msisdn FROM numbers
+         WHERE status IN ('ok', 'sem_valor') AND link IS NOT NULL`,
       )
       .all()
       .map((r) => r.msisdn),
