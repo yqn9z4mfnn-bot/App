@@ -176,6 +176,16 @@ def test_login_429_nao_e_resultado_final():
     assert pick_bot_state(rows) == ("progress", login_429)
 
 
+def test_progresso_velho_nao_trava_worker():
+    from worker_rules import is_stale_progress, stale_progress_as
+
+    assert is_stale_progress("progress", 20 * 60) is True
+    assert is_stale_progress("progress", 60) is False
+    assert is_stale_progress("approved", 20 * 60) is False
+    assert stale_progress_as("**Conferindo saldo**\n__A API atrasou — nova leitura 3/4__") == "approved"
+    assert stale_progress_as("**Preparando**\n__Gerando login…__") == "idle"
+
+
 def test_halt_espera_seguir_ou_pedido_fechado():
     from worker_rules import halt_next_step
 

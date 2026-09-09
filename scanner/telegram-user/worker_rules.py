@@ -1,6 +1,9 @@
 """Regras puras do worker Fácil — testáveis sem Telegram."""
 import re
 
+# Progresso no chat do bot mais velho que isso não é job ativo.
+STALE_PROGRESS_SEC = 15 * 60
+
 
 def payload_target(payload):
     return (payload or "").split("|")[0].strip()
@@ -62,6 +65,23 @@ def next_after_bot_result(kind, fingerprint, last_fingerprint):
     if last_fingerprint and fingerprint == last_fingerprint:
         return "halt"
     return "retry"
+
+
+def is_stale_progress(kind, age_sec, stale_sec=STALE_PROGRESS_SEC):
+    if kind != "progress":
+        return False
+    try:
+        age = float(age_sec)
+    except (TypeError, ValueError):
+        return False
+    return age > stale_sec
+
+
+def stale_progress_as(text):
+    """Bolha abandonada: Conferindo saldo = pagamento já passou."""
+    if re.search(r"Conferindo saldo", text or "", re.I):
+        return "approved"
+    return "idle"
 
 
 def halt_next_step(seguir_requested, pedido_still_open):

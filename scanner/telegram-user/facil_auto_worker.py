@@ -37,7 +37,9 @@ from worker_rules import (
     error_fingerprint,
     halt_next_step,
     is_reivindicar_label,
+    is_stale_progress,
     next_after_bot_result,
+    stale_progress_as,
 )
 
 STATE_FILE = DATA_DIR / "facil-auto-worker.json"
@@ -111,6 +113,23 @@ def consume_seguir():
         SEGUIR_FILE.unlink(missing_ok=True)
         return True
     return False
+
+
+def telegram_msg_age_sec(msg):
+    dt = getattr(msg, "edit_date", None) or getattr(msg, "date", None)
+    if not dt:
+        return 0
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return max(0, (datetime.now(timezone.utc) - dt).total_seconds())
+
+
+def classify_live_bot(text, age_sec):
+    kind = classify_bot_response(text)
+    if is_stale_progress(kind, age_sec):
+        resolved = stale_progress_as(text)
+        return resolved, True
+    return kind, False
 
 
 async def wait_after_halt(g, tg, pedido_id, payload):
@@ -280,7 +299,10 @@ async def bot_has_active_job(tg, bot, exclude_target=None, limit=15):
         text = m.text or ""
         if exclude_target and response_matches_target(text, exclude_target):
             continue
-        kind = classify_bot_response(text)
+        age = telegram_msg_age_sec(m)
+        kind, stale = classify_live_bot(text, age)
+        if stale:
+            continue
         if kind == "approved":
             continue
         if kind == "progress":
@@ -310,11 +332,15 @@ async def wait_bot_reply(tg, bot, after_id, target, timeout=600):
             updated = await tg.get_messages(bot, ids=newest_id)
             text = (updated.text or "") if updated else ""
             if text.strip():
-                kind = classify_bot_response(text)
+                age = telegram_msg_age_sec(updated)
+                kind, stale = classify_live_bot(text, age)
                 blob = text[:220].replace("\n", " | ")
                 if blob != last_logged:
-                    log(f"BOT [{kind}] {target}: {blob}")
+                    extra = f" (velho {int(age)}s)" if stale else ""
+                    log(f"BOT [{kind}] {target}: {blob}{extra}")
                     last_logged = blob
+                if stale and kind == "approved":
+                    return kind, text
                 if is_terminal_kind(kind):
                     return kind, text
 
@@ -332,7 +358,9 @@ async def bot_state_for_target(tg, bot, target, limit=20):
         text = m.text or ""
         if not response_matches_target(text, target):
             continue
-        rows.append((classify_bot_response(text), text))
+        age = telegram_msg_age_sec(m)
+        kind, _stale = classify_live_bot(text, age)
+        rows.append((kind, text))
     kind, text = pick_bot_state(rows)
     return kind, (text or "")[:120]
 
@@ -343,7 +371,10 @@ async def bot_active_targets(tg, bot, limit=20):
         if m.out:
             continue
         text = m.text or ""
-        kind = classify_bot_response(text)
+        age = telegram_msg_age_sec(m)
+        kind, stale = classify_live_bot(text, age)
+        if stale and kind != "approved":
+            continue
         if kind not in ("progress", "approved"):
             continue
         digits = re.findall(r"\d{10,11}", text.replace("`", ""))
