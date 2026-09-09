@@ -22,6 +22,7 @@ from facil_group import (
     classify_bot_response,
     is_actionable_response,
     is_feita_final,
+    is_global_fail,
     is_confirm_prompt,
     is_terminal_kind,
     parse_payload,
@@ -323,6 +324,12 @@ async def wait_bot_reply(tg, bot, after_id, target, timeout=600):
             if after_id and m.id <= after_id:
                 continue
             text = m.text or ""
+            if is_global_fail(text):
+                kind = classify_bot_response(text)
+                if kind not in ("fail", "fail_login"):
+                    kind = "fail"
+                log(f"BOT [{kind}] {target}: {text[:220].replace(chr(10), ' | ')}")
+                return kind, text
             if not response_matches_target(text, target):
                 continue
             newest_id = m.id

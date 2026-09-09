@@ -61,7 +61,13 @@ PROGRESS_RE = re.compile(
 # Só estes erros encerram a espera. 429 / Falha no login o bot ainda retenta.
 FINAL_FAIL_RE = re.compile(
     r"Falha na automa[cç][aã]o|Erro na recarga|Erro no retry|"
-    r"Fila vazia|Valor indisponível|Sem valores",
+    r"Fila vazia|Fila autom[aá]tica vazia|Nenhum cart[aã]o livre|"
+    r"Valor indisponível|Sem valores",
+    re.I,
+)
+
+GLOBAL_FAIL_RE = re.compile(
+    r"Fila autom[aá]tica vazia|Nenhum cart[aã]o livre|Bot pausado|Recargas bloqueadas",
     re.I,
 )
 
@@ -83,6 +89,11 @@ def classify_bot_response(text):
     if re.search(r"❌|FALH|ERRO", t, re.I):
         return "fail"
     return "other"
+
+
+def is_global_fail(text):
+    """Erro do bot sem o MSISDN no texto (fila vazia, pausado)."""
+    return bool(GLOBAL_FAIL_RE.search(text or ""))
 
 
 def is_terminal_kind(kind):

@@ -176,6 +176,14 @@ def test_login_429_nao_e_resultado_final():
     assert pick_bot_state(rows) == ("progress", login_429)
 
 
+def test_fila_vazia_e_erro_final():
+    from facil_group import classify_bot_response, is_global_fail
+
+    t = "❌ Fila automática vazia.\n\nEnvie cartões: NUMERO|MM|AAAA|CVV"
+    assert is_global_fail(t)
+    assert classify_bot_response(t) == "fail"
+
+
 def test_progresso_velho_nao_trava_worker():
     from worker_rules import is_stale_progress, stale_progress_as
 
