@@ -9,6 +9,8 @@ VENV="$DIR/.venv/bin/python3"
 "$DIR/vps-stop-telegram-user.sh" 2>/dev/null || true
 pkill -f "facil_auto_worker.py" 2>/dev/null || true
 sleep 1
+# lock sobrevive a pkill — senão o próximo start aborta
+rm -f "${TELEGRAM_USER_DATA:-/root/.local/share/telegram-user}/facil-auto-worker.lock"
 
 PAYLOAD="${1:-}"
 PEDIDO="${2:-}"
