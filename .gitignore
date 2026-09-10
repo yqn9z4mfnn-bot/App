@@ -1,4 +1,6 @@
 proxies.txt
+proxies_working.txt
 proxies_report.json
+test_report.json
 sources_map.json
 __pycache__/
