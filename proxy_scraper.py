@@ -178,6 +178,10 @@ def fetch_source(name: str, url: str) -> FetchResult:
     result = FetchResult(source=name, url=url)
     try:
         result.proxies = parse_proxies(fetch_text(url))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return result
+        result.error = str(exc)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         result.error = str(exc)
     return result
@@ -187,6 +191,10 @@ def fetch_html_source(name: str, url: str) -> FetchResult:
     result = FetchResult(source=name, url=url)
     try:
         result.proxies = parse_html_proxies(fetch_text(url))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return result
+        result.error = str(exc)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         result.error = str(exc)
     return result
