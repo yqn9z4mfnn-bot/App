@@ -72,8 +72,16 @@ GLOBAL_FAIL_RE = re.compile(
 )
 
 
+def is_welcome_menu(text):
+    """Menu /start do bot — contém 'Recarga automática' mas não é job ativo."""
+    t = text or ""
+    return "Escolha o modo" in t and "Link Claro" in t
+
+
 def classify_bot_response(text):
     t = text or ""
+    if is_welcome_menu(t):
+        return "other"
     if re.search(r"✅\s*\*\*APROVADA\*\*|APROVADA", t, re.I):
         return "approved"
     if re.search(r"Validação 3DS|3DS|\bVBV\b", t, re.I):

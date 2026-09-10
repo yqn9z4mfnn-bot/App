@@ -407,6 +407,11 @@ async def acquire_order(g, tg, bot):
         return row["payload"], row["pedido_id"]
 
     if action == "block":
+        if len(open_orders) == 1:
+            row = open_orders[0]
+            save_current_pedido(row["pedido_id"], row["payload"], row["msg_id"])
+            log(f"Retomando pedido aberto {row['pedido_id']} → {row['payload']} (sem novo Reivindicar)")
+            return row["payload"], row["pedido_id"]
         for o in open_orders:
             log(f"Aberto: {o['pedido_id']} → {o['payload']} (msg {o['msg_id']})")
         log(f"BLOQUEADO: {len(open_orders)} pedido(s) aberto(s) — NÃO reivindica novo")

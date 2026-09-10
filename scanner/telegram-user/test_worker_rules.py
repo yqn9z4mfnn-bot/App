@@ -135,6 +135,12 @@ def test_cartao_bloqueado_com_fila_e_progress():
         "__Lendo saldo e validade após a recarga…__"
     )
     assert classify_bot_response(t7) == "progress"
+    welcome = (
+        "<b>📱 Link Claro</b>\n\n"
+        "Recarga automática com fila de cartões.\n\n"
+        "Escolha o modo:"
+    )
+    assert classify_bot_response(welcome) == "other"
     from facil_group import is_actionable_response, is_terminal_kind
 
     assert not is_actionable_response(t6)
