@@ -334,12 +334,19 @@ const cleanupUsedCard = async (session, paymentResult) => {
 };
 
 const finishPaymentSession = async (sessionId, session, paymentResult, { gateMode = 'browser' } = {}) => {
-  const is3ds = paymentResult?.status === '3ds_required';
-  if (is3ds && gateMode === 'browser') {
-    console.log('[automation][3ds] fechando Edge na hora — cleanup do cartão em background');
-    await finalizeSessionClose(sessionId, paymentResult);
+  const status = paymentResult?.status;
+  const releaseEarly = status === 'success' || status === '3ds_required';
+
+  if (releaseEarly) {
+    const tag = status === '3ds_required' ? '3ds' : 'success';
+    if (gateMode === 'browser') {
+      console.log(`[automation][${tag}] fechando Edge — cleanup do cartão em background (API)`);
+      await finalizeSessionClose(sessionId, paymentResult);
+    } else {
+      console.log(`[automation][${tag}] cleanup do cartão em background (API)`);
+    }
     void cleanupUsedCard(session, paymentResult).catch((err) => {
-      console.log(`[automation][3ds] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
+      console.log(`[automation][${tag}] cleanup async: ${String(err?.message || err).slice(0, 100)}`);
     });
     return;
   }
@@ -350,7 +357,7 @@ const finishPaymentSession = async (sessionId, session, paymentResult, { gateMod
   }
 };
 
-/** Aguarda cleanup do cartão e fechamento do Edge antes de liberar a resposta da API. */
+/** Fecha Edge (se browser) e dispara cleanup do cartão; em sucesso/3DS o cleanup roda em background. */
 const scheduleFinishPaymentSession = async (sessionId, session, paymentResult, opts = {}) => {
   const { gateMode = 'browser' } = opts;
   await finishPaymentSession(sessionId, session, paymentResult, { gateMode });
@@ -488,7 +495,7 @@ export const startSessionFromWebLink = async (payload) => {
         return loginUrl;
       }
     })();
-    console.log('[automation] finalizando sessão (cartão + Edge) antes de responder API…');
+    console.log('[automation] finalizando sessão antes de responder API…');
     await scheduleFinishPaymentSession(sessionId, session, paymentResult);
 
     return {
@@ -752,7 +759,7 @@ export const startSessionFromCheckoutLink = async (payload) => {
             return checkoutUrl;
           }
         })();
-    console.log('[automation] finalizando sessão (cartão + Edge) antes de responder API…');
+    console.log('[automation] finalizando sessão antes de responder API…');
     await scheduleFinishPaymentSession(sessionId, session, paymentResult, { gateMode });
 
     return {
