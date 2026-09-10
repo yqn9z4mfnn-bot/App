@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Coleta proxies de fontes públicas conhecidas (busca profunda)."""
+"""Coleta proxies de centenas de fontes públicas (mapeamento profundo)."""
 
 from __future__ import annotations
 
@@ -12,142 +12,27 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Iterable
 
 PROXY_LINE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}:\d{1,5}$")
 PROXY_IN_LINE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3}:\d{1,5})\b")
 PROTOCOL_PREFIX = re.compile(r"^(?:https?|socks4|socks5)://", re.I)
+USER_AGENT = "proxy-scraper/3.0 (+https://github.com/yqn9z4mfnn-bot/App)"
 
-TEXT_SOURCES: dict[str, str] = {
-    # APIs públicas
-    "hproxy_all": "https://hproxy.com/api/proxy-list?format=txt&limit=2000",
-    "hproxy_http": "https://hproxy.com/api/proxy-list?format=txt&protocol=http&limit=1000",
-    "hproxy_socks4": "https://hproxy.com/api/proxy-list?format=txt&protocol=socks4&limit=1000",
-    "hproxy_socks5": "https://hproxy.com/api/proxy-list?format=txt&protocol=socks5&limit=1000",
-    "proxyscrape_v4_all": (
-        "https://api.proxyscrape.com/v4/free-proxy-list/get"
-        "?request=display_proxies&proxy_format=ipport&format=text"
-    ),
-    "proxyscrape_v2_http": (
-        "https://api.proxyscrape.com/v2/?request=displayproxies"
-        "&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all"
-    ),
-    "proxyscrape_v2_https": (
-        "https://api.proxyscrape.com/v2/?request=displayproxies"
-        "&protocol=http&timeout=10000&country=all&ssl=yes&anonymity=all"
-    ),
-    "proxyscrape_v2_socks4": (
-        "https://api.proxyscrape.com/v2/?request=displayproxies"
-        "&protocol=socks4&timeout=10000&country=all"
-    ),
-    "proxyscrape_v2_socks5": (
-        "https://api.proxyscrape.com/v2/?request=displayproxies"
-        "&protocol=socks5&timeout=10000&country=all"
-    ),
-    "openproxylist_http": "https://api.openproxylist.xyz/http.txt",
-    "openproxylist_socks5": "https://api.openproxylist.xyz/socks5.txt",
-    "spys_http": "https://spys.me/proxy.txt",
-    "spys_socks": "https://spys.me/socks.txt",
-    # ProxyScrape mirror (jsDelivr)
-    "proxyscrape_mirror_all": (
-        "https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/all/data.txt"
-    ),
-    "proxyscrape_mirror_http": (
-        "https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/protocols/http/data.txt"
-    ),
-    "proxyscrape_mirror_socks4": (
-        "https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/protocols/socks4/data.txt"
-    ),
-    "proxyscrape_mirror_socks5": (
-        "https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/protocols/socks5/data.txt"
-    ),
-    # GitHub — listas grandes
-    "sevenworks_http": (
-        "https://raw.githubusercontent.com/SevenworksDev/proxy-list/main/proxies/http.txt"
-    ),
-    "sevenworks_socks5": (
-        "https://raw.githubusercontent.com/SevenworksDev/proxy-list/main/proxies/socks5.txt"
-    ),
-    "zevtyardt_http": "https://raw.githubusercontent.com/zevtyardt/proxy-list/main/http.txt",
-    "zevtyardt_socks5": "https://raw.githubusercontent.com/zevtyardt/proxy-list/main/socks5.txt",
-    "ercin_http": "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/http.txt",
-    "ercin_https": "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/https.txt",
-    "ercin_socks4": "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks4.txt",
-    "ercin_socks5": "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt",
-    "obcbo_http": "https://raw.githubusercontent.com/ObcbO/getproxy/master/file/http.txt",
-    "obcbo_socks5": "https://raw.githubusercontent.com/ObcbO/getproxy/master/file/socks5.txt",
-    "aslisk_https": "https://raw.githubusercontent.com/aslisk/proxyhttps/main/https.txt",
-    "b4rcode_http": "https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/HTTP.txt",
-    "b4rcode_socks5": "https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/SOCKS5.txt",
-    "proxyscraper_http": "https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/main/http.txt",
-    "proxyscraper_socks4": "https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/main/socks4.txt",
-    "proxyscraper_socks5": "https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/main/socks5.txt",
-    "anonym0us_http": (
-        "https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/http_proxies.txt"
-    ),
-    "anonym0us_socks5": (
-        "https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/socks5_proxies.txt"
-    ),
-    "thespeedx_http": "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
-    "thespeedx_socks4": "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt",
-    "thespeedx_socks5": "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt",
-    "jetkai_http": (
-        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt"
-    ),
-    "jetkai_https": (
-        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-https.txt"
-    ),
-    "jetkai_socks4": (
-        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks4.txt"
-    ),
-    "jetkai_socks5": (
-        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt"
-    ),
-    "monosans_all": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt",
-    "monosans_http": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
-    "monosans_socks4": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt",
-    "monosans_socks5": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt",
-    "thordata_all": "https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/all.txt",
-    "thordata_http": "https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/http.txt",
-    "thordata_socks5": "https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/socks5.txt",
-    "stormsia_all": "https://raw.githubusercontent.com/stormsia/proxy-list/main/working_proxies.txt",
-    "stormsia_http": "https://raw.githubusercontent.com/stormsia/proxy-list/main/http.txt",
-    "stormsia_socks4": "https://raw.githubusercontent.com/stormsia/proxy-list/main/socks4.txt",
-    "stormsia_socks5": "https://raw.githubusercontent.com/stormsia/proxy-list/main/socks5.txt",
-    "vpslab_http": (
-        "https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/http_all.txt"
-    ),
-    "vpslab_http_elite": (
-        "https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/http_elite.txt"
-    ),
-    "vpslab_socks4": (
-        "https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/socks4_all.txt"
-    ),
-    "vpslab_socks5": (
-        "https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/socks5_all.txt"
-    ),
-    "clarketm_raw": "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
-    "sunny9577": "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/proxies.txt",
-    "opsxcq": "https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt",
-    "shiftytr_http": "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
-    "shiftytr_https": "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/https.txt",
-    "shiftytr_socks4": "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/socks4.txt",
-    "shiftytr_socks5": "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/socks5.txt",
-    "roosterkid_https": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt",
-    "roosterkid_socks4": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS4_RAW.txt",
-    "roosterkid_socks5": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt",
-    "hideip_http": "https://raw.githubusercontent.com/zloi-user/hideip.me/main/http.txt",
-    "hideip_socks5": "https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks5.txt",
-    "prxchk_http": "https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt",
-    "prxchk_socks5": "https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt",
-    "aliilapro_http": "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt",
-    "aliilapro_socks5": "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks5.txt",
-    "hendrikbgr": "https://raw.githubusercontent.com/hendrikbgr/Free-Proxy-Repo/master/proxy_list.txt",
-    "vakhov_all": "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxylist.txt",
-    "vakhov_socks4": "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks4.txt",
-    "vakhov_socks5": "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt",
-    "hookzof_socks5": "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
-    "fate0_json": "https://raw.githubusercontent.com/fate0/proxylist/master/proxy.list",
+COUNTRIES = [
+    "US", "BR", "DE", "FR", "GB", "CN", "IN", "RU", "JP", "KR", "CA", "AU", "NL",
+    "IT", "ES", "MX", "AR", "CL", "CO", "PE", "VE", "ID", "TH", "VN", "PH", "MY",
+    "SG", "HK", "TW", "PL", "UA", "TR", "EG", "ZA", "NG", "SA", "AE", "IL", "PK",
+    "BD", "BE", "CH", "AT", "SE", "NO", "DK", "FI", "IE", "PT", "GR", "CZ", "RO",
+    "HU", "BG", "SK", "HR", "RS", "SI", "LT", "LV", "EE", "NZ",
+]
+
+HTML_SOURCES: dict[str, str] = {
+    "html_free_proxy_list": "https://free-proxy-list.net/",
+    "html_sslproxies": "https://www.sslproxies.org/",
+    "html_us_proxy": "https://www.us-proxy.org/",
+    "html_socks_proxy": "https://www.socks-proxy.net/",
 }
 
 
@@ -160,10 +45,7 @@ class FetchResult:
 
 
 def fetch_text(url: str, timeout: int = 30) -> str:
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "proxy-scraper/2.0 (+https://github.com/yqn9z4mfnn-bot/App)"},
-    )
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
@@ -203,6 +85,22 @@ def add_proxy(proxies: set[str], candidate: str) -> None:
 
 def parse_proxies(text: str) -> set[str]:
     proxies: set[str] = set()
+
+    stripped = text.strip()
+    if stripped.startswith("[") or stripped.startswith("{"):
+        try:
+            payload = json.loads(stripped)
+            if isinstance(payload, list):
+                for item in payload:
+                    if isinstance(item, dict):
+                        ip = item.get("ip") or item.get("host")
+                        port = item.get("port")
+                        if ip and port:
+                            add_proxy(proxies, f"{ip}:{port}")
+            return proxies
+        except json.JSONDecodeError:
+            pass
+
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -227,6 +125,55 @@ def parse_proxies(text: str) -> set[str]:
     return proxies
 
 
+def parse_html_proxies(html: str) -> set[str]:
+    proxies: set[str] = set()
+    textarea = re.search(r"<textarea[^>]*>(.*?)</textarea>", html, re.S | re.I)
+    if textarea:
+        for line in textarea.group(1).splitlines():
+            line = line.strip()
+            if line:
+                add_proxy(proxies, line.split()[0])
+    for ip, port in re.findall(
+        r"(\d{1,3}(?:\.\d{1,3}){3})[\s\S]{0,40}?<td>(\d{2,5})</td>", html
+    ):
+        add_proxy(proxies, f"{ip}:{port}")
+    for ip, port in re.findall(r"(\d{1,3}(?:\.\d{1,3}){3}):(\d{2,5})", html):
+        add_proxy(proxies, f"{ip}:{port}")
+    return proxies
+
+
+def load_sources_file(path: Path) -> dict[str, str]:
+    sources: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "|" in line:
+            name, url = line.split("|", 1)
+            sources[name.strip()] = url.strip()
+    return sources
+
+
+def build_dynamic_sources() -> dict[str, str]:
+    sources: dict[str, str] = {}
+    for country in COUNTRIES:
+        cc = country.upper()
+        cl = country.lower()
+        sources[f"iplocate_{cl}"] = (
+            f"https://raw.githubusercontent.com/iplocate/free-proxy-list/main/countries/{cc}/proxies.txt"
+        )
+        sources[f"databay_{cl}"] = (
+            f"https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/by-country/{cc}/http.txt"
+        )
+        sources[f"databay_{cl}_socks5"] = (
+            f"https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/by-country/{cc}/socks5.txt"
+        )
+        sources[f"databay_{cl}_socks4"] = (
+            f"https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/by-country/{cc}/socks4.txt"
+        )
+    return sources
+
+
 def fetch_source(name: str, url: str) -> FetchResult:
     result = FetchResult(source=name, url=url)
     try:
@@ -236,12 +183,25 @@ def fetch_source(name: str, url: str) -> FetchResult:
     return result
 
 
-def fetch_geonode(pages: int = 5) -> FetchResult:
+def fetch_html_source(name: str, url: str) -> FetchResult:
+    result = FetchResult(source=name, url=url)
+    try:
+        result.proxies = parse_html_proxies(fetch_text(url))
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        result.error = str(exc)
+    return result
+
+
+def fetch_geonode() -> FetchResult:
     result = FetchResult(
         source="geonode_api",
-        url=f"https://proxylist.geonode.com/api/proxy-list?limit=500&page=1..{pages}",
+        url="https://proxylist.geonode.com/api/proxy-list?limit=500",
     )
     try:
+        first = json.loads(fetch_text(result.url + "&page=1&sort_by=lastChecked&sort_type=desc"))
+        total = int(first.get("total", 0))
+        pages = max(1, (total + 499) // 500)
+        result.url = f"{result.url}&pages=1..{pages}"
         for page in range(1, pages + 1):
             url = (
                 "https://proxylist.geonode.com/api/proxy-list"
@@ -258,8 +218,46 @@ def fetch_geonode(pages: int = 5) -> FetchResult:
     return result
 
 
+def fetch_monosans_json() -> FetchResult:
+    result = FetchResult(
+        source="monosans_json",
+        url="https://raw.githubusercontent.com/monosans/proxy-list/main/proxies.json",
+    )
+    try:
+        payload = json.loads(fetch_text(result.url))
+        for item in payload:
+            if isinstance(item, dict):
+                host = item.get("host") or item.get("ip")
+                port = item.get("port")
+                if host and port:
+                    add_proxy(result.proxies, f"{host}:{port}")
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        result.error = str(exc)
+    return result
+
+
+def fetch_proxyscrape_json() -> FetchResult:
+    result = FetchResult(
+        source="proxyscrape_mirror_json",
+        url="https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/all/data.json",
+    )
+    try:
+        payload = json.loads(fetch_text(result.url))
+        for item in payload:
+            if isinstance(item, dict):
+                ip = item.get("ip")
+                port = item.get("port")
+                if ip and port:
+                    add_proxy(result.proxies, f"{ip}:{port}")
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        result.error = str(exc)
+    return result
+
+
 SPECIAL_FETCHERS: dict[str, Callable[[], FetchResult]] = {
-    "geonode_api": lambda: fetch_geonode(pages=5),
+    "geonode_api": fetch_geonode,
+    "monosans_json": fetch_monosans_json,
+    "proxyscrape_mirror_json": fetch_proxyscrape_json,
 }
 
 
@@ -275,58 +273,60 @@ def test_proxy(proxy: str, timeout: float = 5.0) -> tuple[str, bool, str]:
         return proxy, False, str(exc)
 
 
+def collect_all_sources(sources_file: Path) -> dict[str, str]:
+    all_sources = load_sources_file(sources_file)
+    all_sources.update(build_dynamic_sources())
+    all_sources.update(HTML_SOURCES)
+    return all_sources
+
+
 def main(argv: Iterable[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Coleta proxies de sites públicos (busca profunda)")
-    parser.add_argument(
-        "--output",
-        "-o",
-        default="proxies.txt",
-        help="Arquivo de saída (ip:port por linha)",
+    parser = argparse.ArgumentParser(
+        description="Mapeamento profundo de proxies em fontes públicas"
     )
     parser.add_argument(
-        "--json",
-        default="proxies_report.json",
-        help="Relatório JSON com detalhes por fonte",
+        "--sources",
+        default="proxy_sources.txt",
+        help="Arquivo manifesto de fontes (nome|url)",
     )
-    parser.add_argument(
-        "--test",
-        type=int,
-        default=0,
-        metavar="N",
-        help="Testa conectividade dos N primeiros proxies únicos",
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=30,
-        help="Threads para download e teste",
-    )
+    parser.add_argument("--output", "-o", default="proxies.txt")
+    parser.add_argument("--json", default="proxies_report.json")
+    parser.add_argument("--map", default="sources_map.json", help="Mapa completo de fontes")
+    parser.add_argument("--test", type=int, default=0, metavar="N")
+    parser.add_argument("--workers", type=int, default=40)
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    total_sources = len(TEXT_SOURCES) + len(SPECIAL_FETCHERS)
-    print(f"Busca profunda em {total_sources} fontes públicas...\n")
+    sources_path = Path(args.sources)
+    text_sources = collect_all_sources(sources_path)
+    html_names = set(HTML_SOURCES)
+    total_sources = len(text_sources) + len(SPECIAL_FETCHERS)
+
+    print(f"Mapeamento profundo: {total_sources} fontes públicas\n")
 
     results: list[FetchResult] = []
     all_proxies: set[str] = set()
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = [
-            pool.submit(fetch_source, name, url) for name, url in TEXT_SOURCES.items()
-        ]
+        futures = []
+        for name, url in text_sources.items():
+            if name in html_names:
+                futures.append(pool.submit(fetch_html_source, name, url))
+            else:
+                futures.append(pool.submit(fetch_source, name, url))
         futures.extend(pool.submit(fn) for fn in SPECIAL_FETCHERS.values())
 
         for future in as_completed(futures):
             result = future.result()
             results.append(result)
             if result.error:
-                status = f"ERRO: {result.error}"
+                status = f"ERRO: {result.error[:70]}"
             elif len(result.proxies) == 0:
                 status = "0 proxies (vazio)"
             else:
                 status = f"{len(result.proxies)} proxies"
             print(f"  [{result.source}] {status}")
 
-    for result in sorted(results, key=lambda r: r.source):
+    for result in results:
         all_proxies.update(result.proxies)
 
     sorted_proxies = sorted(
@@ -353,14 +353,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                     working.append(proxy)
 
     ok_sources = [r for r in results if not r.error and r.proxies]
-    failed_sources = [r for r in results if r.error or not r.proxies]
+    empty_sources = [r for r in results if not r.error and not r.proxies]
+    failed_sources = [r for r in results if r.error]
 
     report = {
         "collected_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "deep",
+        "mode": "ultra-deep",
         "sources_total": total_sources,
-        "sources_ok": len(ok_sources),
-        "sources_failed_or_empty": len(failed_sources),
+        "sources_with_data": len(ok_sources),
+        "sources_empty": len(empty_sources),
+        "sources_failed": len(failed_sources),
         "sources": [
             {
                 "name": r.source,
@@ -371,26 +373,37 @@ def main(argv: Iterable[str] | None = None) -> int:
             for r in sorted(results, key=lambda r: r.source)
         ],
         "top_sources": sorted(
-            [
-                {"name": r.source, "count": len(r.proxies)}
-                for r in ok_sources
-            ],
+            [{"name": r.source, "count": len(r.proxies), "url": r.url} for r in ok_sources],
             key=lambda x: x["count"],
             reverse=True,
-        )[:15],
+        )[:25],
         "total_unique": len(sorted_proxies),
         "output_file": args.output,
         "tested": args.test,
         "working_from_test": working,
     }
 
+    sources_map = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "manifest_file": str(sources_path),
+        "static_sources": len(load_sources_file(sources_path)),
+        "dynamic_country_sources": len(build_dynamic_sources()),
+        "html_sources": list(HTML_SOURCES.keys()),
+        "special_fetchers": list(SPECIAL_FETCHERS.keys()),
+        "all_source_urls": {r.source: r.url for r in sorted(results, key=lambda r: r.source)},
+    }
+
     with open(args.json, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, ensure_ascii=False)
+    with open(args.map, "w", encoding="utf-8") as fh:
+        json.dump(sources_map, fh, indent=2, ensure_ascii=False)
 
     print(f"\nFontes com dados: {len(ok_sources)}/{total_sources}")
+    print(f"Fontes vazias: {len(empty_sources)} | Falhas: {len(failed_sources)}")
     print(f"Total único: {len(sorted_proxies)} proxies")
     print(f"Salvo em: {args.output}")
     print(f"Relatório: {args.json}")
+    print(f"Mapa de fontes: {args.map}")
 
     if args.test > 0:
         print(f"Funcionando no teste: {len(working)}/{min(args.test, len(sorted_proxies))}")

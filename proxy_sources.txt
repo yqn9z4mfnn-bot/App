@@ -1,0 +1,197 @@
+# Formato: nome|url
+# Fontes curadas — APIs, GitHub raw, mirrors jsDelivr
+
+# --- HProxy API ---
+hproxy_all|https://hproxy.com/api/proxy-list?format=txt&limit=2000
+hproxy_elite|https://hproxy.com/api/proxy-list?format=txt&anonymity=elite&limit=2000
+hproxy_http|https://hproxy.com/api/proxy-list?format=txt&protocol=http&limit=1000
+hproxy_socks4|https://hproxy.com/api/proxy-list?format=txt&protocol=socks4&limit=1000
+hproxy_socks5|https://hproxy.com/api/proxy-list?format=txt&protocol=socks5&limit=1000
+hproxy_br|https://hproxy.com/api/proxy-list?format=txt&country=br&limit=500
+hproxy_us|https://hproxy.com/api/proxy-list?format=txt&country=us&limit=500
+hproxy_de|https://hproxy.com/api/proxy-list?format=txt&country=de&limit=500
+hproxy_fr|https://hproxy.com/api/proxy-list?format=txt&country=fr&limit=500
+hproxy_gb|https://hproxy.com/api/proxy-list?format=txt&country=gb&limit=500
+hproxy_cn|https://hproxy.com/api/proxy-list?format=txt&country=cn&limit=500
+hproxy_in|https://hproxy.com/api/proxy-list?format=txt&country=in&limit=500
+hproxy_ru|https://hproxy.com/api/proxy-list?format=txt&country=ru&limit=500
+hproxy_jp|https://hproxy.com/api/proxy-list?format=txt&country=jp&limit=500
+hproxy_kr|https://hproxy.com/api/proxy-list?format=txt&country=kr&limit=500
+hproxy_ca|https://hproxy.com/api/proxy-list?format=txt&country=ca&limit=500
+hproxy_au|https://hproxy.com/api/proxy-list?format=txt&country=au&limit=500
+hproxy_nl|https://hproxy.com/api/proxy-list?format=txt&country=nl&limit=500
+hproxy_it|https://hproxy.com/api/proxy-list?format=txt&country=it&limit=500
+hproxy_es|https://hproxy.com/api/proxy-list?format=txt&country=es&limit=500
+hproxy_mx|https://hproxy.com/api/proxy-list?format=txt&country=mx&limit=500
+hproxy_id|https://hproxy.com/api/proxy-list?format=txt&country=id&limit=500
+hproxy_vn|https://hproxy.com/api/proxy-list?format=txt&country=vn&limit=500
+hproxy_ph|https://hproxy.com/api/proxy-list?format=txt&country=ph&limit=500
+hproxy_sg|https://hproxy.com/api/proxy-list?format=txt&country=sg&limit=500
+hproxy_pl|https://hproxy.com/api/proxy-list?format=txt&country=pl&limit=500
+hproxy_tr|https://hproxy.com/api/proxy-list?format=txt&country=tr&limit=500
+hproxy_za|https://hproxy.com/api/proxy-list?format=txt&country=za&limit=500
+hproxy_ae|https://hproxy.com/api/proxy-list?format=txt&country=ae&limit=500
+
+# --- ProxyScrape API v2/v4 ---
+proxyscrape_v4_all|https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=ipport&format=text
+proxyscrape_v4_http|https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&protocol=http&proxy_format=ipport&format=text
+proxyscrape_v4_https|https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&protocol=https&proxy_format=ipport&format=text
+proxyscrape_v4_socks4|https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&protocol=socks4&proxy_format=ipport&format=text
+proxyscrape_v4_socks5|https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&protocol=socks5&proxy_format=ipport&format=text
+proxyscrape_v4_proto|https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text
+proxyscrape_v2_http|https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all
+proxyscrape_v2_https|https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=yes&anonymity=all
+proxyscrape_v2_socks4|https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks4&timeout=10000&country=all
+proxyscrape_v2_socks5|https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=10000&country=all
+
+# --- ProxyScrape jsDelivr mirror ---
+proxyscrape_mirror_all|https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/all/data.txt
+proxyscrape_mirror_http|https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/protocols/http/data.txt
+proxyscrape_mirror_https|https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/protocols/https/data.txt
+proxyscrape_mirror_socks4|https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/protocols/socks4/data.txt
+proxyscrape_mirror_socks5|https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/protocols/socks5/data.txt
+
+# --- OpenProxyList / spys.me ---
+openproxylist_http|https://api.openproxylist.xyz/http.txt
+openproxylist_socks4|https://api.openproxylist.xyz/socks4.txt
+openproxylist_socks5|https://api.openproxylist.xyz/socks5.txt
+spys_http|https://spys.me/proxy.txt
+spys_socks|https://spys.me/socks.txt
+
+# --- Databay Labs ---
+databay_http|https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/http.txt
+databay_socks4|https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/socks4.txt
+databay_socks5|https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/socks5.txt
+databay_cdn_http|https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/http.txt
+databay_cdn_socks4|https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/socks4.txt
+databay_cdn_socks5|https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list/socks5.txt
+
+# --- Proxifly ---
+proxifly_all|https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt
+proxifly_http|https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt
+proxifly_socks4|https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks4/data.txt
+proxifly_socks5|https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks5/data.txt
+proxifly_cdn_all|https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.txt
+
+# --- iplocate ---
+iplocate_all|https://raw.githubusercontent.com/iplocate/free-proxy-list/main/all-proxies.txt
+iplocate_http|https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/http.txt
+iplocate_https|https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/https.txt
+iplocate_socks4|https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/socks4.txt
+iplocate_socks5|https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/socks5.txt
+
+# --- SevenworksDev (grandes) ---
+sevenworks_http|https://raw.githubusercontent.com/SevenworksDev/proxy-list/main/proxies/http.txt
+sevenworks_https|https://raw.githubusercontent.com/SevenworksDev/proxy-list/main/proxies/https.txt
+sevenworks_socks4|https://raw.githubusercontent.com/SevenworksDev/proxy-list/main/proxies/socks4.txt
+sevenworks_socks5|https://raw.githubusercontent.com/SevenworksDev/proxy-list/main/proxies/socks5.txt
+
+# --- ErcinDedeoglu (grandes) ---
+ercin_http|https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/http.txt
+ercin_https|https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/https.txt
+ercin_socks4|https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks4.txt
+ercin_socks5|https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt
+
+# --- zevtyardt (grandes) ---
+zevtyardt_all|https://raw.githubusercontent.com/zevtyardt/proxy-list/main/all.txt
+zevtyardt_http|https://raw.githubusercontent.com/zevtyardt/proxy-list/main/http.txt
+zevtyardt_socks4|https://raw.githubusercontent.com/zevtyardt/proxy-list/main/socks4.txt
+zevtyardt_socks5|https://raw.githubusercontent.com/zevtyardt/proxy-list/main/socks5.txt
+
+# --- ObcbO ---
+obcbo_all|https://raw.githubusercontent.com/ObcbO/getproxy/master/file/all.txt
+obcbo_http|https://raw.githubusercontent.com/ObcbO/getproxy/master/file/http.txt
+obcbo_https|https://raw.githubusercontent.com/ObcbO/getproxy/master/file/https.txt
+obcbo_socks4|https://raw.githubusercontent.com/ObcbO/getproxy/master/file/socks4.txt
+obcbo_socks5|https://raw.githubusercontent.com/ObcbO/getproxy/master/file/socks5.txt
+
+# --- ProxyScraper ---
+proxyscraper_http|https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/main/http.txt
+proxyscraper_socks4|https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/main/socks4.txt
+proxyscraper_socks5|https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/main/socks5.txt
+
+# --- TheSpeedX ---
+thespeedx_http|https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt
+thespeedx_socks4|https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt
+thespeedx_socks5|https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt
+speedx_socks_http|https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt
+speedx_socks_socks4|https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks4.txt
+speedx_socks_socks5|https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
+
+# --- jetkai ---
+jetkai_all|https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies.txt
+jetkai_http|https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt
+jetkai_https|https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-https.txt
+jetkai_socks4|https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks4.txt
+jetkai_socks5|https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt
+
+# --- monosans ---
+monosans_all|https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt
+monosans_http|https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
+monosans_socks4|https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt
+monosans_socks5|https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
+
+# --- Thordata ---
+thordata_all|https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/all.txt
+thordata_http|https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/http.txt
+thordata_https|https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/https.txt
+thordata_socks4|https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/socks4.txt
+thordata_socks5|https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/socks5.txt
+thordata_top|https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/top-http.txt
+
+# --- stormsia ---
+stormsia_all|https://raw.githubusercontent.com/stormsia/proxy-list/main/working_proxies.txt
+stormsia_http|https://raw.githubusercontent.com/stormsia/proxy-list/main/http.txt
+stormsia_socks4|https://raw.githubusercontent.com/stormsia/proxy-list/main/socks4.txt
+stormsia_socks5|https://raw.githubusercontent.com/stormsia/proxy-list/main/socks5.txt
+
+# --- VPSLab ---
+vpslab_http|https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/http_all.txt
+vpslab_http_elite|https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/http_elite.txt
+vpslab_http_anon|https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/http_anonymous.txt
+vpslab_http_nossl|https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/http_nossl.txt
+vpslab_http_ssl|https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/http_ssl.txt
+vpslab_socks4|https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/socks4_all.txt
+vpslab_socks5|https://raw.githubusercontent.com/vpslabcloud/vpslab-free-proxy-list/main/socks5_all.txt
+
+# --- Outros GitHub ---
+clarketm_raw|https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt
+clarketm_proxy|https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list.txt
+sunny9577|https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/proxies.txt
+sunny9577_http|https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/http_proxies.txt
+sunny9577_socks5|https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/socks5_proxies.txt
+shiftytr_proxy|https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/proxy.txt
+shiftytr_http|https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt
+shiftytr_https|https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/https.txt
+shiftytr_socks4|https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/socks4.txt
+shiftytr_socks5|https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/socks5.txt
+roosterkid_https|https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt
+roosterkid_socks4|https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS4_RAW.txt
+roosterkid_socks5|https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt
+hideip_http|https://raw.githubusercontent.com/zloi-user/hideip.me/main/http.txt
+hideip_https|https://raw.githubusercontent.com/zloi-user/hideip.me/main/https.txt
+hideip_socks4|https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks4.txt
+hideip_socks5|https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks5.txt
+prxchk_http|https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt
+prxchk_socks4|https://raw.githubusercontent.com/prxchk/proxy-list/main/socks4.txt
+prxchk_socks5|https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt
+prxchk_all|https://raw.githubusercontent.com/prxchk/proxy-list/main/all.txt
+aliilapro_http|https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt
+aliilapro_socks4|https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks4.txt
+aliilapro_socks5|https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks5.txt
+hendrikbgr|https://raw.githubusercontent.com/hendrikbgr/Free-Proxy-Repo/master/proxy_list.txt
+vakhov_all|https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxylist.txt
+vakhov_http|https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt
+vakhov_https|https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/https.txt
+vakhov_socks4|https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks4.txt
+vakhov_socks5|https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt
+hookzof_socks5|https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
+fate0_json|https://raw.githubusercontent.com/fate0/proxylist/master/proxy.list
+opsxcq|https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt
+b4rcode_http|https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/HTTP.txt
+b4rcode_socks4|https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/SOCKS4.txt
+b4rcode_socks5|https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/SOCKS5.txt
+anonym0us_http|https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/http_proxies.txt
+anonym0us_socks4|https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/socks4_proxies.txt
+anonym0us_socks5|https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/socks5_proxies.txt
+aslisk_https|https://raw.githubusercontent.com/aslisk/proxyhttps/main/https.txt
