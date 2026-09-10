@@ -5,6 +5,8 @@ import re
 STALE_PROGRESS_SEC = 15 * 60
 # "Conferindo saldo/claro" abandonado (ex.: bot reiniciou) — trata como aprovado antes.
 CONFIRMING_STALE_SEC = 3 * 60
+# Checkout abandonado (restart/crash) — não bloqueia reivindicar novo pedido.
+CHECKOUT_STALE_SEC = 5 * 60
 
 
 def payload_target(payload):
@@ -72,6 +74,8 @@ def next_after_bot_result(kind, fingerprint, last_fingerprint):
 def stale_threshold_sec(text=None):
     if re.search(r"Conferindo (?:saldo|Claro)", text or "", re.I):
         return CONFIRMING_STALE_SEC
+    if re.search(r"Aguardando checkout", text or "", re.I):
+        return CHECKOUT_STALE_SEC
     return STALE_PROGRESS_SEC
 
 

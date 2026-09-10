@@ -193,6 +193,9 @@ def test_progresso_velho_nao_trava_worker():
     conferindo = "**Conferindo saldo**\n__A API atrasou — nova leitura 3/4__"
     assert is_stale_progress("progress", 4 * 60, text=conferindo) is True
     assert is_stale_progress("progress", 2 * 60, text=conferindo) is False
+    checkout = "**Processando**\n__Aguardando checkout… (24s)__"
+    assert is_stale_progress("progress", 6 * 60, text=checkout) is True
+    assert is_stale_progress("progress", 4 * 60, text=checkout) is False
     assert stale_progress_as(conferindo) == "approved"
     assert stale_progress_as("**Preparando**\n__Gerando login…__") == "idle"
 
