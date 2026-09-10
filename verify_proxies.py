@@ -20,7 +20,7 @@ try:
 except ImportError:
     socks = None
 
-TEST_URL = "http://httpbin.org/ip"
+TEST_URL = "http://icanhazip.com"
 GEO_BATCH_URL = "http://ip-api.com/batch?fields=status,country,countryCode,query,isp,city"
 USER_AGENT = "proxy-verify/1.0"
 SOCKS_PORTS = {
@@ -53,7 +53,7 @@ def try_http_proxy(proxy: str, timeout: float) -> tuple[bool, float, str | None]
             resp.read(512)
         latency_ms = (time.perf_counter() - start) * 1000
         return True, latency_ms, "http"
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+    except Exception as exc:
         return False, 0.0, str(exc)[:120]
 
 
@@ -68,9 +68,9 @@ def try_socks_proxy(proxy: str, timeout: float, kind: int) -> tuple[bool, float,
     try:
         sock.set_proxy(kind, ip, port)
         sock.settimeout(timeout)
-        sock.connect(("httpbin.org", 80))
+        sock.connect(("icanhazip.com", 80))
         request = (
-            f"GET /ip HTTP/1.1\r\nHost: httpbin.org\r\n"
+            f"GET / HTTP/1.1\r\nHost: icanhazip.com\r\n"
             f"User-Agent: {USER_AGENT}\r\nConnection: close\r\n\r\n"
         )
         sock.sendall(request.encode())
@@ -79,7 +79,7 @@ def try_socks_proxy(proxy: str, timeout: float, kind: int) -> tuple[bool, float,
             return False, 0.0, "bad_socks_response"
         latency_ms = (time.perf_counter() - start) * 1000
         return True, latency_ms, label
-    except OSError as exc:
+    except Exception as exc:
         return False, 0.0, str(exc)[:120]
     finally:
         try:
