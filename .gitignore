@@ -1,6 +1,7 @@
 proxies.txt
 proxies_working.txt
 proxies_verified/
+proxies_web/
 proxies_report.json
 test_report.json
 sources_map.json
