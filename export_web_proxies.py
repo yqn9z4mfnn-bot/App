@@ -65,8 +65,15 @@ def export(verified_json: Path = Path("proxies_verified/verified.json"), out_dir
 
 
 if __name__ == "__main__":
-    if not Path("proxies_verified/verified.json").exists():
-        print("Execute verify_proxies.py antes.", file=sys.stderr)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Exporta proxies verificados")
+    parser.add_argument("--input", default="proxies_verified/verified.json")
+    parser.add_argument("--output-dir", default="proxies_web")
+    args = parser.parse_args()
+    verified_path = Path(args.input)
+    if not verified_path.exists():
+        print(f"Arquivo não encontrado: {verified_path}", file=sys.stderr)
         sys.exit(1)
-    result = export()
+    result = export(verified_path, Path(args.output_dir))
     print(json.dumps(result, indent=2))
