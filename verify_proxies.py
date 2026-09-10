@@ -267,35 +267,42 @@ def main(argv: Iterable[str] | None = None) -> int:
     results: list[dict] = []
     started = time.time()
 
-    print(f"Verificando {total} proxies (HTTP + SOCKS, {args.workers} threads)...\n")
+    chunk_size = max(args.workers * 4, 500)
+    print(
+        f"Verificando {total} proxies (HTTP + SOCKS, {args.workers} threads, "
+        f"lotes de {chunk_size})...\n"
+    )
+
+    done = 0
+    working_count = 0
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(verify_proxy, proxy, args.timeout): proxy for proxy in proxies}
-        done = 0
-        working_count = 0
+        for offset in range(0, total, chunk_size):
+            chunk = proxies[offset : offset + chunk_size]
+            futures = [pool.submit(verify_proxy, proxy, args.timeout) for proxy in chunk]
 
-        for future in as_completed(futures):
-            row = future.result()
-            results.append(row)
-            done += 1
-            if row["working"]:
-                working_count += 1
+            for future in as_completed(futures):
+                row = future.result()
+                results.append(row)
+                done += 1
+                if row["working"]:
+                    working_count += 1
 
-            if done % 500 == 0 or done == total:
-                elapsed = time.time() - started
-                rate = done / elapsed if elapsed else 0
-                eta = (total - done) / rate if rate else 0
-                print(
-                    f"  [{done}/{total}] {done*100/total:.1f}% | "
-                    f"ok: {working_count} | {rate:.1f}/s | ETA {eta/60:.1f}min",
-                    flush=True,
-                )
+                if done % 500 == 0 or done == total:
+                    elapsed = time.time() - started
+                    rate = done / elapsed if elapsed else 0
+                    eta = (total - done) / rate if rate else 0
+                    print(
+                        f"  [{done}/{total}] {done*100/total:.1f}% | "
+                        f"ok: {working_count} | {rate:.1f}/s | ETA {eta/60:.1f}min",
+                        flush=True,
+                    )
 
-            if done % args.save_every == 0:
-                partial = [r for r in results if r["working"]]
-                (out_dir / "partial.json").write_text(
-                    json.dumps(partial, indent=2), encoding="utf-8"
-                )
+                if done % args.save_every == 0:
+                    partial = [r for r in results if r["working"]]
+                    (out_dir / "partial.json").write_text(
+                        json.dumps(partial, indent=2), encoding="utf-8"
+                    )
 
     print(f"\nGeolocalizando {working_count} proxies funcionais...")
     working_ips = [r["ip"] for r in results if r["working"]]
