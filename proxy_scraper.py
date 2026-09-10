@@ -18,7 +18,7 @@ from typing import Callable, Iterable
 PROXY_LINE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}:\d{1,5}$")
 PROXY_IN_LINE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3}:\d{1,5})\b")
 PROTOCOL_PREFIX = re.compile(r"^(?:https?|socks4|socks5)://", re.I)
-USER_AGENT = "proxy-scraper/3.0 (+https://github.com/yqn9z4mfnn-bot/App)"
+USER_AGENT = "proxy-scraper/4.0-extreme (+https://github.com/yqn9z4mfnn-bot/App)"
 
 COUNTRIES = [
     "US", "BR", "DE", "FR", "GB", "CN", "IN", "RU", "JP", "KR", "CA", "AU", "NL",
@@ -90,13 +90,7 @@ def parse_proxies(text: str) -> set[str]:
     if stripped.startswith("[") or stripped.startswith("{"):
         try:
             payload = json.loads(stripped)
-            if isinstance(payload, list):
-                for item in payload:
-                    if isinstance(item, dict):
-                        ip = item.get("ip") or item.get("host")
-                        port = item.get("port")
-                        if ip and port:
-                            add_proxy(proxies, f"{ip}:{port}")
+            _parse_json_payload(payload, proxies)
             return proxies
         except json.JSONDecodeError:
             pass
@@ -123,6 +117,28 @@ def parse_proxies(text: str) -> set[str]:
         if match:
             add_proxy(proxies, match.group(1))
     return proxies
+
+
+def _parse_json_item(item: dict, proxies: set[str]) -> None:
+    ip = item.get("ip") or item.get("host")
+    port = item.get("port")
+    if ip and port:
+        add_proxy(proxies, f"{ip}:{port}")
+
+
+def _parse_json_payload(payload: object, proxies: set[str]) -> None:
+    if isinstance(payload, list):
+        for item in payload:
+            if isinstance(item, dict):
+                _parse_json_item(item, proxies)
+        return
+    if isinstance(payload, dict):
+        for key in ("data", "proxies", "results", "items"):
+            nested = payload.get(key)
+            if isinstance(nested, list):
+                _parse_json_payload(nested, proxies)
+        if payload.get("ip") or payload.get("host"):
+            _parse_json_item(payload, proxies)
 
 
 def parse_html_proxies(html: str) -> set[str]:
@@ -200,22 +216,19 @@ def fetch_html_source(name: str, url: str) -> FetchResult:
     return result
 
 
-def fetch_geonode() -> FetchResult:
-    result = FetchResult(
-        source="geonode_api",
-        url="https://proxylist.geonode.com/api/proxy-list?limit=500",
-    )
+def fetch_geonode(protocol: str | None = None) -> FetchResult:
+    label = f"geonode_{protocol}" if protocol else "geonode_all"
+    base = "https://proxylist.geonode.com/api/proxy-list?limit=500&sort_by=lastChecked&sort_type=desc"
+    if protocol:
+        base += f"&protocols={protocol}"
+    result = FetchResult(source=label, url=base)
     try:
-        first = json.loads(fetch_text(result.url + "&page=1&sort_by=lastChecked&sort_type=desc"))
+        first = json.loads(fetch_text(base + "&page=1"))
         total = int(first.get("total", 0))
         pages = max(1, (total + 499) // 500)
-        result.url = f"{result.url}&pages=1..{pages}"
+        result.url = f"{base}&pages=1..{pages}"
         for page in range(1, pages + 1):
-            url = (
-                "https://proxylist.geonode.com/api/proxy-list"
-                f"?limit=500&page={page}&sort_by=lastChecked&sort_type=desc"
-            )
-            payload = json.loads(fetch_text(url))
+            payload = json.loads(fetch_text(base + f"&page={page}"))
             for item in payload.get("data", []):
                 ip = item.get("ip")
                 port = item.get("port")
@@ -263,7 +276,10 @@ def fetch_proxyscrape_json() -> FetchResult:
 
 
 SPECIAL_FETCHERS: dict[str, Callable[[], FetchResult]] = {
-    "geonode_api": fetch_geonode,
+    "geonode_all": lambda: fetch_geonode(None),
+    "geonode_http": lambda: fetch_geonode("http"),
+    "geonode_socks4": lambda: fetch_geonode("socks4"),
+    "geonode_socks5": lambda: fetch_geonode("socks5"),
     "monosans_json": fetch_monosans_json,
     "proxyscrape_mirror_json": fetch_proxyscrape_json,
 }
@@ -281,11 +297,20 @@ def test_proxy(proxy: str, timeout: float = 5.0) -> tuple[str, bool, str]:
         return proxy, False, str(exc)
 
 
-def collect_all_sources(sources_file: Path) -> dict[str, str]:
+def collect_all_sources(sources_file: Path, extreme: bool = False) -> dict[str, str]:
     all_sources = load_sources_file(sources_file)
-    all_sources.update(build_dynamic_sources())
-    all_sources.update(HTML_SOURCES)
+    if extreme:
+        extreme_file = Path("proxy_sources_extreme.txt")
+        if extreme_file.exists():
+            all_sources.update(load_sources_file(extreme_file))
+    else:
+        all_sources.update(build_dynamic_sources())
+        all_sources.update(HTML_SOURCES)
     return all_sources
+
+
+def is_html_source(name: str) -> bool:
+    return name in HTML_SOURCES or name.startswith("html_")
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -297,6 +322,16 @@ def main(argv: Iterable[str] | None = None) -> int:
         default="proxy_sources.txt",
         help="Arquivo manifesto de fontes (nome|url)",
     )
+    parser.add_argument(
+        "--extreme",
+        action="store_true",
+        help="Modo extremo: usa proxy_sources_extreme.txt (gere com discover_sources.py)",
+    )
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="Regenera proxy_sources_extreme.txt antes de coletar (com --extreme)",
+    )
     parser.add_argument("--output", "-o", default="proxies.txt")
     parser.add_argument("--json", default="proxies_report.json")
     parser.add_argument("--map", default="sources_map.json", help="Mapa completo de fontes")
@@ -304,12 +339,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--workers", type=int, default=40)
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    sources_path = Path(args.sources)
-    text_sources = collect_all_sources(sources_path)
-    html_names = set(HTML_SOURCES)
-    total_sources = len(text_sources) + len(SPECIAL_FETCHERS)
+    if args.extreme and args.discover:
+        from discover_sources import build_extreme_manifest, write_manifest
 
-    print(f"Mapeamento profundo: {total_sources} fontes públicas\n")
+        extreme_path = Path("proxy_sources_extreme.txt")
+        manifest = build_extreme_manifest(Path(args.sources))
+        write_manifest(manifest, extreme_path)
+        print(f"Manifesto extremo regenerado: {len(manifest)} fontes\n")
+
+    sources_path = Path(args.sources)
+    text_sources = collect_all_sources(sources_path, extreme=args.extreme)
+    total_sources = len(text_sources) + len(SPECIAL_FETCHERS)
+    mode = "EXTREMO" if args.extreme else "ultra-deep"
+
+    print(f"Mapeamento {mode}: {total_sources} fontes públicas\n")
 
     results: list[FetchResult] = []
     all_proxies: set[str] = set()
@@ -317,7 +360,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = []
         for name, url in text_sources.items():
-            if name in html_names:
+            if is_html_source(name):
                 futures.append(pool.submit(fetch_html_source, name, url))
             else:
                 futures.append(pool.submit(fetch_source, name, url))
@@ -366,7 +409,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     report = {
         "collected_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "ultra-deep",
+        "mode": mode.lower(),
         "sources_total": total_sources,
         "sources_with_data": len(ok_sources),
         "sources_empty": len(empty_sources),

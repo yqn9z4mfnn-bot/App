@@ -5,4 +5,5 @@ proxies_web/
 proxies_report.json
 test_report.json
 sources_map.json
+proxy_sources_extreme.txt
 __pycache__/
