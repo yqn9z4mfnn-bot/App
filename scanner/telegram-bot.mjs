@@ -1197,30 +1197,32 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       }
     }
 
-    let outcome = useBrowser
-      ? useHybrid
-        ? await runHybridRecharge({
-            loginUrl: toLoginUrl(entry.link),
+    let outcome = await withCheckoutHeartbeat(chatId, statusMsg, runBubble, () =>
+      useBrowser
+        ? useHybrid
+          ? runHybridRecharge({
+              loginUrl: toLoginUrl(entry.link),
+              msisdn: entry.msisdn,
+              targetMsisdn,
+              productValue: flow.productValue,
+              card,
+              claroSessionId: entry.sessionId,
+            })
+          : runBrowserRecharge({
+              loginUrl: toLoginUrl(entry.link),
+              msisdn: entry.msisdn,
+              targetMsisdn,
+              productValue: flow.productValue,
+              card,
+            })
+        : runRecharge({
+            sessionId: entry.sessionId,
             msisdn: entry.msisdn,
-            targetMsisdn,
+            productId: flow.productId,
             productValue: flow.productValue,
             card,
-            claroSessionId: entry.sessionId,
-          })
-        : await runBrowserRecharge({
-            loginUrl: toLoginUrl(entry.link),
-            msisdn: entry.msisdn,
-            targetMsisdn,
-            productValue: flow.productValue,
-            card,
-          })
-      : await runRecharge({
-          sessionId: entry.sessionId,
-          msisdn: entry.msisdn,
-          productId: flow.productId,
-          productValue: flow.productValue,
-          card,
-        });
+          }),
+    );
 
     if (isRechargeSuccess(outcome)) {
       await editBubble(chatId, statusMsg, {
@@ -2430,6 +2432,24 @@ async function buildStatusMessage() {
   }
 
   return lines.join('\n');
+}
+
+/** Atualiza a bolha durante checkout longo — evita parecer que o bot travou. */
+async function withCheckoutHeartbeat(chatId, statusMsg, runBubble, fn, { intervalMs = 12_000 } = {}) {
+  const started = Date.now();
+  const timer = setInterval(() => {
+    const sec = Math.round((Date.now() - started) / 1000);
+    editBubble(chatId, statusMsg, {
+      ...runBubble,
+      hint: `Aguardando checkout… (${sec}s)`,
+    }).catch(() => {});
+  }, intervalMs);
+  timer.unref?.();
+  try {
+    return await fn();
+  } finally {
+    clearInterval(timer);
+  }
 }
 
 /** Bloqueia até haver vaga de navegador — nada da recarga começa antes disso. */
