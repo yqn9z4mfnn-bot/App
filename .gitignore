@@ -1,4 +1,8 @@
 proxies.txt
+proxies_extreme.txt
+proxies_extreme_report.json
+sources_extreme_map.json
+extreme_run.log
 proxies_working.txt
 proxies_verified/
 proxies_web/
