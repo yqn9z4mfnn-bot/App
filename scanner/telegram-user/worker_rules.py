@@ -3,6 +3,8 @@ import re
 
 # Progresso no chat do bot mais velho que isso não é job ativo.
 STALE_PROGRESS_SEC = 15 * 60
+# "Conferindo saldo/claro" abandonado (ex.: bot reiniciou) — trata como aprovado antes.
+CONFIRMING_STALE_SEC = 3 * 60
 
 
 def payload_target(payload):
@@ -67,14 +69,21 @@ def next_after_bot_result(kind, fingerprint, last_fingerprint):
     return "retry"
 
 
-def is_stale_progress(kind, age_sec, stale_sec=STALE_PROGRESS_SEC):
+def stale_threshold_sec(text=None):
+    if re.search(r"Conferindo (?:saldo|Claro)", text or "", re.I):
+        return CONFIRMING_STALE_SEC
+    return STALE_PROGRESS_SEC
+
+
+def is_stale_progress(kind, age_sec, stale_sec=None, text=None):
     if kind != "progress":
         return False
     try:
         age = float(age_sec)
     except (TypeError, ValueError):
         return False
-    return age > stale_sec
+    threshold = stale_sec if stale_sec is not None else stale_threshold_sec(text)
+    return age > threshold
 
 
 def stale_progress_as(text):

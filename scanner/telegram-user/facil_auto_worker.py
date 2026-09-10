@@ -127,7 +127,7 @@ def telegram_msg_age_sec(msg):
 
 def classify_live_bot(text, age_sec):
     kind = classify_bot_response(text)
-    if is_stale_progress(kind, age_sec):
+    if is_stale_progress(kind, age_sec, text=text):
         resolved = stale_progress_as(text)
         return resolved, True
     return kind, False
