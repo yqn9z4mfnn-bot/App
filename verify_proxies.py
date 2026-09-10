@@ -23,6 +23,10 @@ except ImportError:
 TEST_URL = "http://httpbin.org/ip"
 GEO_BATCH_URL = "http://ip-api.com/batch?fields=status,country,countryCode,query,isp,city"
 USER_AGENT = "proxy-verify/1.0"
+SOCKS_PORTS = {
+    1080, 1081, 4145, 4153, 5678, 7777, 9050, 9051, 9898, 10000, 10001,
+    10808, 11368, 12344, 18181, 23969, 45672, 51327, 55636, 63079,
+}
 
 
 def load_proxies(path: Path) -> list[str]:
@@ -85,11 +89,21 @@ def try_socks_proxy(proxy: str, timeout: float, kind: int) -> tuple[bool, float,
 
 
 def verify_proxy(proxy: str, timeout: float) -> dict:
-    ok, latency_ms, protocol = try_http_proxy(proxy, timeout)
-    if not ok:
-        ok, latency_ms, protocol = try_socks_proxy(proxy, timeout, socks.SOCKS5 if socks else 0)
-    if not ok and socks is not None:
-        ok, latency_ms, protocol = try_socks_proxy(proxy, timeout, socks.SOCKS4)
+    port = int(proxy.rsplit(":", 1)[1])
+    ok = False
+    latency_ms = 0.0
+    protocol: str | None = None
+
+    if port in SOCKS_PORTS and socks is not None:
+        ok, latency_ms, protocol = try_socks_proxy(proxy, timeout, socks.SOCKS5)
+        if not ok:
+            ok, latency_ms, protocol = try_socks_proxy(proxy, timeout, socks.SOCKS4)
+        if not ok:
+            ok, latency_ms, protocol = try_http_proxy(proxy, timeout)
+    else:
+        ok, latency_ms, protocol = try_http_proxy(proxy, timeout)
+        if not ok and socks is not None:
+            ok, latency_ms, protocol = try_socks_proxy(proxy, timeout, socks.SOCKS5)
 
     return {
         "proxy": proxy,
@@ -235,9 +249,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Verifica HTTP/SOCKS, latência e país")
     parser.add_argument("--input", "-i", default="proxies_working.txt")
     parser.add_argument("--output-dir", "-d", default="proxies_verified")
-    parser.add_argument("--timeout", type=float, default=8.0)
-    parser.add_argument("--workers", type=int, default=150)
-    parser.add_argument("--save-every", type=int, default=1000)
+    parser.add_argument("--timeout", type=float, default=5.0)
+    parser.add_argument("--workers", type=int, default=250)
+    parser.add_argument("--save-every", type=int, default=500)
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     input_path = Path(args.input)
