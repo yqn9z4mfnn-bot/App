@@ -109,6 +109,13 @@ def clear_current_pedido():
     CURRENT_FILE.unlink(missing_ok=True)
 
 
+def current_msg_id(pedido_id):
+    cur = load_current_pedido()
+    if cur and cur.get("pedido_id") == pedido_id:
+        return cur.get("msg_id")
+    return None
+
+
 def consume_seguir():
     if SEGUIR_FILE.exists():
         SEGUIR_FILE.unlink(missing_ok=True)
@@ -440,12 +447,17 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
     state, hint = await bot_state_for_target(tg, bot, target)
     if state == "approved":
         log(f"APROVADA {target}")
-        closed = await close_order_in_group(g, tg, pedido_id, log=log)
-        clear_current_pedido()
+        msg_id = current_msg_id(pedido_id)
+        closed = await close_order_in_group(
+            g, tg, pedido_id, log=log, anchor_msg_id=msg_id
+        )
+        if closed:
+            clear_current_pedido()
         save_state({
             "result": "closed" if closed else "approved_unconfirmed",
             "payload": payload,
             "pedido_id": pedido_id,
+            "msg_id": msg_id,
             "at": datetime.now(timezone.utc).isoformat(),
         })
         return "closed" if closed else "needs_confirm"
@@ -512,12 +524,17 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
 async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp):
     if kind == "approved":
         log("APROVADA!")
-        closed = await close_order_in_group(g, tg, pedido_id, log=log)
-        clear_current_pedido()
+        msg_id = current_msg_id(pedido_id)
+        closed = await close_order_in_group(
+            g, tg, pedido_id, log=log, anchor_msg_id=msg_id
+        )
+        if closed:
+            clear_current_pedido()
         save_state({
             "result": "closed" if closed else "approved_unconfirmed",
             "payload": payload,
             "pedido_id": pedido_id,
+            "msg_id": msg_id,
             "at": datetime.now(timezone.utc).isoformat(),
         })
         return "closed" if closed else "needs_confirm"
@@ -570,9 +587,15 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
     try:
         while True:
             if pending_confirm:
-                pedido_id_retry, payload_retry = pending_confirm
+                pedido_id_retry, payload_retry, msg_id_retry = pending_confirm
                 log(f"Retentando Confirmar {pedido_id_retry}")
-                closed = await close_order_in_group(g, tg, pedido_id_retry, log=log)
+                closed = await close_order_in_group(
+                    g,
+                    tg,
+                    pedido_id_retry,
+                    log=log,
+                    anchor_msg_id=msg_id_retry or current_msg_id(pedido_id_retry),
+                )
                 if closed:
                     pending_confirm = None
                     log(f"Grupo OK {pedido_id_retry}")
@@ -609,7 +632,11 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
             pedido_id = None
 
             if result == "needs_confirm":
-                pending_confirm = (current_pedido, current_payload)
+                pending_confirm = (
+                    current_pedido,
+                    current_payload,
+                    current_msg_id(current_pedido),
+                )
                 continue
 
             if result == "halt_same_error":

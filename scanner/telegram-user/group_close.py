@@ -22,7 +22,19 @@ def is_cancel_label_or_blocked(label):
     return not allowed_group_click(label)
 
 
-async def pedido_ja_feita(g, tg, pedido_id, limit=150):
+async def _msg_by_id(g, tg, msg_id):
+    if not msg_id:
+        return None
+    try:
+        return await tg.get_messages(g, ids=msg_id)
+    except Exception:
+        return None
+
+
+async def pedido_ja_feita(g, tg, pedido_id, anchor_msg_id=None, limit=500):
+    anchor = await _msg_by_id(g, tg, anchor_msg_id)
+    if anchor and pedido_id in (anchor.text or "") and is_feita_final(anchor.text or ""):
+        return True
     async for m in tg.iter_messages(g, limit=limit):
         text = m.text or ""
         if pedido_id in text and is_feita_final(text):
@@ -30,7 +42,10 @@ async def pedido_ja_feita(g, tg, pedido_id, limit=150):
     return False
 
 
-async def find_processing_msg(g, tg, pedido_id, limit=120):
+async def find_processing_msg(g, tg, pedido_id, anchor_msg_id=None, limit=500):
+    anchor = await _msg_by_id(g, tg, anchor_msg_id)
+    if anchor and pedido_id in (anchor.text or ""):
+        return anchor
     async for m in tg.iter_messages(g, limit=limit):
         text = m.text or ""
         if pedido_id in text and "PROCESSANDO" in text:
@@ -66,15 +81,15 @@ async def click_confirm(msg, pedido_id="?", log=print):
     return False
 
 
-async def close_order_in_group(g, tg, pedido_id, log=print):
+async def close_order_in_group(g, tg, pedido_id, log=print, anchor_msg_id=None):
     """Clica Feita + Confirmar. Retorna True só com status final Feita."""
-    if await pedido_ja_feita(g, tg, pedido_id):
+    if await pedido_ja_feita(g, tg, pedido_id, anchor_msg_id=anchor_msg_id):
         log(f"Pedido {pedido_id} já está Feita no grupo")
         return True
 
-    msg = await find_processing_msg(g, tg, pedido_id)
+    msg = await find_processing_msg(g, tg, pedido_id, anchor_msg_id=anchor_msg_id)
 
-    anchor_id = msg.id if msg else None
+    anchor_id = anchor_msg_id or (msg.id if msg else None)
 
     if msg and msg.buttons:
         for row in msg.buttons:
@@ -105,7 +120,9 @@ async def close_order_in_group(g, tg, pedido_id, log=print):
                             log(f"Grupo fechado {pedido_id}")
                             return True
 
-        confirm = await find_confirm_msg(g, tg, pedido_id=None, limit=15)
+        confirm = await find_confirm_msg(
+            g, tg, pedido_id=pedido_id, anchor_msg_id=anchor_id, limit=80
+        )
         if confirm and confirm.buttons:
             if await click_confirm(confirm, pedido_id, log=log):
                 log(f"Clicou Confirmar pedido {pedido_id} (msg {confirm.id})")
@@ -115,8 +132,13 @@ async def close_order_in_group(g, tg, pedido_id, log=print):
                     log(f"Grupo fechado {pedido_id}")
                     return True
 
-        # pedido pode aparecer só após confirmar
-        async for m in tg.iter_messages(g, limit=40):
+        if anchor_id:
+            final_anchor = await tg.get_messages(g, ids=anchor_id)
+            if final_anchor and pedido_id in (final_anchor.text or "") and is_feita_final(final_anchor.text or ""):
+                log(f"Pedido {pedido_id} já Feita (msg {anchor_id})")
+                return True
+
+        async for m in tg.iter_messages(g, limit=500):
             text = m.text or ""
             if pedido_id in text and is_feita_final(text):
                 log(f"Pedido {pedido_id} já Feita (msg {m.id})")
