@@ -1,0 +1,16 @@
+#!/bin/bash
+# Depois de 2x o mesmo erro: retenta o número atual e segue o worker.
+# Uso na VPS:  bash /root/App/telegram-user/seguir
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")" && pwd)"
+DATA="${TELEGRAM_USER_DATA:-/root/.local/share/telegram-user}"
+mkdir -p "$DATA"
+date -u +%Y-%m-%dT%H:%M:%SZ > "$DATA/facil-seguir"
+
+if pgrep -f "facil_auto_worker.py" >/dev/null; then
+  echo "SEGUIR enviado — worker retenta o mesmo número"
+  tail -5 /tmp/facil-worker.log 2>/dev/null || true
+else
+  echo "Worker estava parado — subindo de novo"
+  exec "$DIR/vps-start-facil-worker.sh"
+fi

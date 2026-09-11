@@ -1,0 +1,92 @@
+#!/usr/bin/env node
+import express from 'express';
+import { config } from './config.mjs';
+import { describeProxy, proxyEnabled } from '../lib/proxy.mjs';
+import {
+  closeSession,
+  getConcurrencyPublic,
+  getSessionPublic,
+  listAllSessionsPublic,
+  listRecentSessions,
+  startSessionFromWebLink,
+  startSessionFromCheckoutLink,
+} from './sessions.mjs';
+import { isBrowserLockedByEnv, normalizeBrowserName } from './browser.mjs';
+import { isBotPaused } from '../lib/bot-pause.mjs';
+
+const rejectIfPaused = (res) => {
+  if (!isBotPaused()) return false;
+  res.status(503).json({ error: 'Bot pausado — novas sessões de pagamento suspensas.' });
+  return true;
+};
+
+const app = express();
+app.use(express.json({ limit: '1mb' }));
+
+app.get('/health', (_req, res) => {
+  res.json({
+    ok: true,
+    paused: isBotPaused(),
+    headless: config.headless,
+    defaultBrowser: normalizeBrowserName(config.defaultBrowser),
+    browserLockedByEnv: isBrowserLockedByEnv(),
+    ...getConcurrencyPublic(),
+  });
+});
+
+app.get('/api/sessions', (_req, res) => {
+  return res.json({
+    ...getConcurrencyPublic(),
+    sessions: listAllSessionsPublic(),
+    recent: listRecentSessions(),
+  });
+});
+
+app.get('/api/session/:sessionId', (req, res) => {
+  const info = getSessionPublic(req.params.sessionId);
+  if (!info) return res.status(404).json({ error: 'Sessão não encontrada.' });
+  return res.json(info);
+});
+
+/** Abre link JWT minhaclaro_web no Edge e paga (sem SMS). */
+app.post('/api/session/start-web-link', async (req, res) => {
+  if (rejectIfPaused(res)) return;
+  try {
+    const body = req.body ?? {};
+    const result = await startSessionFromWebLink(body);
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/** HTTP prepara checkout → Edge abre só Eldorado e paga. */
+app.post('/api/session/start-checkout-link', async (req, res) => {
+  if (rejectIfPaused(res)) return;
+  try {
+    const body = req.body ?? {};
+    const result = await startSessionFromCheckoutLink(body);
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/session/:sessionId/close', async (req, res) => {
+  try {
+    const result = await closeSession(req.params.sessionId);
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.listen(config.port, () => {
+  console.log(`[automation] API online em http://127.0.0.1:${config.port}`);
+  console.log(`[automation] browser=${normalizeBrowserName(config.defaultBrowser)} headless=${config.headless}`);
+  console.log(
+    `[automation] 3DS frictionless: UI ${config.threedsUiWaitMs}ms + CONFIRMED ${config.threedsExtraWaitMs}ms (VBV para na hora)`,
+  );
+  const p = describeProxy();
+  console.log(`[automation] proxy=${p || (proxyEnabled() ? 'config incompleta' : 'OFF')}`);
+});
