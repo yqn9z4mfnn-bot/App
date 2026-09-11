@@ -25,6 +25,7 @@ Environment=AUTO_INGEST_BATCH=1000
 Environment=AUTO_INGEST_PAUSE_MS=7200000
 Environment=AUTO_INGEST_CONCURRENCY=1
 Environment=AUTO_INGEST_LOG_EVERY=10
+Environment=AUTO_INGEST_NOTIFY_CHAT_IDS=${AUTO_INGEST_NOTIFY_CHAT_IDS:-926709483}
 EnvironmentFile=-$DATA_DIR/.env
 ExecStart=/usr/bin/node $APP_DIR/scripts/auto-ingest-loop.mjs
 Restart=always
