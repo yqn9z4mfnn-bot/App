@@ -31,7 +31,7 @@ from facil_group import (
     pick_bot_state,
     response_matches_target,
 )
-from group_close import close_order_in_group, pedido_ja_feita
+from group_close import close_order_in_group, pedido_ja_feita, cancel_order_in_group
 from worker_rules import (
     allowed_group_click,
     decide_next_action,
@@ -157,8 +157,19 @@ async def wait_after_halt(g, tg, pedido_id, payload):
         await asyncio.sleep(5)
 
 
-async def pedido_still_open(g, tg, pedido_id):
-    async for m in tg.iter_messages(g, limit=100):
+async def pedido_still_open(g, tg, pedido_id, anchor_msg_id=None):
+    if anchor_msg_id:
+        try:
+            m = await tg.get_messages(g, ids=anchor_msg_id)
+            text = (m.text or "") if m else ""
+            if pedido_id in text:
+                if is_feita_final(text):
+                    return False
+                if "PROCESSANDO" in text or "Tem certeza" in text:
+                    return True
+        except Exception:
+            pass
+    async for m in tg.iter_messages(g, limit=500):
         text = m.text or ""
         if pedido_id not in text:
             continue
@@ -169,10 +180,10 @@ async def pedido_still_open(g, tg, pedido_id):
     return False
 
 
-async def list_open_orders(g, tg, attendee=ATTENDEE):
+async def list_open_orders(g, tg, attendee=ATTENDEE, limit=500):
     """Todos os pedidos abertos (PROCESSANDO ou confirmação) do atendente."""
     open_orders = []
-    async for m in tg.iter_messages(g, limit=80):
+    async for m in tg.iter_messages(g, limit=limit):
         text = m.text or ""
         if attendee not in text:
             continue
@@ -396,10 +407,45 @@ async def bot_active_targets(tg, bot, limit=20):
     return targets
 
 
+async def reconcile_open_orders(g, tg, bot, open_orders):
+    """Fecha aprovados no bot; cancela 3DS/negados abandonados no grupo."""
+    changed = False
+    for row in open_orders:
+        pid = row["pedido_id"]
+        payload = row["payload"]
+        msg_id = row["msg_id"]
+        target = payload_target(payload)
+        state, _hint = await bot_state_for_target(tg, bot, target)
+        if state == "approved":
+            log(f"Reconcile: {target} APROVADA — fechando {pid}")
+            if await close_order_in_group(g, tg, pid, log=log, anchor_msg_id=msg_id):
+                changed = True
+            continue
+        if state in ("3ds", "denied", "fail", "fail_login"):
+            log(f"Reconcile: {target} {state} — cancelando {pid}")
+            if await cancel_order_in_group(g, tg, pid, log=log, anchor_msg_id=msg_id):
+                changed = True
+    return changed
+
+
 async def acquire_order(g, tg, bot):
     current = load_current_pedido()
+    if current:
+        pid = current.get("pedido_id")
+        payload = current.get("payload")
+        msg_id = current.get("msg_id")
+        if pid and payload and await pedido_still_open(g, tg, pid, anchor_msg_id=msg_id):
+            save_current_pedido(pid, payload, msg_id)
+            log(f"Retomando {pid} → {payload} (worker-current msg {msg_id})")
+            return payload, pid
+
     open_raw = await list_open_orders(g, tg)
     open_orders = [{"pedido_id": p, "payload": pay, "msg_id": mid} for p, pay, mid in open_raw]
+    if len(open_orders) > 1:
+        if await reconcile_open_orders(g, tg, bot, open_orders):
+            open_raw = await list_open_orders(g, tg)
+            open_orders = [{"pedido_id": p, "payload": pay, "msg_id": mid} for p, pay, mid in open_raw]
+
     current_id = current["pedido_id"] if current else None
     bot_targets = await bot_active_targets(tg, bot)
 
@@ -414,14 +460,18 @@ async def acquire_order(g, tg, bot):
         return row["payload"], row["pedido_id"]
 
     if action == "block":
-        if len(open_orders) == 1:
-            row = open_orders[0]
+        if open_orders:
+            row = min(open_orders, key=lambda o: o["msg_id"] or 0)
             save_current_pedido(row["pedido_id"], row["payload"], row["msg_id"])
-            log(f"Retomando pedido aberto {row['pedido_id']} → {row['payload']} (sem novo Reivindicar)")
+            if len(open_orders) > 1:
+                log(
+                    f"Retomando o mais antigo entre {len(open_orders)} abertos: "
+                    f"{row['pedido_id']} → {row['payload']}"
+                )
+            else:
+                log(f"Retomando pedido aberto {row['pedido_id']} → {row['payload']} (sem novo Reivindicar)")
             return row["payload"], row["pedido_id"]
-        for o in open_orders:
-            log(f"Aberto: {o['pedido_id']} → {o['payload']} (msg {o['msg_id']})")
-        log(f"BLOQUEADO: {len(open_orders)} pedido(s) aberto(s) — NÃO reivindica novo")
+        log("BLOQUEADO: pedidos abertos sumiram após reconcile")
         return None, None
 
     busy, hint = await bot_has_active_job(tg, bot)
@@ -499,11 +549,6 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
                 last_fp = error_fingerprint(kind if kind != "timeout" else "timeout", text, target)
                 continue
             return action
-
-        others = [o for o in await list_open_orders(g, tg) if o[0] != pedido_id]
-        if others:
-            log(f"ABORT envio: outro pedido aberto {others[0][0]}")
-            return "blocked"
 
         log(f"=== Envio {cycle} | pedido={pedido_id} | {payload} ===")
         if not tg.is_connected():

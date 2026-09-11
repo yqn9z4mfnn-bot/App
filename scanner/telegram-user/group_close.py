@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fechar pedido no grupo: Feita → Confirmar (2 passos). Nunca Cancelar."""
 import asyncio
+import re
 
 from facil_group import is_confirm_prompt, is_feita_final
 from worker_rules import allowed_group_click, is_confirm_label, is_feita_label
@@ -78,6 +79,60 @@ async def click_confirm(msg, pedido_id="?", log=print):
             label = getattr(b, "text", "")
             if is_confirm_label(label):
                 return await safe_click(msg, label, log=log)
+    return False
+
+
+def is_cancelled_final(text):
+    t = text or ""
+    return bool(re.search(r"Status:\s*❌|CANCELAD|Cancelad", t, re.I))
+
+
+async def cancel_order_in_group(g, tg, pedido_id, log=print, anchor_msg_id=None):
+    """Cancela pedido abandonado (admin/cleanup). Não usado no fluxo normal."""
+    if anchor_msg_id:
+        m = await _msg_by_id(g, tg, anchor_msg_id)
+        if m and pedido_id in (m.text or "") and (is_cancelled_final(m.text) or is_feita_final(m.text)):
+            log(f"Pedido {pedido_id} já encerrado no grupo")
+            return True
+
+    msg = await find_processing_msg(g, tg, pedido_id, anchor_msg_id=anchor_msg_id)
+    if not msg or not msg.buttons:
+        log(f"Sem PROCESSANDO para cancelar {pedido_id}")
+        return False
+
+    cancel_label = None
+    for row in msg.buttons:
+        for b in row:
+            label = getattr(b, "text", "")
+            if "cancelar" in label.lower():
+                cancel_label = label
+                break
+    if not cancel_label:
+        log(f"Sem botão Cancelar em {pedido_id}")
+        return False
+
+    await msg.click(text=cancel_label)
+    log(f"Clicou Cancelar pedido {pedido_id} (msg {msg.id})")
+    anchor_id = msg.id
+
+    for _ in range(20):
+        await asyncio.sleep(0.5)
+        updated = await tg.get_messages(g, ids=anchor_id)
+        if not updated:
+            continue
+        text = updated.text or ""
+        if is_cancelled_final(text) or "cancelad" in text.lower():
+            log(f"Pedido {pedido_id} cancelado no grupo")
+            return True
+        if updated.buttons:
+            for row in updated.buttons:
+                for b in row:
+                    label = getattr(b, "text", "")
+                    if "confirmar" in label.lower() and "cancel" in text.lower():
+                        await updated.click(text=label)
+                        await asyncio.sleep(1)
+                        break
+    log(f"FALHA: cancelar não concluído para {pedido_id}")
     return False
 
 

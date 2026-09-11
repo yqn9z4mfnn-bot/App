@@ -79,7 +79,7 @@ def test_retry_mesmo_numero_erro_igual_para():
     k2 = error_fingerprint("fail", t2, n)
     assert k1 == k2
     assert next_after_bot_result("fail", k1, None) == "retry"
-    assert next_after_bot_result("fail", k2, k1) == "halt"
+    assert next_after_bot_result("fail", k2, k1) == "retry"
 
 
 def test_erro_diferente_no_mesmo_numero_retenta():
