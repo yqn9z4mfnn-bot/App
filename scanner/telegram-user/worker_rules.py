@@ -9,6 +9,8 @@ CONFIRMING_STALE_SEC = 3 * 60
 CHECKOUT_STALE_SEC = 5 * 60
 # "Verificando fila" abandonado após recarga já concluída no backend.
 QUEUE_VERIFY_STALE_SEC = 3 * 60
+# Mesmo erro consecutivo neste MSISDN — para após N tentativas (erro diferente zera).
+MAX_SAME_ERROR_ATTEMPTS = 3
 
 
 def payload_target(payload):
@@ -64,15 +66,28 @@ def error_fingerprint(kind, text, target):
     return f"{target}|{kind}|{detail}"
 
 
-def next_after_bot_result(kind, fingerprint, last_fingerprint):
-    """Só APROVADA fecha. Qualquer outra coisa: retry ou halt se erro idêntico 2x."""
+def next_after_bot_result(kind, fingerprint, same_error_streak=0):
+    """Só APROVADA fecha. Erro diferente retenta; mesmo erro consecutivo → halt após N."""
     if kind == "approved":
         return "close"
-    if kind == "fail_login" or "too many requests" in fingerprint or "429" in fingerprint:
-        return "retry"
-    if last_fingerprint and fingerprint == last_fingerprint:
+    try:
+        streak = int(same_error_streak or 0)
+    except (TypeError, ValueError):
+        streak = 0
+    if streak >= MAX_SAME_ERROR_ATTEMPTS:
         return "halt"
     return "retry"
+
+
+def bump_same_error_streak(error_state, fingerprint):
+    """Atualiza contador consecutivo; erro diferente reinicia em 1."""
+    state = error_state if error_state is not None else {"fp": None, "streak": 0}
+    if state.get("fp") == fingerprint:
+        state["streak"] = int(state.get("streak") or 0) + 1
+    else:
+        state["fp"] = fingerprint
+        state["streak"] = 1
+    return state["streak"]
 
 
 def stale_threshold_sec(text=None):

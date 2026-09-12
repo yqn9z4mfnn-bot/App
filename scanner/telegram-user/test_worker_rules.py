@@ -78,8 +78,9 @@ def test_retry_mesmo_numero_erro_igual_para():
     k1 = error_fingerprint("fail", t1, n)
     k2 = error_fingerprint("fail", t2, n)
     assert k1 == k2
-    assert next_after_bot_result("fail", k1, None) == "retry"
-    assert next_after_bot_result("fail", k2, k1) == "retry"
+    assert next_after_bot_result("fail", k1, 1) == "retry"
+    assert next_after_bot_result("fail", k2, 2) == "retry"
+    assert next_after_bot_result("fail", k2, 3) == "halt"
 
 
 def test_erro_diferente_no_mesmo_numero_retenta():
@@ -89,7 +90,7 @@ def test_erro_diferente_no_mesmo_numero_retenta():
     a = error_fingerprint("fail", "Falha no login (429): Too Many Requests", n)
     b = error_fingerprint("fail_login", "Não iniciou Login 11991000516 falhou", n)
     assert a != b
-    assert next_after_bot_result("fail_login", b, a) == "retry"
+    assert next_after_bot_result("fail_login", b, 1) == "retry"
 
 
 def test_erro_igual_em_numero_diferente_nao_para():
@@ -99,7 +100,7 @@ def test_erro_igual_em_numero_diferente_nao_para():
     k1 = error_fingerprint("fail", t, "11111111111")
     k2 = error_fingerprint("fail", t, "22222222222")
     assert k1 != k2
-    assert next_after_bot_result("fail", k2, k1) == "retry"
+    assert next_after_bot_result("fail", k2, 1) == "retry"
 
 
 def test_cartao_bloqueado_com_fila_e_progress():
@@ -148,10 +149,10 @@ def test_cartao_bloqueado_com_fila_e_progress():
     assert is_terminal_kind("approved")
     assert not is_terminal_kind("progress")
     assert not is_terminal_kind("other")
-    assert next_after_bot_result("3ds", "n|3ds|x", None) == "retry"
-    assert next_after_bot_result("other", "n|other|x", None) == "retry"
-    assert next_after_bot_result("timeout", "n|timeout|x", None) == "retry"
-    assert next_after_bot_result("approved", "n|approved|x", None) == "close"
+    assert next_after_bot_result("3ds", "n|3ds|x", 1) == "retry"
+    assert next_after_bot_result("other", "n|other|x", 2) == "retry"
+    assert next_after_bot_result("timeout", "n|timeout|x", 3) == "halt"
+    assert next_after_bot_result("approved", "n|approved|x", 99) == "close"
 
 
 def test_login_429_nao_e_resultado_final():
@@ -208,6 +209,19 @@ def test_progresso_velho_nao_trava_worker():
     assert is_stale_progress("progress", 4 * 60, text=fila) is True
     assert is_stale_progress("progress", 2 * 60, text=fila) is False
     assert stale_progress_as(fila) == "idle"
+
+
+def test_erro_diferente_reinicia_contagem():
+    from worker_rules import bump_same_error_streak, next_after_bot_result
+
+    state = {"fp": None, "streak": 0}
+    a = "91999999999|denied|negada"
+    b = "91999999999|fail|erro no cartao"
+    assert bump_same_error_streak(state, a) == 1
+    assert bump_same_error_streak(state, a) == 2
+    assert next_after_bot_result("denied", a, state["streak"]) == "retry"
+    assert bump_same_error_streak(state, b) == 1
+    assert next_after_bot_result("fail", b, state["streak"]) == "retry"
 
 
 def test_halt_espera_seguir_ou_pedido_fechado():

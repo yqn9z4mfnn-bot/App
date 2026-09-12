@@ -34,6 +34,8 @@ from worker_rules import (
     allowed_group_click,
     decide_next_action,
     error_fingerprint,
+    MAX_SAME_ERROR_ATTEMPTS,
+    bump_same_error_streak,
     halt_next_step,
     is_reivindicar_label,
     is_stale_progress,
@@ -141,7 +143,7 @@ def classify_live_bot(text, age_sec):
 async def wait_after_halt(g, tg, pedido_id, payload):
     """Fica vivo após 2x o mesmo erro. `seguir` retenta; pedido fechado no grupo → próximo."""
     target = payload_target(payload)
-    log(f"PARADO em {target} (mesmo erro 2x). Para retentar: bash /root/App/telegram-user/seguir")
+    log(f"PARADO em {target} (mesmo erro 3x). Para retentar: bash /root/App/telegram-user/seguir")
     log("Ou feche o pedido no grupo — o worker segue sozinho para o próximo")
     while True:
         step = halt_next_step(consume_seguir(), await pedido_still_open(g, tg, pedido_id))
@@ -526,9 +528,9 @@ async def acquire_order(g, tg, bot):
 
 
 async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
-    """Qualquer coisa ≠ APROVADA: espera 60s e reenvia o mesmo número. Mesmo erro 2x → para."""
+    """Qualquer coisa ≠ APROVADA: retenta; mesmo erro 3x consecutivas → para (erro diferente zera)."""
     target = payload_target(payload)
-    last_fp = None
+    error_state = {"fp": None, "streak": 0}
 
     if await pedido_ja_feita(g, tg, pedido_id, anchor_msg_id=current_msg_id(pedido_id)):
         log(f"Pedido {pedido_id} já Feita no grupo — encerrando")
@@ -564,11 +566,11 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
         log(f"Bot processando {target} — aguardando resultado")
         kind, text = await wait_bot_reply(tg, bot, 0, target, timeout=600)
         if kind == "approved":
-            return await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, None)
+            return await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, error_state)
         state, hint = kind, text
 
     if state not in ("idle", "progress", "approved"):
-        last_fp = error_fingerprint(state, hint, target)
+        bump_same_error_streak(error_state, error_fingerprint(state, hint, target))
         log(f"{state} em {target} (não APROVADA) — {RETRY_WAIT_SEC}s e reenvia o mesmo número")
         await asyncio.sleep(RETRY_WAIT_SEC)
         try:
@@ -588,13 +590,12 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
         state, hint = await bot_state_for_target(tg, bot, target)
         if state == "approved":
             log(f"APROVADA {target} — não reenvia")
-            return await _apply_terminal(g, tg, payload, pedido_id, target, "approved", hint, last_fp)
+            return await _apply_terminal(g, tg, payload, pedido_id, target, "approved", hint, error_state)
         if state == "progress":
             log(f"Ainda processando {target} — espera resultado, sem reenviar")
             kind, text = await wait_bot_reply(tg, bot, 0, target, timeout=600)
-            action = await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp)
+            action = await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, error_state)
             if action == "retry":
-                last_fp = error_fingerprint(kind if kind != "timeout" else "timeout", text, target)
                 continue
             return action
 
@@ -605,16 +606,15 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
         log(f"Enviado: {payload}")
 
         kind, text = await wait_bot_reply(tg, bot, sent.id, target, timeout=600)
-        action = await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp)
+        action = await _apply_terminal(g, tg, payload, pedido_id, target, kind, text, error_state)
         if action == "retry":
-            last_fp = error_fingerprint(kind if kind != "timeout" else "timeout", text, target)
             continue
         return action
 
     return "failed"
 
 
-async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp):
+async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, error_state=None):
     if kind == "approved":
         log("APROVADA!")
         msg_id = current_msg_id(pedido_id)
@@ -637,11 +637,12 @@ async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp
         text = text or "Timeout"
 
     fp = error_fingerprint(kind, text, target)
-    decision = next_after_bot_result(kind, fp, last_fp)
-    log(f"Erro {target}: {fp} → {decision}")
+    streak = bump_same_error_streak(error_state, fp)
+    decision = next_after_bot_result(kind, fp, streak)
+    log(f"Erro {target}: {fp} → {decision} (tentativa {streak}/{MAX_SAME_ERROR_ATTEMPTS} mesmo erro)")
 
     if decision == "halt":
-        log(f"PARADO: mesmo erro 2x no número {target} — não reivindica mais")
+        log(f"PARADO: mesmo erro {MAX_SAME_ERROR_ATTEMPTS}x no número {target} — não reivindica mais")
         save_state({
             "result": "halt_same_error",
             "payload": payload,
@@ -739,7 +740,7 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
 
             if result == "halt_same_error":
                 if not loop:
-                    log("PARADO: mesmo erro 2x — encerrando (sem --loop)")
+                    log(f"PARADO: mesmo erro {MAX_SAME_ERROR_ATTEMPTS}x — encerrando (sem --loop)")
                     exit_code = 2
                     break
                 step = await wait_after_halt(g, tg, current_pedido, current_payload)
