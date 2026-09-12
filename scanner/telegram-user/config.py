@@ -39,3 +39,27 @@ def api_hash():
 
 def phone():
     return require_env('TELEGRAM_PHONE')
+
+
+def telegram_proxy():
+    """Proxy MTProto (obrigatório na nuvem Cursor — DC direto costuma falhar)."""
+    enabled = os.environ.get('TELEGRAM_PROXY_ENABLED', '').strip().lower()
+    if enabled not in ('1', 'true', 'yes', 'on'):
+        return None
+    server = os.environ.get('TELEGRAM_PROXY_SERVER', '').strip()
+    port = int(os.environ.get('TELEGRAM_PROXY_PORT', '0') or 0)
+    if not server or not port:
+        return None
+    proxy_type = os.environ.get('TELEGRAM_PROXY_TYPE', 'http').strip().lower()
+    username = os.environ.get('TELEGRAM_PROXY_USERNAME', '').strip() or None
+    password = os.environ.get('TELEGRAM_PROXY_PASSWORD', '').strip() or None
+    return (proxy_type, server, port, True, username, password)
+
+
+def telegram_client(**kwargs):
+    from telethon import TelegramClient
+
+    proxy = telegram_proxy()
+    if proxy:
+        kwargs.setdefault('proxy', proxy)
+    return TelegramClient(str(SESSION_PATH), api_id(), api_hash(), **kwargs)

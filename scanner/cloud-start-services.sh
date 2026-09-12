@@ -23,7 +23,9 @@ ENV_EXPORT="export XDG_DATA_HOME=$XDG_DATA_HOME; set -a; source $DATA_DIR/.env; 
 run_in_tmux cloud-automation "$ENV_EXPORT; node automation/run.mjs"
 run_in_tmux cloud-telegram-bot "$ENV_EXPORT; node telegram-bot.mjs"
 run_in_tmux cloud-admin "$ENV_EXPORT; node admin/run.mjs"
+bash "$APP_DIR/telegram-user/cloud-start-facil-worker.sh" 2>/dev/null || true
 
 echo "Automação: tmux attach -t cloud-automation"
 echo "Bot:       tmux attach -t cloud-telegram-bot"
 echo "Admin:     tmux attach -t cloud-admin  (http://127.0.0.1:\${ADMIN_PORT:-3080})"
+echo "Worker:    tmux attach -t cloud-facil-worker"

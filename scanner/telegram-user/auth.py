@@ -21,6 +21,7 @@ from config import (
     api_id,
     load_env_file,
     phone,
+    telegram_client,
 )
 
 
@@ -35,7 +36,7 @@ def write_status(**fields):
 
 def client():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return TelegramClient(str(SESSION_PATH), api_id(), api_hash())
+    return telegram_client()
 
 
 async def run_connected(fn):

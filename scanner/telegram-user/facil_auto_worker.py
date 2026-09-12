@@ -13,9 +13,7 @@ import json
 import re
 from datetime import datetime, timezone
 
-from telethon import TelegramClient
-
-from config import DATA_DIR, SESSION_PATH, api_id, api_hash, load_env_file
+from config import DATA_DIR, SESSION_PATH, api_id, api_hash, load_env_file, telegram_client
 from facil_group import (
     BOT_USERNAME,
     GROUP_ID,
@@ -290,8 +288,25 @@ async def claim_one_claro(g, tg):
     if not allowed_group_click(claim_label):
         log(f"RECUSADO clique '{claim_label}'")
         return None, None, None
-    await message.click(text=claim_label)
-    log(f"Clicou Reivindicar em {pedido_id} (msg {message.id})")
+    for click_try in range(3):
+        try:
+            message = await tg.get_messages(g, ids=message.id)
+            labels = [getattr(b, "text", "") for row in (message.buttons or []) for b in row]
+            claim_label = next((lb for lb in labels if is_reivindicar_label(lb)), None)
+            if not claim_label:
+                log(f"Reivindicar sumiu em {pedido_id} (msg {message.id})")
+                return None, None, None
+            await message.click(text=claim_label)
+            log(f"Clicou Reivindicar em {pedido_id} (msg {message.id})")
+            break
+        except Exception as exc:
+            err = str(exc)
+            if click_try < 2 and ("DataInvalid" in err or "Encrypted data invalid" in err):
+                log(f"Reivindicar stale em {pedido_id} — refresh ({click_try + 1}/3)")
+                await asyncio.sleep(1)
+                continue
+            log(f"Falha ao reivindicar {pedido_id}: {err[:120]}")
+            return None, None, None
 
     for wait in range(8):
         await asyncio.sleep(1)
@@ -621,7 +636,7 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
         log("Outro worker já ativo — abortando")
         return 1
 
-    tg = TelegramClient(str(SESSION_PATH), api_id(), api_hash())
+    tg = telegram_client()
     await tg.connect()
     g = await tg.get_entity(GROUP_ID)
     bot = await tg.get_entity(BOT_USERNAME)
@@ -659,19 +674,24 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
             current_payload = payload
             current_pedido = pedido_id
 
-            if not current_payload:
-                current_payload, current_pedido = await acquire_order(g, tg, bot)
+            try:
                 if not current_payload:
-                    if not loop:
-                        log("Sem pedido disponível")
-                        exit_code = 1
-                        break
-                    log(f"Sem pedidos — aguardando {idle_poll}s")
-                    await asyncio.sleep(idle_poll)
-                    continue
+                    current_payload, current_pedido = await acquire_order(g, tg, bot)
+                    if not current_payload:
+                        if not loop:
+                            log("Sem pedido disponível")
+                            exit_code = 1
+                            break
+                        log(f"Sem pedidos — aguardando {idle_poll}s")
+                        await asyncio.sleep(idle_poll)
+                        continue
 
-            result = await process_one_order(g, tg, bot, current_payload, current_pedido, max_cycles)
-            log(f"Resultado {current_pedido}: {result}")
+                result = await process_one_order(g, tg, bot, current_payload, current_pedido, max_cycles)
+                log(f"Resultado {current_pedido}: {result}")
+            except Exception as exc:
+                log(f"ERRO no loop (continua): {exc}")
+                await asyncio.sleep(10)
+                continue
 
             payload = None
             pedido_id = None
