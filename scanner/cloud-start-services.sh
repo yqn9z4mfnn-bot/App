@@ -18,7 +18,7 @@ run_in_tmux() {
   fi
 }
 
-ENV_EXPORT="export XDG_DATA_HOME=$XDG_DATA_HOME; set -a; source $DATA_DIR/.env; set +a; export NUMBERS_DB=$DATA_DIR/numbers.db; export ADMIN_DB=$DATA_DIR/admin.db; cd $APP_DIR"
+ENV_EXPORT="export XDG_DATA_HOME=$XDG_DATA_HOME; set -a; source $DATA_DIR/.env; set +a; export XDG_DATA_HOME=$XDG_DATA_HOME; export NUMBERS_DB=$DATA_DIR/numbers.db; export ADMIN_DB=$DATA_DIR/admin.db; cd $APP_DIR"
 
 run_in_tmux cloud-automation "$ENV_EXPORT; node automation/run.mjs"
 run_in_tmux cloud-telegram-bot "$ENV_EXPORT; node telegram-bot.mjs"
