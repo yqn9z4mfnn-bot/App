@@ -1,0 +1,352 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { classifyCardListAction, isThreedsUnconfirmedOutcome } from '../lib/card-outcome.mjs';
+import { mapAutomationPaymentStatus } from '../lib/automation-client.mjs';
+import { createCardListStore } from '../lib/card-list.mjs';
+import { formatCardMask } from '../lib/card-parse.mjs';
+
+function outcome(status, extra = {}) {
+  return {
+    result: { status, message: extra.message ?? null, gateCode: extra.gateCode ?? null },
+    automation: {
+      raw: {
+        status: extra.rawStatus ?? null,
+        gateCode: extra.gateCode ?? null,
+        gateMessage: extra.gateMessage ?? extra.message ?? null,
+        message: extra.message ?? null,
+        gateResponse: extra.gateResponse ?? null,
+        pagamentoErro: extra.pagamentoErro ?? false,
+      },
+    },
+  };
+}
+
+const cases = [
+  {
+    name: 'PAN não abriu (outcome ERROR + captura HTTP de cards)',
+    input: {
+      outcome: outcome('ERROR', {
+        rawStatus: 'error',
+        message: 'Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).',
+        pagamentoErro: true,
+        gateResponse: { httpStatus: 200, url: 'https://eldorado/cards', body: { cards: [] } },
+      }),
+    },
+    expected: 'return',
+  },
+  {
+    name: 'PAN não abriu (throw)',
+    input: { error: new Error('Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).') },
+    expected: 'return',
+  },
+  {
+    name: 'proxy / fetch failed',
+    input: { error: new Error('fetch failed') },
+    expected: 'return',
+  },
+  {
+    name: 'timeout playwright',
+    input: { error: new Error('page.goto: Timeout 30000ms exceeded') },
+    expected: 'return',
+  },
+  {
+    name: 'TIMEOUT mapeado',
+    input: { outcome: outcome('TIMEOUT', { rawStatus: 'timeout', message: 'Timeout aguardando SSE HTTP' }) },
+    expected: 'return',
+  },
+  {
+    name: 'AUTOMATION_FAIL',
+    input: { outcome: outcome('AUTOMATION_FAIL', { message: 'error_manual' }) },
+    expected: 'return',
+  },
+  {
+    name: 'erro desconhecido (não é gate) devolve',
+    input: { error: new Error('ECONNRESET') },
+    expected: 'return',
+  },
+  {
+    name: 'throw com texto de gate ainda é erro → devolve',
+    input: { error: new Error('CREDIT_CARD - 422 - suspected fraud') },
+    expected: 'return',
+  },
+  {
+    name: 'ERROR de processo (checkout) devolve',
+    input: {
+      outcome: outcome('ERROR', {
+        rawStatus: 'error',
+        message: 'Não foi possível concluir o pagamento',
+        pagamentoErro: true,
+      }),
+    },
+    expected: 'return',
+  },
+  {
+    name: 'INVALID_STATE / field value devolve à fila (Click-to-Pay)',
+    input: {
+      outcome: outcome('AUTOMATION_FAIL', {
+        gateCode: 'INVALID_STATE',
+        message: 'Request cannot be executed due to incorrect field value.',
+      }),
+    },
+    expected: 'return',
+  },
+  {
+    name: 'DENIED real',
+    input: {
+      outcome: outcome('DENIED', {
+        rawStatus: 'error',
+        gateCode: 'DENIED',
+        message: 'Transação negada',
+        gateResponse: { url: '/payments', body: { status: 'DENIED', payments: [{ status: 'DENIED' }] } },
+      }),
+    },
+    expected: 'consumed',
+  },
+  {
+    name: 'fraude da gate',
+    input: {
+      outcome: outcome('DENIED', {
+        gateCode: 'DENIED',
+        message: 'CREDIT_CARD - 422 - suspected fraud',
+        gateResponse: { httpStatus: 422, body: { status: 'DENIED' } },
+      }),
+    },
+    expected: 'consumed',
+  },
+  {
+    name: 'saldo insuficiente',
+    input: { outcome: outcome('DENIED', { message: 'Saldo insuficiente' }) },
+    expected: 'consumed',
+  },
+  {
+    name: '3DS volta pra fila (sem parar no VBV)',
+    input: { outcome: outcome('3DS_REQUIRED', { rawStatus: '3ds_required' }) },
+    expected: 'return',
+    env: { THREEDS_STOP_ON_VBV: '0' },
+  },
+  {
+    name: '3DS consome da fila (THREEDS_STOP_ON_VBV=1)',
+    input: { outcome: outcome('3DS_REQUIRED', { rawStatus: '3ds_required' }) },
+    expected: 'consumed',
+    env: { THREEDS_STOP_ON_VBV: '1' },
+  },
+  {
+    name: '3DS sem confirmação automática consome',
+    input: {
+      outcome: outcome('AUTOMATION_FAIL', {
+        rawStatus: 'error',
+        gateCode: 'ok',
+        message: '3DS sem confirmação automática',
+        gateMessage: '3DS sem confirmação automática',
+      }),
+    },
+    expected: 'consumed',
+    env: { THREEDS_STOP_ON_VBV: '1' },
+  },
+  {
+    name: '3DS + checkout/success é aprovado',
+    input: {
+      outcome: {
+        result: { status: '3DS_REQUIRED', message: '3DS frictionless — aguardando confirmação automática' },
+        automation: {
+          raw: {
+            status: '3ds_required',
+            url: 'https://eldorado.m4u.com.br/bsc/checkout/success?code=452efbfd-378d-4893-b50d-fdca3b9bf7db',
+            gateMessage: '3DS frictionless — aguardando confirmação automática',
+          },
+        },
+      },
+    },
+    expected: 'approved',
+  },
+  {
+    name: 'aprovado',
+    input: { outcome: outcome('CONFIRMED', { rawStatus: 'success' }) },
+    expected: 'approved',
+  },
+  {
+    name: 'DENIED mapeado por engano (PAN + captura cards) devolve',
+    input: {
+      outcome: outcome('DENIED', {
+        rawStatus: 'error',
+        message: 'Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).',
+        pagamentoErro: true,
+        gateResponse: { httpStatus: 200, body: { cards: [] } },
+      }),
+    },
+    expected: 'return',
+  },
+];
+
+const mapCases = [
+  {
+    name: 'map PAN + pagamentoErro + gateResponse cards',
+    pr: {
+      status: 'error',
+      gateMessage: 'Formulário PAN não abriu — checkout pode estar em cartão salvo (CVV só).',
+      pagamentoErro: true,
+      gateResponse: { httpStatus: 200, body: { cards: [] } },
+    },
+    expected: 'AUTOMATION_FAIL',
+  },
+  {
+    name: 'map DENIED real',
+    pr: {
+      status: 'error',
+      gateCode: 'DENIED',
+      gateMessage: 'Transação negada',
+      pagamentoErro: true,
+      gateResponse: { body: { status: 'DENIED' } },
+    },
+    expected: 'DENIED',
+  },
+  {
+    name: 'map fraude',
+    pr: {
+      status: 'error',
+      gateMessage: 'CREDIT_CARD - 422 - suspected fraud',
+      pagamentoErro: true,
+      gateResponse: { httpStatus: 422, body: { status: 'DENIED' } },
+    },
+    expected: 'DENIED',
+  },
+  {
+    name: 'map checkout/error não é 3DS',
+    pr: {
+      status: '3ds_required',
+      gateCode: '3DS',
+      gateMessage: '3DS frictionless — aguardando confirmação automática',
+      url: 'https://eldorado.m4u.com.br/bsc/checkout/error?code=abc',
+    },
+    expected: 'DENIED',
+  },
+  {
+    name: 'map timeout',
+    pr: { status: 'timeout', gateMessage: 'Timeout aguardando SSE HTTP', pagamentoErro: true },
+    expected: 'TIMEOUT',
+  },
+  {
+    name: 'map pagamentoErro sozinho não é gate',
+    pr: { status: 'error', message: 'algo quebrou', pagamentoErro: true, gateResponse: { httpStatus: 200 } },
+    expected: 'AUTOMATION_FAIL',
+  },
+];
+
+let failed = 0;
+
+if (formatCardMask('6516520002817303') !== '651652****7303') {
+  failed += 1;
+  console.error('FAIL formatCardMask full pan');
+}
+if (formatCardMask('1234') !== '****1234') {
+  failed += 1;
+  console.error('FAIL formatCardMask short');
+}
+
+for (const c of cases) {
+  const saved = {};
+  for (const [k, v] of Object.entries(c.env ?? {})) {
+    saved[k] = process.env[k];
+    process.env[k] = v;
+  }
+  const got = classifyCardListAction(c.input);
+  for (const k of Object.keys(saved)) {
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
+  }
+  if (got !== c.expected) {
+    failed += 1;
+    console.error('FAIL classify', c.name, { expected: c.expected, got });
+  }
+}
+
+if (
+  !isThreedsUnconfirmedOutcome(
+    outcome('AUTOMATION_FAIL', { message: '3DS sem confirmação automática' }),
+    '3DS sem confirmação automática',
+  )
+) {
+  failed += 1;
+  console.error('FAIL isThreedsUnconfirmedOutcome detecta timeout 3DS');
+}
+
+for (const c of mapCases) {
+  const got = mapAutomationPaymentStatus(c.pr, {});
+  if (got !== c.expected) {
+    failed += 1;
+    console.error('FAIL map', c.name, { expected: c.expected, got });
+  }
+}
+
+const dir = mkdtempSync(join(tmpdir(), 'card-list-'));
+try {
+  const store = createCardListStore(dir);
+  await store.ingestText('4111111111111111|12|2030|123\n4222222222222222|12|2030|123');
+  const reserved = await store.reserveNextCard(1);
+  if (!reserved?.line) throw new Error('reserva falhou');
+  if (store.countPending() !== 1) throw new Error('reserva deveria deixar 1 na fila');
+
+  const reused = await store.reserveNextCard(1);
+  if (!reused?.reused || reused.pan !== reserved.pan) {
+    failed += 1;
+    console.error('FAIL reserve reutiliza o mesmo chat', reused);
+  } else if (store.countPending() !== 1) {
+    failed += 1;
+    console.error('FAIL reuse queimou outro cartão', store.countPending());
+  }
+
+  const other = await store.reserveNextCard(2);
+  if (!other?.pan || other.pan === reserved.pan) {
+    failed += 1;
+    console.error('FAIL outro chat deveria pegar o segundo', other);
+  }
+
+  const released = await store.releaseAllReservations();
+  if (released.released !== 2 || store.countPending() !== 2 || store.countInUse() !== 0) {
+    failed += 1;
+    console.error('FAIL releaseAllReservations', released, store.countPending(), store.countInUse());
+  }
+
+  const again = await store.reserveNextCard(1);
+  await store.releaseChatReservations(1);
+  if (store.countInUse() !== 0 || store.countPending() !== 2) {
+    failed += 1;
+    console.error('FAIL releaseChatReservations', store.countPending(), store.countInUse(), again);
+  }
+
+  const reserved2 = await store.reserveNextCard(1);
+  const applied = await store.applyOutcome(reserved2.line, 'return', '', 1);
+  if (!applied.returned) {
+    failed += 1;
+    console.error('FAIL applyOutcome return', applied);
+  } else if (store.countPending() !== 2) {
+    failed += 1;
+    console.error('FAIL fila após return', store.countPending());
+  }
+
+  const reserved3 = await store.reserveNextCard(1);
+  const consumedMeta = '2026-08-31 12:00:00 R$35,00 119->219 3DS_SMS — test';
+  const consumedApply = await store.applyOutcome(reserved3.line, 'consumed', consumedMeta, 1);
+  if (store.countConsumed() !== 1 || !consumedApply.removed) {
+    failed += 1;
+    console.error('FAIL applyOutcome consumed', consumedApply, store.countConsumed());
+  } else {
+    const lines = store.loadConsumed();
+    if (!lines[0]?.includes('3DS_SMS') || !lines[0]?.includes(reserved3.line.split('|')[0])) {
+      failed += 1;
+      console.error('FAIL consumed line', lines[0]);
+    }
+  }
+} catch (err) {
+  failed += 1;
+  console.error('FAIL applyOutcome', err);
+} finally {
+  rmSync(dir, { recursive: true, force: true });
+}
+
+if (failed) {
+  console.error(`${failed} falha(s)`);
+  process.exit(1);
+}
+console.log('ok', cases.length, 'classify ·', mapCases.length, 'map · applyOutcome');
