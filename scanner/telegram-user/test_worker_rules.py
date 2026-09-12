@@ -233,6 +233,21 @@ def test_halt_espera_seguir_ou_pedido_fechado():
     assert halt_next_step(True, False) == "retry_same"
 
 
+def test_destino_sem_link_ignora_sem_retentar():
+    from facil_group import classify_bot_response, is_terminal_kind
+    from worker_rules import is_dest_link_skip_error, next_after_bot_result
+
+    t = (
+        "**Destino ignorado** | 💰 **R$30,00** | 📱 `81982973854` | "
+        "__Sem link de recarga Claro — cartão não usado__"
+    )
+    assert classify_bot_response(t) == "skip_dest"
+    assert is_terminal_kind("skip_dest")
+    assert is_dest_link_skip_error("skip_dest", t)
+    assert next_after_bot_result("skip_dest", "81982973854|skip|x", 1, text=t) == "skip_dest"
+    assert next_after_bot_result("denied", "81982973854|denied|x", 1, text=t) == "skip_dest"
+
+
 if __name__ == "__main__":
     tests = [v for k, v in list(globals().items()) if k.startswith("test_")]
     for fn in tests:

@@ -56,6 +56,7 @@ import {
 import { classifyCardListAction } from './lib/card-outcome.mjs';
 import { confirmClaroReload, applyClaroNokToOutcome } from './lib/claro-reload-confirm.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile, normalizeMinhaClaroWebLink } from './lib/fetch-claro-link.mjs';
+import { assertDestCanReceiveRecharge, DestLinkUnreachableError } from './lib/ignored-dest.mjs';
 import { parseLink } from './lib/parse-link.mjs';
 import { describeProxy, resetProxyAgent } from './lib/proxy.mjs';
 import { formatFetchError, isTransientFetchError, sleep } from './lib/transient-fetch.mjs';
@@ -635,6 +636,27 @@ async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = false
     await waitForBrowserSlotAvailable(chatId, queueMsg, queueBubble);
   }
 
+  const destProbe = normalizeBrMobile(
+    flow?.rechargeTargetNumber || entry?.rechargeTargetNumber || '',
+  );
+  const loginProbe = normalizeBrMobile(entry?.msisdn || '');
+  if (destProbe && loginProbe && destProbe !== loginProbe) {
+    try {
+      await assertDestCanReceiveRecharge(destProbe);
+    } catch (err) {
+      if (err instanceof DestLinkUnreachableError || err?.code === 'DEST_LINK_UNREACHABLE') {
+        await editBubble(chatId, queueMsg, {
+          title: 'Destino ignorado',
+          valueLabel: flow?.productName ?? '',
+          login: loginProbe,
+          target: destProbe,
+          hint: 'Sem link de recarga Claro — cartão não usado',
+        });
+        return;
+      }
+    }
+  }
+
   const picked = await pickAutoCardLine(chatId, { skipReuse, skipPans });
   if (!picked) {
     const inUse = cardList.countInUse();
@@ -867,6 +889,20 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
   if (!target || !cents) {
     await send(chatId, '❌ Atalho inválido. Ex: <code>13991019331|Claro|30</code>');
     return;
+  }
+
+  try {
+    await assertDestCanReceiveRecharge(target);
+  } catch (err) {
+    if (err instanceof DestLinkUnreachableError || err?.code === 'DEST_LINK_UNREACHABLE') {
+      await editBubble(chatId, null, {
+        title: 'Destino ignorado',
+        valueLabel: formatBRL(cents),
+        target,
+        hint: 'Sem link de recarga Claro — número não elegível',
+      });
+      return;
+    }
   }
 
   preemptChatWork(chatId);
@@ -1143,6 +1179,29 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     await send(chatId, '❌ Informe o número destino antes do cartão (/start → Outro número).');
     clearRecharge(chatId);
     return;
+  }
+
+  const targetMsisdnEarly = flow.rechargeTargetNumber || entry.rechargeTargetNumber || entry.msisdn;
+  const destEarly = normalizeBrMobile(targetMsisdnEarly);
+  const loginEarly = normalizeBrMobile(entry.msisdn);
+  if (destEarly && loginEarly && destEarly !== loginEarly) {
+    try {
+      await assertDestCanReceiveRecharge(destEarly);
+    } catch (err) {
+      if (err instanceof DestLinkUnreachableError || err?.code === 'DEST_LINK_UNREACHABLE') {
+        busy.delete(chatId);
+        if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
+        await editBubble(chatId, statusMsg, {
+          title: 'Destino ignorado',
+          valueLabel: flow.productName ?? '',
+          login: loginEarly,
+          target: destEarly,
+          hint: 'Sem link de recarga Claro — cartão não usado',
+        });
+        clearRecharge(chatId);
+        return;
+      }
+    }
   }
 
   const useHybrid = useBrowser && isHybridRechargeEnabled();

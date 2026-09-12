@@ -66,10 +66,26 @@ def error_fingerprint(kind, text, target):
     return f"{target}|{kind}|{detail}"
 
 
-def next_after_bot_result(kind, fingerprint, same_error_streak=0):
+def is_dest_link_skip_error(kind, text):
+    """Destino sem link Claro — não retenta, cancela pedido e segue."""
+    if kind == "skip_dest":
+        return True
+    t = text or ""
+    return bool(
+        re.search(
+            r"Destino ignorado|sem link de recarga Claro|Falha ao obter link de recarga da Claro",
+            t,
+            re.I,
+        )
+    )
+
+
+def next_after_bot_result(kind, fingerprint, same_error_streak=0, text=None):
     """Só APROVADA fecha. Erro diferente retenta; mesmo erro consecutivo → halt após N."""
     if kind == "approved":
         return "close"
+    if is_dest_link_skip_error(kind, text):
+        return "skip_dest"
     try:
         streak = int(same_error_streak or 0)
     except (TypeError, ValueError):

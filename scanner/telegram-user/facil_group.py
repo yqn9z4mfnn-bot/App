@@ -43,7 +43,7 @@ def is_feita_final(text):
     return bool(re.search(r"Status:\s*✅\s*\*\*Feita\*\*|Status:\s*✅\s*Feita", t, re.I))
 
 
-TERMINAL_KINDS = frozenset({"approved", "denied", "3ds", "fail", "fail_login"})
+TERMINAL_KINDS = frozenset({"approved", "denied", "3ds", "fail", "fail_login", "skip_dest"})
 
 # Títulos/hints que o bot edita enquanto a recarga ainda corre — NÃO são erro.
 PROGRESS_RE = re.compile(
@@ -90,6 +90,12 @@ def classify_bot_response(text):
         return "denied"
     if re.search(r"Não iniciou|NAO iniciou", t, re.I):
         return "fail_login"
+    if re.search(
+        r"Destino ignorado|sem link de recarga Claro|Falha ao obter link de recarga da Claro",
+        t,
+        re.I,
+    ):
+        return "skip_dest"
     if FINAL_FAIL_RE.search(t):
         return "fail"
     if PROGRESS_RE.search(t):

@@ -37,6 +37,7 @@ from worker_rules import (
     MAX_SAME_ERROR_ATTEMPTS,
     bump_same_error_streak,
     halt_next_step,
+    is_dest_link_skip_error,
     is_reivindicar_label,
     is_stale_progress,
     next_after_bot_result,
@@ -459,7 +460,7 @@ async def reconcile_open_orders(g, tg, bot, open_orders):
             if await close_order_in_group(g, tg, pid, log=log, anchor_msg_id=msg_id):
                 changed = True
             continue
-        if state in ("3ds", "denied", "fail", "fail_login"):
+        if state in ("3ds", "denied", "fail", "fail_login", "skip_dest"):
             log(f"Reconcile: {target} {state} — cancelando {pid}")
             if await cancel_order_in_group(g, tg, pid, log=log, anchor_msg_id=msg_id):
                 changed = True
@@ -636,10 +637,42 @@ async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, error_s
         kind = "timeout"
         text = text or "Timeout"
 
+    if is_dest_link_skip_error(kind, text):
+        log(f"Destino {target} sem link Claro — cancelando pedido {pedido_id}")
+        msg_id = current_msg_id(pedido_id)
+        cancelled = await cancel_order_in_group(
+            g, tg, pedido_id, log=log, anchor_msg_id=msg_id
+        )
+        clear_current_pedido()
+        save_state({
+            "result": "skipped_dest",
+            "payload": payload,
+            "pedido_id": pedido_id,
+            "target": target,
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
+        return "skipped_dest" if cancelled else "skip_dest_unconfirmed"
+
     fp = error_fingerprint(kind, text, target)
     streak = bump_same_error_streak(error_state, fp)
-    decision = next_after_bot_result(kind, fp, streak)
+    decision = next_after_bot_result(kind, fp, streak, text=text)
     log(f"Erro {target}: {fp} → {decision} (tentativa {streak}/{MAX_SAME_ERROR_ATTEMPTS} mesmo erro)")
+
+    if decision == "skip_dest":
+        log(f"Destino {target} sem link Claro — cancelando pedido {pedido_id}")
+        msg_id = current_msg_id(pedido_id)
+        cancelled = await cancel_order_in_group(
+            g, tg, pedido_id, log=log, anchor_msg_id=msg_id
+        )
+        clear_current_pedido()
+        save_state({
+            "result": "skipped_dest",
+            "payload": payload,
+            "pedido_id": pedido_id,
+            "target": target,
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
+        return "skipped_dest" if cancelled else "skip_dest_unconfirmed"
 
     if decision == "halt":
         log(f"PARADO: mesmo erro {MAX_SAME_ERROR_ATTEMPTS}x no número {target} — não reivindica mais")
@@ -747,6 +780,11 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
                 if step == "retry_same":
                     payload = current_payload
                     pedido_id = current_pedido
+                continue
+
+            if result in ("skipped_dest", "skip_dest_unconfirmed"):
+                log(f"Destino ignorado — próximo pedido")
+                await asyncio.sleep(3)
                 continue
 
             if result == "blocked":
