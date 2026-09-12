@@ -325,7 +325,25 @@ async def claim_one_claro(g, tg):
     return None, None, None
 
 
-async def bot_has_active_job(tg, bot, exclude_target=None, limit=15):
+def bot_message_target(text):
+    digits = re.findall(r"\d{10,11}", (text or "").replace("`", ""))
+    return digits[-1] if digits else None
+
+
+async def group_has_feita_for_target(g, tg, target, limit=300):
+    if not target or not g:
+        return False
+    digits = re.sub(r"\D", "", str(target))
+    async for m in tg.iter_messages(g, limit=limit):
+        text = m.text or ""
+        if digits not in re.sub(r"\D", "", text.replace("`", "")):
+            continue
+        if is_feita_final(text):
+            return True
+    return False
+
+
+async def bot_has_active_job(tg, bot, exclude_target=None, limit=15, g=None):
     """Só considera ocupado se há recarga em andamento de verdade."""
     async for m in tg.iter_messages(bot, limit=limit):
         if m.out:
@@ -340,6 +358,9 @@ async def bot_has_active_job(tg, bot, exclude_target=None, limit=15):
         if kind == "approved":
             continue
         if kind == "progress":
+            other = bot_message_target(text)
+            if other and await group_has_feita_for_target(g, tg, other):
+                continue
             return True, text[:100]
     return False, ""
 
@@ -489,7 +510,7 @@ async def acquire_order(g, tg, bot):
         log("BLOQUEADO: pedidos abertos sumiram após reconcile")
         return None, None
 
-    busy, hint = await bot_has_active_job(tg, bot)
+    busy, hint = await bot_has_active_job(tg, bot, g=g)
     if busy:
         log(f"Bot ocupado — aguardando antes de reivindicar ({hint})")
         return None, None
@@ -508,6 +529,18 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
     """Qualquer coisa ≠ APROVADA: espera 60s e reenvia o mesmo número. Mesmo erro 2x → para."""
     target = payload_target(payload)
     last_fp = None
+
+    if await pedido_ja_feita(g, tg, pedido_id, anchor_msg_id=current_msg_id(pedido_id)):
+        log(f"Pedido {pedido_id} já Feita no grupo — encerrando")
+        clear_current_pedido()
+        save_state({
+            "result": "closed",
+            "payload": payload,
+            "pedido_id": pedido_id,
+            "note": "already_feita",
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
+        return "closed"
 
     state, hint = await bot_state_for_target(tg, bot, target)
     if state == "approved":
@@ -546,7 +579,7 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
             await tg.connect()
 
     for cycle in range(1, max_cycles + 1):
-        busy, busy_hint = await bot_has_active_job(tg, bot, exclude_target=target)
+        busy, busy_hint = await bot_has_active_job(tg, bot, exclude_target=target, g=g)
         if busy:
             log(f"Outro job no bot — aguardando 15s ({busy_hint})")
             await asyncio.sleep(15)

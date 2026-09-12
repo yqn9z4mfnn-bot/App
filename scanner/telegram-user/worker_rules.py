@@ -7,6 +7,8 @@ STALE_PROGRESS_SEC = 15 * 60
 CONFIRMING_STALE_SEC = 3 * 60
 # Checkout abandonado (restart/crash) — não bloqueia reivindicar novo pedido.
 CHECKOUT_STALE_SEC = 5 * 60
+# "Verificando fila" abandonado após recarga já concluída no backend.
+QUEUE_VERIFY_STALE_SEC = 3 * 60
 
 
 def payload_target(payload):
@@ -52,7 +54,7 @@ def error_fingerprint(kind, text, target):
     t = re.sub(r"\s+", " ", (text or ""))
     t = t.replace("`", "")
     m = re.search(
-        r"Falha no login \([^)]+\)|Too Many Requests|CART[AÃ]O BLOQUEADO|"
+        r"Too Many Requests|Falha no login \([^)]+\)|CART[AÃ]O BLOQUEADO|"
         r"N[aã]o iniciou|NEGAD\w*|RECUSAD\w*|Validação 3DS",
         t,
         re.I,
@@ -66,6 +68,8 @@ def next_after_bot_result(kind, fingerprint, last_fingerprint):
     """Só APROVADA fecha. Qualquer outra coisa: retry ou halt se erro idêntico 2x."""
     if kind == "approved":
         return "close"
+    if kind == "fail_login" or "too many requests" in fingerprint or "429" in fingerprint:
+        return "retry"
     if last_fingerprint and fingerprint == last_fingerprint:
         return "halt"
     return "retry"
@@ -76,6 +80,8 @@ def stale_threshold_sec(text=None):
         return CONFIRMING_STALE_SEC
     if re.search(r"Aguardando checkout", text or "", re.I):
         return CHECKOUT_STALE_SEC
+    if re.search(r"Verificando fila", text or "", re.I):
+        return QUEUE_VERIFY_STALE_SEC
     return STALE_PROGRESS_SEC
 
 
@@ -94,6 +100,8 @@ def stale_progress_as(text):
     """Bolha abandonada: Conferindo saldo = pagamento já passou."""
     if re.search(r"Conferindo saldo", text or "", re.I):
         return "approved"
+    if re.search(r"Verificando fila", text or "", re.I):
+        return "idle"
     return "idle"
 
 

@@ -204,6 +204,10 @@ def test_progresso_velho_nao_trava_worker():
     assert is_stale_progress("progress", 4 * 60, text=checkout) is False
     assert stale_progress_as(conferindo) == "approved"
     assert stale_progress_as("**Preparando**\n__Gerando login…__") == "idle"
+    fila = "**Recarga automática**\n__Verificando fila do navegador…__"
+    assert is_stale_progress("progress", 4 * 60, text=fila) is True
+    assert is_stale_progress("progress", 2 * 60, text=fila) is False
+    assert stale_progress_as(fila) == "idle"
 
 
 def test_halt_espera_seguir_ou_pedido_fechado():
