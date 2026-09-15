@@ -497,7 +497,7 @@ async def reconcile_open_orders(g, tg, bot, open_orders):
             if await close_order_in_group(g, tg, pid, log=log, anchor_msg_id=msg_id):
                 changed = True
             continue
-        if state in ("3ds", "denied", "fail", "fail_login", "skip_dest"):
+        if state in ("denied", "fail", "fail_login", "skip_dest"):
             log(f"Reconcile: {target} {state} — cancelando {pid}")
             if await cancel_order_in_group(g, tg, pid, log=log, anchor_msg_id=msg_id):
                 changed = True
@@ -706,6 +706,14 @@ async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, error_s
             "at": datetime.now(timezone.utc).isoformat(),
         })
         return "skipped_dest" if cancelled else "skip_dest_unconfirmed"
+
+    if kind == "3ds":
+        log(
+            f"3DS em {target} — automação pode ainda estar na gate; "
+            f"aguarda {RETRY_WAIT_SEC}s e relê o bot (sem contar erro)"
+        )
+        await asyncio.sleep(RETRY_WAIT_SEC)
+        return "retry"
 
     fp = error_fingerprint(kind, text, target)
     streak = bump_same_error_streak(error_state, fp)

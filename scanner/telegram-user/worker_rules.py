@@ -97,6 +97,9 @@ def next_after_bot_result(kind, fingerprint, same_error_streak=0, text=None):
     """Só APROVADA fecha. Erro diferente retenta; mesmo erro consecutivo → halt após N."""
     if kind == "approved":
         return "close"
+    # 3DS visual no bot pode aparecer enquanto a automação ainda conclui a gate — nunca parar a fila.
+    if kind == "3ds":
+        return "retry"
     if is_dest_link_skip_error(kind, text):
         return "skip_dest"
     try:
