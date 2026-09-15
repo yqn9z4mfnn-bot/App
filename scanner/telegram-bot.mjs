@@ -1353,31 +1353,43 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
 
     if (isRechargeSuccess(outcome) && destKey) {
       const pack = destBalanceByChat.get(chatId) || { dest: destKey };
-      const afterSnap = await snapshotDestBalanceUntilChange(destKey, pack.before, {
-        sessionId: pack.sessionId,
-        onAttempt: ({ attempt, total, waitMs }) =>
-          editBubble(chatId, statusMsg, {
-            ...runBubble,
-            title: 'Conferindo saldo',
-            hint:
-              attempt === 1
-                ? 'Lendo saldo e validade após a recarga…'
-                : `A API atrasou — nova leitura ${attempt}/${total} (${Math.round(waitMs / 1000)}s)…`,
-          }).catch(() => {}),
-      });
-      pack.after = afterSnap.ok ? afterSnap.balance : null;
-      pack.sessionId = afterSnap.sessionId ?? pack.sessionId;
-      destBalanceByChat.set(chatId, pack);
-      destBalanceText = formatBalanceCompare(pack.before, pack.after, {
-        stale: afterSnap.ok && afterSnap.changed === false,
-      });
-      if (afterSnap.ok) {
-        console.log(
-          `[bot] saldo depois dest=${destKey} ${afterSnap.balance.cents}c val=${afterSnap.balance.expiration || '—'} tent=${afterSnap.attempts} mudou=${afterSnap.changed}`,
+      const prepaidUnavailable = !pack.before && pack.error === 'sem saldo prepaid';
+      if (prepaidUnavailable) {
+        console.warn(
+          `[bot] saldo depois dest=${destKey} pulado — API prepaid indisponível (404)`,
         );
+        destBalanceText = [
+          '📊 Saldo do destino',
+          'Antes: API prepaid indisponível nesta linha',
+          'Depois: (pulado — confira no app Claro)',
+        ].join('\n');
       } else {
-        console.warn(`[bot] saldo depois dest=${destKey} falhou: ${afterSnap.error}`);
-        destBalanceText = formatBalanceCompare(pack.before, null);
+        const afterSnap = await snapshotDestBalanceUntilChange(destKey, pack.before, {
+          sessionId: pack.sessionId,
+          onAttempt: ({ attempt, total, waitMs }) =>
+            editBubble(chatId, statusMsg, {
+              ...runBubble,
+              title: 'Conferindo saldo',
+              hint:
+                attempt === 1
+                  ? 'Lendo saldo e validade após a recarga…'
+                  : `A API atrasou — nova leitura ${attempt}/${total} (${Math.round(waitMs / 1000)}s)…`,
+            }).catch(() => {}),
+        });
+        pack.after = afterSnap.ok ? afterSnap.balance : null;
+        pack.sessionId = afterSnap.sessionId ?? pack.sessionId;
+        destBalanceByChat.set(chatId, pack);
+        destBalanceText = formatBalanceCompare(pack.before, pack.after, {
+          stale: afterSnap.ok && afterSnap.changed === false,
+        });
+        if (afterSnap.ok) {
+          console.log(
+            `[bot] saldo depois dest=${destKey} ${afterSnap.balance.cents}c val=${afterSnap.balance.expiration || '—'} tent=${afterSnap.attempts} mudou=${afterSnap.changed}`,
+          );
+        } else {
+          console.warn(`[bot] saldo depois dest=${destKey} falhou: ${afterSnap.error}`);
+          destBalanceText = formatBalanceCompare(pack.before, null);
+        }
       }
     }
 

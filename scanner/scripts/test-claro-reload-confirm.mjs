@@ -3,6 +3,7 @@ import {
   isClaroReloadNok,
   isClaroReloadOk,
   applyClaroNokToOutcome,
+  shouldDenyOnClaroNok,
   CLARO_NOK_MESSAGE,
 } from '../lib/claro-reload-confirm.mjs';
 import { isRechargeSuccess } from '../lib/recharge-format.mjs';
@@ -41,11 +42,16 @@ const confirmed = {
 check('antes success', isRechargeSuccess(confirmed));
 check('antes approved', classifyCardListAction({ outcome: confirmed }) === 'approved');
 
+check('gate confirmado não nega', shouldDenyOnClaroNok(confirmed) === false);
+
 const flipped = applyClaroNokToOutcome(confirmed, { status: 'nok' });
-check('vira denied', flipped.result.status === 'DENIED', flipped.result);
-check('msg nok', flipped.result.message === CLARO_NOK_MESSAGE);
-check('depois não success', isRechargeSuccess(flipped) === false);
-check('fila consome', classifyCardListAction({ outcome: flipped }) === 'consumed');
+check('mantém success', isRechargeSuccess(flipped) === true);
+check('aviso claro', flipped.claroConfirmWarning === CLARO_NOK_MESSAGE);
+check('fila approved', classifyCardListAction({ outcome: flipped }) === 'approved');
+
+const pending = { result: { status: 'PENDING' }, automation: { raw: { status: 'pending' } } };
+const denied = applyClaroNokToOutcome(pending, { status: 'nok' });
+check('sem gate vira denied', denied.result.status === 'DENIED');
 
 if (failed) {
   console.error(`${failed} falha(s)`);

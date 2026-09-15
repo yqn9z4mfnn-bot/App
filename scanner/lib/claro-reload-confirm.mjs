@@ -2,6 +2,7 @@ import { fetchRecharges } from './claro.mjs';
 import { openDestSession } from './line-balance.mjs';
 import { normalizeBrMobile } from './fetch-claro-link.mjs';
 import { sleep } from './transient-fetch.mjs';
+import { isRechargeSuccess } from './recharge-format.mjs';
 
 export const CLARO_NOK_MESSAGE = 'Claro: recarga não efetivada (nok)';
 
@@ -105,9 +106,22 @@ export async function confirmClaroReload({
   return { checked: false, status: 'unknown', error: lastErr };
 }
 
-/** Se a Claro marcou nok, o outcome de CONFIRMED vira negada. */
+/** Eldorado CONFIRMED prevalece — histórico Claro nok vira aviso (worker/bot mantêm APROVADA). */
+export function shouldDenyOnClaroNok(outcome) {
+  if ((process.env.CLARO_NOK_STRICT || '').trim() === '1') return true;
+  return !isRechargeSuccess(outcome);
+}
+
+/** Se a Claro marcou nok, o outcome de CONFIRMED vira negada (salvo gate já confirmada). */
 export function applyClaroNokToOutcome(outcome, confirm) {
   if (!outcome || confirm?.status !== 'nok') return outcome;
+  if (!shouldDenyOnClaroNok(outcome)) {
+    return {
+      ...outcome,
+      claroConfirm: confirm,
+      claroConfirmWarning: CLARO_NOK_MESSAGE,
+    };
+  }
   const message = CLARO_NOK_MESSAGE;
   const result = {
     ...(outcome.result || {}),
