@@ -97,6 +97,8 @@ import {
   PAUSE_USER_MESSAGE,
   invalidateBotPauseCache,
 } from './lib/bot-pause.mjs';
+import fs from 'node:fs';
+import { join } from 'node:path';
 import { logRechargeEvent } from './lib/recharge-events.mjs';
 import { getDataDir } from './lib/data-dir.mjs';
 import { parseQuickCrossRecharge } from './lib/quick-cross-recharge.mjs';
@@ -104,6 +106,24 @@ import { parseQuickCrossRecharge } from './lib/quick-cross-recharge.mjs';
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DATA_DIR = getDataDir();
 const cardList = createCardListStore(DATA_DIR);
+const BOT_HEARTBEAT_PATH = join(DATA_DIR, 'bot-heartbeat.json');
+
+function touchBotHeartbeat(extra = {}) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(
+      BOT_HEARTBEAT_PATH,
+      `${JSON.stringify({
+        at: Date.now(),
+        pid: process.pid,
+        uptimeSec: Math.floor(process.uptime()),
+        ...extra,
+      })}\n`,
+    );
+  } catch {
+    /* ignore */
+  }
+}
 
 if (!TOKEN) {
   console.error('Defina TELEGRAM_BOT_TOKEN');
@@ -2967,6 +2987,7 @@ async function poll() {
         },
         { timeoutMs: 90_000, retries: 1 },
       );
+      touchBotHeartbeat({ poll: 'ok', updates: updates.length });
 
       const now = Date.now();
       if (now - lastBeat >= 30_000) {
