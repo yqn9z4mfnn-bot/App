@@ -772,6 +772,7 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
 
     pending_confirm = None
     exit_code = 0
+    empty_poll_streak = 0
 
     try:
         while True:
@@ -815,6 +816,18 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
                 if not current_payload:
                     current_payload, current_pedido = await acquire_order(g, tg, bot)
                     if not current_payload:
+                        empty_poll_streak += 1
+                        if empty_poll_streak >= 3:
+                            log(
+                                "Sem pedidos 3x — reconectando Telethon "
+                                "(sessão MTProto pode ter ficado cega ao grupo)"
+                            )
+                            try:
+                                await tg.disconnect()
+                            except Exception:
+                                pass
+                            await tg.connect()
+                            empty_poll_streak = 0
                         if not loop:
                             log("Sem pedido disponível")
                             exit_code = 1
@@ -822,6 +835,7 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
                         log(f"Sem pedidos — aguardando {idle_poll}s")
                         await asyncio.sleep(idle_poll)
                         continue
+                    empty_poll_streak = 0
 
                 result = await process_one_order(g, tg, bot, current_payload, current_pedido, max_cycles)
                 log(f"Resultado {current_pedido}: {result}")
