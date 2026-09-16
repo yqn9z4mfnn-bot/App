@@ -317,7 +317,7 @@ export function pickLinkForValue(valueCents, { excludeMsisdn, excludeMsisdns } =
              AND n.status = 'ok'
              AND n.link IS NOT NULL
              AND n.msisdn NOT IN (${exclude.map(() => '?').join(', ')})
-           ORDER BY n.scanned_at ASC
+           ORDER BY RANDOM()
            LIMIT 1`,
         )
         .get(cents, ...exclude)
@@ -329,7 +329,7 @@ export function pickLinkForValue(valueCents, { excludeMsisdn, excludeMsisdns } =
            WHERE nv.value_cents = ?
              AND n.status = 'ok'
              AND n.link IS NOT NULL
-           ORDER BY n.scanned_at ASC
+           ORDER BY RANDOM()
            LIMIT 1`,
         )
         .get(cents);
