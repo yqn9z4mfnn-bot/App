@@ -24,8 +24,9 @@ $TMUX new-session -d -s cloud-facil-worker -c "$DIR" -- bash -lc "
   set -a; source '$DIR/.env'; set +a
   [ -f '$BOT_ENV' ] && set -a && source '$BOT_ENV' && set +a
   export TELEGRAM_USER_DATA='$DATA'
-  export TELEGRAM_PROXY_ENABLED=\${TELEGRAM_PROXY_ENABLED:-\${PROXY_ENABLED:-0}}
-  export TELEGRAM_PROXY_TYPE=\${TELEGRAM_PROXY_TYPE:-http}
+  # MTProto: SOCKS5 ok; HTTP Smartproxy corrompe a sessão → worker não vê pedidos no grupo.
+  export TELEGRAM_PROXY_ENABLED=\${TELEGRAM_PROXY_ENABLED:-1}
+  export TELEGRAM_PROXY_TYPE=socks5
   export TELEGRAM_PROXY_SERVER=\${TELEGRAM_PROXY_SERVER:-\${PROXY_SERVER:-}}
   export TELEGRAM_PROXY_PORT=\${TELEGRAM_PROXY_PORT:-\${PROXY_PORT:-}}
   export TELEGRAM_PROXY_USERNAME=\${TELEGRAM_PROXY_USERNAME:-\${PROXY_USERNAME:-}}
