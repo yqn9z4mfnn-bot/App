@@ -2542,12 +2542,21 @@ async function withCheckoutHeartbeat(chatId, statusMsg, runBubble, fn, { interva
   }
 }
 
+async function automationHealthOrRetry({ tries = 10, delayMs = 600 } = {}) {
+  for (let i = 0; i < tries; i += 1) {
+    const health = await automationHealth().catch(() => null);
+    if (health) return health;
+    if (i < tries - 1) await sleep(delayMs);
+  }
+  return null;
+}
+
 /** Bloqueia até haver vaga de navegador — nada da recarga começa antes disso. */
 async function waitForBrowserSlotAvailable(chatId, statusMsg, runBubble) {
   const waitMs = Math.max(5000, Number(process.env.SESSION_SLOT_WAIT_MS) || 600_000);
   const deadline = Date.now() + waitMs;
   while (Date.now() < deadline) {
-    const health = await automationHealth().catch(() => null);
+    const health = await automationHealthOrRetry();
     if (!health) throw new Error('Automação indisponível — tente de novo.');
     const alive = Number(health.aliveSessions ?? 0);
     const pending = Number(health.pendingSlots ?? 0);
