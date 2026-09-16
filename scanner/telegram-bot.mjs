@@ -98,7 +98,6 @@ import {
   invalidateBotPauseCache,
 } from './lib/bot-pause.mjs';
 import fs from 'node:fs';
-import { join } from 'node:path';
 import { logRechargeEvent } from './lib/recharge-events.mjs';
 import { getDataDir } from './lib/data-dir.mjs';
 import { parseQuickCrossRecharge } from './lib/quick-cross-recharge.mjs';
