@@ -107,7 +107,7 @@ export function logRechargeEvent({
 }) {
   try {
     const { gateCode, gateMessage } = extractGate(outcome, error);
-    insertRechargeEvent({
+    const eventId = insertRechargeEvent({
       chatId: chatId != null ? String(chatId) : null,
       username,
       loginMsisdn,
@@ -123,8 +123,10 @@ export function logRechargeEvent({
       durationMs: startedAt ? Date.now() - startedAt : null,
       rawJson: { outcome: outcome ?? null, error: error?.message ?? null },
     });
+    return eventId;
   } catch (err) {
     console.warn('[recharge-events]', err.message);
+    return null;
   }
 }
 

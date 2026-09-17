@@ -111,6 +111,14 @@ import {
 import { logRechargeEvent } from './lib/recharge-events.mjs';
 import { getDataDir } from './lib/data-dir.mjs';
 import { parseQuickCrossRecharge } from './lib/quick-cross-recharge.mjs';
+import {
+  assertCanStartRecharge,
+  chargeRechargeAttempt,
+  createPixDepositForUser,
+  formatWalletBrl,
+  formatWalletHelp,
+  buildPixAmountKeyboard,
+} from './lib/user-wallet.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DATA_DIR = getDataDir();
@@ -162,6 +170,7 @@ function shouldBlockPaused({ text = '', callbackData = '', chatId = null, allowA
     if (text === '/status' || text.startsWith('/status@')) return false;
   }
   if (isReadOnlyWhenPaused(text)) return false;
+  if (callbackData && callbackData.startsWith('wallet:')) return false;
   if (callbackData && !isRechargeCallback(callbackData)) return false;
   return true;
 }
@@ -427,6 +436,28 @@ async function promptRechargeMode(chatId) {
   clearDestBalance(chatId);
   chatRechargeMode.delete(chatId);
   await send(chatId, WELCOME, { reply_markup: buildRechargeModeKeyboard() });
+}
+
+async function promptWalletSaldo(chatId) {
+  await send(chatId, formatWalletHelp(chatId), { reply_markup: buildPixAmountKeyboard() });
+}
+
+async function sendPixInvoice(chatId, valueCents) {
+  const dep = await createPixDepositForUser(chatId, valueCents);
+  const code = String(dep.qrCode ?? '').trim();
+  if (!code) throw new Error('PushinPay não retornou código PIX');
+  const safeCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  await send(
+    chatId,
+    [
+      `<b>PIX — ${formatWalletBrl(dep.valueCents)}</b>`,
+      '',
+      'Copie o código abaixo no app do banco:',
+      `<code>${safeCode}</code>`,
+      '',
+      'Quando o pagamento confirmar, seu saldo é atualizado automaticamente.',
+    ].join('\n'),
+  );
 }
 
 async function purgeLoginCards(chatId, statusMsg, bubble, { sessionId, msisdn, productId }) {
@@ -1172,6 +1203,14 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     return;
   }
 
+  const walletGate = assertCanStartRecharge(chatId);
+  if (!walletGate.ok) {
+    busy.delete(chatId);
+    if (listLine) await cardApplyOutcome(chatId, listLine, 'return', '', listOwner);
+    await send(chatId, walletGate.message);
+    return;
+  }
+
   const useHybrid = useBrowser && isHybridRechargeEnabled();
   const epochAtStart = workEpoch.get(chatId);
   let scheduledAutoRetry = false;
@@ -1275,7 +1314,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       }
     }
 
-    logRechargeEvent({
+    const rechargeEventId = logRechargeEvent({
       chatId,
       username: telegramUser?.username ?? null,
       loginMsisdn: entry.msisdn,
@@ -1287,6 +1326,14 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
       startedAt,
     });
+    const feeResult = chargeRechargeAttempt(chatId, {
+      confirmed: isRechargeSuccess(outcome),
+      rechargeEventId,
+    });
+    let walletFooter = '';
+    if (feeResult.ok && !feeResult.skipped && feeResult.balanceCents != null) {
+      walletFooter = `\n\n💰 Saldo: <b>${formatWalletBrl(feeResult.balanceCents)}</b>`;
+    }
 
     let queueFooter = '';
     if (listLine) {
@@ -1353,7 +1400,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       targetMsisdn,
     };
     const report = formatRechargeResult(resultPayload, {
-      footer: queueFooter,
+      footer: `${queueFooter}${walletFooter}`,
       attempts: attemptLog,
       balance: destBalanceText,
     });
@@ -1373,7 +1420,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       await send(chatId, report, { reply_markup: retryKb });
     }
   } catch (err) {
-    logRechargeEvent({
+    const rechargeEventId = logRechargeEvent({
       chatId,
       username: telegramUser?.username ?? null,
       loginMsisdn: entry.msisdn,
@@ -1385,6 +1432,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
       startedAt,
     });
+    chargeRechargeAttempt(chatId, { confirmed: false, rechargeEventId });
 
     let queueFooter = '';
     if (listLine) {
@@ -1870,6 +1918,25 @@ async function handleCallback(query) {
   }
 
   await tg('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {});
+
+  if (data === 'wallet:saldo' || data === 'wallet:back') {
+    await promptWalletSaldo(chatId);
+    return;
+  }
+
+  if (data.startsWith('wallet:pix:')) {
+    const cents = Number(data.slice('wallet:pix:'.length));
+    if (!Number.isFinite(cents) || cents < 500) {
+      await send(chatId, '❌ Valor inválido. Mínimo R$ 5,00.');
+      return;
+    }
+    try {
+      await sendPixInvoice(chatId, cents);
+    } catch (err) {
+      await send(chatId, `❌ PIX: ${err.message.replace(/</g, '&lt;')}`);
+    }
+    return;
+  }
 
   if (data === 'recarga:start') {
     await startRechargePicker(chatId);
@@ -2549,6 +2616,30 @@ async function handleMessage(msg) {
       return;
     }
 
+    if (text === '/saldo' || text.startsWith('/saldo@')) {
+      await promptWalletSaldo(chatId);
+      return;
+    }
+
+    if (/^\/pix(\@\S+)?(\s|$)/i.test(text)) {
+      const arg = text.replace(/^\/pix(\@\S+)?\s*/i, '').trim();
+      if (!arg) {
+        await promptWalletSaldo(chatId);
+        return;
+      }
+      const reais = Number(arg.replace(',', '.'));
+      if (!Number.isFinite(reais) || reais < 5) {
+        await send(chatId, '❌ Informe um valor em reais (mínimo <b>5</b>), ex: <code>/pix 20</code>');
+        return;
+      }
+      try {
+        await sendPixInvoice(chatId, Math.round(reais * 100));
+      } catch (err) {
+        await send(chatId, `❌ PIX: ${err.message.replace(/</g, '&lt;')}`);
+      }
+      return;
+    }
+
     if (text === '/recarga' || text.startsWith('/recarga@')) {
       await startRechargePicker(chatId);
       return;
@@ -2673,6 +2764,8 @@ async function main() {
     commands: [
       { command: 'start', description: '🏠 Início e recarga' },
       { command: 'recarga', description: '💳 Escolher valor e pagar' },
+      { command: 'saldo', description: '💰 Ver saldo e tarifas' },
+      { command: 'pix', description: '➕ Adicionar saldo via PIX' },
       { command: 'status', description: '🟢 Bot online' },
       { command: 'pausar', description: '⏸ Pausar recargas (admin)' },
       { command: 'retomar', description: '▶ Retomar recargas (admin)' },

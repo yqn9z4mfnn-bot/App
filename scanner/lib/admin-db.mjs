@@ -98,6 +98,31 @@ export function openAdminDb() {
       value TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS user_balances (
+      chat_id TEXT PRIMARY KEY,
+      balance_cents INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS balance_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at INTEGER NOT NULL,
+      chat_id TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      ref_id TEXT,
+      detail TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_ledger_chat ON balance_ledger(chat_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS pix_deposits (
+      pushin_id TEXT PRIMARY KEY,
+      chat_id TEXT NOT NULL,
+      value_cents INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      paid_at INTEGER,
+      raw_json TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_pix_deposits_chat ON pix_deposits(chat_id, created_at DESC);
   `);
   const pausedRow = database.prepare('SELECT value FROM bot_settings WHERE key = ?').get('paused');
   if (!pausedRow) {
@@ -113,6 +138,11 @@ export function openAdminDb() {
 function getDb() {
   if (!db) db = openAdminDb();
   return db;
+}
+
+/** Mesma conexão SQLite usada pelo painel/bot (WAL). */
+export function getAdminDb() {
+  return getDb();
 }
 
 export function createAdminSession() {

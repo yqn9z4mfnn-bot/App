@@ -40,7 +40,10 @@ export function isReadOnlyWhenPaused(text = '') {
     t === '/help' ||
     t.startsWith('/help@') ||
     t === '/erros' ||
-    t.startsWith('/erros@')
+    t.startsWith('/erros@') ||
+    t === '/saldo' ||
+    t.startsWith('/saldo@') ||
+    /^\/pix(\@\S+)?(\s|$)/i.test(t)
   );
 }
 

@@ -37,6 +37,7 @@ import { describeProxy, proxyEnabled } from '../lib/proxy.mjs';
 import { repairRechargeRow } from '../lib/recharge-events.mjs';
 import { backfillApprovedRecharges } from '../lib/approved-backfill.mjs';
 import { invalidateBotPauseCache } from '../lib/bot-pause.mjs';
+import { handlePushinPixWebhook, validatePushinWebhookRequest } from '../lib/user-wallet.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
@@ -222,6 +223,19 @@ async function proxyAutomation(path, opts = {}) {
 export function startAdminServer() {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
+
+  app.post('/api/webhooks/pushinpay/pix', async (req, res) => {
+    try {
+      if (!validatePushinWebhookRequest(req)) {
+        return res.status(401).json({ error: 'webhook não autorizado' });
+      }
+      const result = await handlePushinPixWebhook(req.body ?? {});
+      return res.status(200).json({ ok: true, ...result });
+    } catch (err) {
+      console.error('[wallet] webhook pushin:', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  });
 
   app.post('/api/login', (req, res) => {
     const password = String(req.body?.password ?? '');

@@ -132,6 +132,7 @@ export function buildRechargeModeKeyboard() {
     inline_keyboard: [
       [{ text: '📱 Mesmo número', callback_data: 'rcgmode:same' }],
       [{ text: '🔀 Outro número', callback_data: 'rcgmode:other' }],
+      [{ text: '💰 Saldo / PIX', callback_data: 'wallet:saldo' }],
     ],
   };
 }
