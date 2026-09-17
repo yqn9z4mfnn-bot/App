@@ -167,17 +167,24 @@ export function upsertTelegramUser(from, { incrementMessages = 1 } = {}) {
         chatId,
       );
   } else {
+    const bootstrapIds = String(process.env.TELEGRAM_ADMIN_IDS || process.env.TELEGRAM_ADMIN_CHAT_ID || '')
+      .split(/[,;\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const isBootstrapAdmin = bootstrapIds.includes(chatId);
     getDb()
       .prepare(
         `INSERT INTO telegram_users
           (chat_id, username, first_name, last_name, allowed, is_admin, first_seen, last_seen, message_count)
-         VALUES (?, ?, ?, ?, 1, 0, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         chatId,
         from.username ?? null,
         from.first_name ?? null,
         from.last_name ?? null,
+        isBootstrapAdmin ? 1 : 0,
+        isBootstrapAdmin ? 1 : 0,
         now,
         now,
         incrementMessages,
@@ -192,8 +199,9 @@ export function getTelegramUser(chatId) {
 }
 
 export function isTelegramUserAllowed(chatId) {
+  if (isTelegramUserAdmin(chatId)) return true;
   const row = getTelegramUser(chatId);
-  if (!row) return true;
+  if (!row) return false;
   return row.allowed === 1;
 }
 
@@ -263,6 +271,18 @@ export function listTelegramUsers({ limit = 100, offset = 0 } = {}) {
   return getDb()
     .prepare('SELECT * FROM telegram_users ORDER BY last_seen DESC LIMIT ? OFFSET ?')
     .all(limit, offset);
+}
+
+export function listTelegramAdmins() {
+  return getDb().prepare('SELECT chat_id, username, first_name FROM telegram_users WHERE is_admin = 1').all();
+}
+
+export function listTelegramUsersPendingApproval({ limit = 50 } = {}) {
+  return getDb()
+    .prepare(
+      'SELECT * FROM telegram_users WHERE allowed = 0 AND is_admin = 0 ORDER BY first_seen DESC LIMIT ?',
+    )
+    .all(Math.max(1, Number(limit) || 50));
 }
 
 export function countTelegramUsers() {

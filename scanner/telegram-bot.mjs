@@ -48,11 +48,22 @@ import {
 } from './lib/line-balance.mjs';
 import { parseCardInput, CARD_INPUT_HINT, randomHolderName, formatCardMask } from './lib/card-parse.mjs';
 import {
-  createCardListStore,
   looksLikeCardsTxt,
   extractCardLinesFromText,
   MAX_CARD_LINES_PER_INGEST,
 } from './lib/card-list.mjs';
+import { createCardListRouter } from './lib/card-list-router.mjs';
+import {
+  registerTelegramUser,
+  accessDeniedMessage,
+  notifyAdminsNewUser,
+  approveUser,
+  denyUser,
+  formatPendingUsersList,
+  resolveUserTarget,
+  findUserByUsername,
+  parseBootstrapAdminIds,
+} from './lib/telegram-access.mjs';
 import { classifyCardListAction } from './lib/card-outcome.mjs';
 import { confirmClaroReload, applyClaroNokToOutcome } from './lib/claro-reload-confirm.mjs';
 import { fetchClaroLoginLink, looksLikeMsisdn, normalizeBrMobile, normalizeMinhaClaroWebLink } from './lib/fetch-claro-link.mjs';
@@ -80,6 +91,8 @@ import {
   isTelegramUserAllowed,
   isTelegramUserAdmin,
   setBotPaused,
+  listTelegramAdmins,
+  listTelegramUsers,
 } from './lib/admin-db.mjs';
 import {
   isBotPaused,
@@ -95,7 +108,19 @@ import { parseQuickCrossRecharge } from './lib/quick-cross-recharge.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DATA_DIR = getDataDir();
-const cardList = createCardListStore(DATA_DIR);
+const cardList = createCardListRouter(DATA_DIR, {
+  isAdmin: (id) => isTelegramUserAdmin(id),
+  listKnownUserIds: () => listTelegramUsers({ limit: 2000 }).map((u) => u.chat_id),
+});
+
+function cardListOwnerId(chatId, flow) {
+  return flow?.cardListOwnerId ?? String(chatId);
+}
+
+async function cardApplyOutcome(chatId, line, action, meta, ownerId) {
+  if (!line) return null;
+  return cardList.applyOutcome(line, action, meta, chatId, ownerId);
+}
 
 if (!TOKEN) {
   console.error('Defina TELEGRAM_BOT_TOKEN');
@@ -381,7 +406,7 @@ function planRechargeRetry(chatId, { flow, entry, targetMsisdn, listLine, outcom
     outcome,
     error,
     autoRetriesUsed: attemptsInRound,
-    pendingCards: cardList.countPending(),
+    pendingCards: cardList.countPending(chatId),
   });
   return { showRetryButton: !autoRetry, autoRetry };
 }
@@ -599,11 +624,12 @@ async function promptCardLine(chatId) {
   });
 }
 
-function payMethodKeyboard(cards) {
-  const pending = cardList.countPending();
-  const inUse = cardList.countInUse();
+function payMethodKeyboard(cards, chatId) {
+  const pending = cardList.countPending(chatId);
+  const inUse = cardList.countInUse(chatId);
   const label = inUse > 0 ? `${pending} fila · ${inUse} em uso` : `${pending}`;
-  return buildPayMethodKeyboard(cards, { pendingCards: pending, queueLabel: label });
+  const scope = isTelegramUserAdmin(chatId) ? ' (todas as filas)' : '';
+  return buildPayMethodKeyboard(cards, { pendingCards: pending, queueLabel: `${label}${scope}` });
 }
 
 async function pickAutoCardLine(chatId, { skipReuse = false, skipPans = [] } = {}) {
@@ -630,12 +656,12 @@ async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = false
 
   const picked = await pickAutoCardLine(chatId, { skipReuse, skipPans });
   if (!picked) {
-    const inUse = cardList.countInUse();
+    const inUse = cardList.countInUse(chatId);
     await send(
       chatId,
       inUse > 0
         ? `❌ Nenhum cartão livre na fila (<b>${inUse}</b> em uso por outras sessões).\n\nAguarde ou use cartão manual.`
-        : '❌ Lista <code>cards-pending.txt</code> vazia.\n\nEnvie um <b>.txt</b> com um cartão por linha:\n<code>NUMERO|MM|AAAA|CVV</code>',
+        : '❌ Sua fila de GG está vazia.\n\nEnvie um <b>.txt</b> ou linhas <code>NUMERO|MM|AAAA|CVV</code> (só na sua conta).',
     );
     return;
   }
@@ -643,6 +669,7 @@ async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = false
   if (flow) {
     flow.autoPay = true;
     flow.cardListLine = picked.line;
+    flow.cardListOwnerId = picked.cardOwnerId ?? String(chatId);
     rechargeFlow.set(chatId, flow);
   }
 
@@ -822,7 +849,7 @@ async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
     autoPay: true,
   });
 
-  const pending = cardList.countPending();
+  const pending = cardList.countPending(chatId);
   if (pending > 0 || retry.useAuto !== false) {
     await editBubble(chatId, statusMsg, {
       title: 'Nova tentativa',
@@ -845,7 +872,7 @@ async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
       target: prep.target,
       hint: 'Envie cartões ou escolha manual',
     },
-    { reply_markup: payMethodKeyboard([]) },
+    { reply_markup: payMethodKeyboard([], chatId) },
   );
   rechargeFlow.get(chatId).step = 'pick_card';
 }
@@ -866,8 +893,8 @@ async function startQuickCrossAutoRecharge(chatId, { targetMsisdn, valueCents })
   resetRetryRound(chatId);
   clearDestBalance(chatId);
 
-  if (cardList.countPending() === 0) {
-    const inUse = cardList.countInUse();
+  if (cardList.countPending(chatId) === 0) {
+    const inUse = cardList.countInUse(chatId);
     await send(
       chatId,
       inUse > 0
@@ -1038,7 +1065,7 @@ async function onValueSelected(chatId, messageId, productId) {
   }
 
   const hasCards = entry.cards?.length > 0;
-  const pendingCards = cardList.countPending();
+  const pendingCards = cardList.countPending(chatId);
   await editBubble(
     chatId,
     { message_id: messageId },
@@ -1049,7 +1076,7 @@ async function onValueSelected(chatId, messageId, productId) {
       target: flow.rechargeTargetNumber || entry.msisdn,
       hint: 'Automático ou cartão manual',
     },
-    { reply_markup: payMethodKeyboard(entry.cards) },
+    { reply_markup: payMethodKeyboard(entry.cards, chatId) },
   );
 
   if (!hasCards && pendingCards === 0) {
@@ -1062,26 +1089,26 @@ async function onValueSelected(chatId, messageId, productId) {
 }
 
 async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: incomingStatus = null } = {}) {
-  if (isBotPaused()) {
-    const flow = rechargeFlow.get(chatId);
-    const listLine = cardListLine ?? flow?.cardListLine ?? null;
-    if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
-    clearRecharge(chatId);
-    return;
-  }
   const entry = getCache(chatId);
   const flow = rechargeFlow.get(chatId);
   let listLine = cardListLine ?? flow?.cardListLine ?? null;
+  const listOwner = cardListOwnerId(chatId, flow);
+
+  if (isBotPaused()) {
+    if (listLine) await cardApplyOutcome(chatId, listLine, 'return', '', listOwner);
+    clearRecharge(chatId);
+    return;
+  }
 
   if (!entry?.sessionId || !flow?.productId) {
-    if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
+    if (listLine) await cardApplyOutcome(chatId, listLine, 'return', '', listOwner);
     await send(chatId, '❌ Sessão expirada. Comece de novo com /recarga');
     clearRecharge(chatId);
     return;
   }
 
   if (busy.has(chatId)) {
-    if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
+    if (listLine) await cardApplyOutcome(chatId, listLine, 'return', '', listOwner);
     await send(chatId, '⏳ Aguarde…');
     return;
   }
@@ -1117,6 +1144,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       }
       listLine = adHoc.line;
       flow.cardListLine = listLine;
+      flow.cardListOwnerId = String(chatId);
       rechargeFlow.set(chatId, flow);
     }
   }
@@ -1132,7 +1160,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
 
   if ((flow.mode === 'other' || entry.awaitTargetMsisdn) && !entry.rechargeTargetNumber) {
     busy.delete(chatId);
-    if (listLine) await cardList.applyOutcome(listLine, 'return', '', chatId);
+    if (listLine) await cardApplyOutcome(chatId, listLine, 'return', '', listOwner);
     await send(chatId, '❌ Informe o número destino antes do cartão (/start → Outro número).');
     clearRecharge(chatId);
     return;
@@ -1261,7 +1289,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
         action === 'return'
           ? ''
           : buildCardListArchiveMeta({ outcome, error: null, entry, targetMsisdn, flow, action });
-      const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
+      const applied = await cardApplyOutcome(chatId, listLine, action, meta, listOwner);
       queueFooter = formatQueueFooter(action, applied.pendingLeft);
     }
 
@@ -1324,7 +1352,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       balance: destBalanceText,
     });
     const retryKb = plan.showRetryButton
-      ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
+      ? buildRetryKeyboard({ autoAvailable: cardList.countPending(chatId) > 0 })
       : undefined;
     try {
       await tg('editMessageText', {
@@ -1359,7 +1387,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
         action === 'return'
           ? ''
           : buildCardListArchiveMeta({ outcome: null, error: err, entry, targetMsisdn, flow, action });
-      const applied = await cardList.applyOutcome(listLine, action, meta, chatId);
+      const applied = await cardApplyOutcome(chatId, listLine, action, meta, listOwner);
       queueFooter = formatQueueFooter(action, applied.pendingLeft);
     }
 
@@ -1381,7 +1409,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     });
     scheduledAutoRetry = plan.autoRetry;
     const retryKb = plan.showRetryButton
-      ? buildRetryKeyboard({ autoAvailable: cardList.countPending() > 0 })
+      ? buildRetryKeyboard({ autoAvailable: cardList.countPending(chatId) > 0 })
       : undefined;
     const multi = attemptLog.length > 1;
 
@@ -1437,7 +1465,7 @@ async function handleRechargeInput(chatId, text) {
     rechargeFlow.set(chatId, flow);
 
     const hasCards = entry.cards?.length > 0;
-    const pendingCards = cardList.countPending();
+    const pendingCards = cardList.countPending(chatId);
     await editBubble(
       chatId,
       null,
@@ -1448,7 +1476,7 @@ async function handleRechargeInput(chatId, text) {
         target,
         hint: hasCards || pendingCards > 0 ? 'Automático ou cartão manual' : 'Envie os dados do cartão',
       },
-      hasCards || pendingCards > 0 ? { reply_markup: payMethodKeyboard(entry.cards) } : undefined,
+      hasCards || pendingCards > 0 ? { reply_markup: payMethodKeyboard(entry.cards, chatId) } : undefined,
     );
     if (!hasCards && pendingCards === 0) {
       flow.step = 'card_line';
@@ -1807,13 +1835,16 @@ async function handleCallback(query) {
   const data = query.data;
 
   if (query.from) {
-    upsertTelegramUser(query.from);
-    if (!isTelegramUserAllowed(chatId)) {
+    const access = registerTelegramUser(query.from);
+    if (!access.allowed) {
       await tg('answerCallbackQuery', {
         callback_query_id: query.id,
-        text: 'Acesso bloqueado.',
+        text: access.pending ? 'Aguardando aprovação do admin.' : 'Acesso bloqueado.',
         show_alert: true,
       }).catch(() => {});
+      if (access.pending) {
+        await notifyAdminsNewUser((id, html) => send(id, html), access.user);
+      }
       return;
     }
   }
@@ -1987,7 +2018,7 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
     await send(chatId, '❌ Nenhuma linha de cartão válida.\n\nFormato: <code>NUMERO|MM|AAAA|CVV</code>');
     return;
   }
-  const result = await cardList.ingestText(cardLines.join('\n'));
+  const result = await cardList.ingestText(chatId, cardLines.join('\n'));
   const leftover = extracted.truncated ? extracted.total - cardLines.length : 0;
   const lines = [
     '<b>💳 Cartões adicionados à fila</b>',
@@ -2005,10 +2036,10 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
       : null,
     result.invalid ? `⚠️ Linhas inválidas: <b>${result.invalid}</b>` : null,
     '',
-    `Total na fila: <b>${result.total}</b>`,
-    `Em uso agora: <b>${result.inUse ?? cardList.countInUse()}</b>`,
-    `Aprovados (histórico): <b>${cardList.countApproved()}</b>`,
-    `Consumidos (VBV/negada): <b>${cardList.countConsumed()}</b> (<code>cards-consumed.txt</code>)`,
+    `Total na <b>sua</b> fila: <b>${result.total}</b>`,
+    `Em uso agora: <b>${result.inUse ?? cardList.countInUse(chatId)}</b>`,
+    `Aprovados (histórico): <b>${cardList.countApproved(chatId)}</b>`,
+    `Consumidos (VBV/negada): <b>${cardList.countConsumed(chatId)}</b>`,
     '',
     '<i>Duplicata = mesmo número já na fila, em uso ou em aprovados.</i>',
     '',
@@ -2089,14 +2120,17 @@ function collectActiveRechargeChatIds() {
   return [...ids];
 }
 
-async function buildStatusMessage() {
+async function buildStatusMessage(chatId) {
   const pause = isBotPaused();
   const pauseLine = pause ? '\n⏸ <b>Pausado</b> — recargas suspensas' : '\n▶ Recargas ativas';
   const lines = [`${pause ? '🟡' : '🟢'} <b>Online</b> · ${Math.floor(process.uptime())}s${pauseLine}`, ''];
 
-  const pending = cardList.countPending();
-  const inUse = cardList.countInUse();
-  lines.push(`💳 <b>Fila de cartões:</b> ${pending} pendente${pending === 1 ? '' : 's'} · ${inUse} em uso`);
+  const counts = cardList.countsFor(chatId);
+  const scope =
+    counts.scope === 'all' ? ' (todas as filas — admin)' : ' (só sua fila)';
+  lines.push(
+    `💳 <b>GG:</b> ${counts.pending} pendente${counts.pending === 1 ? '' : 's'} · ${counts.inUse} em uso${scope}`,
+  );
 
   const activeIds = collectActiveRechargeChatIds();
   if (activeIds.length) {
@@ -2162,11 +2196,11 @@ async function waitForBrowserSlotAvailable(chatId, statusMsg, runBubble) {
 }
 
 async function sendCartoesFila(chatId) {
-  const pending = cardList.countPending();
-  const approved = cardList.countApproved();
-  const consumed = cardList.countConsumed();
-  const inUse = cardList.countInUse();
-  const next = cardList.peekPendingLine();
+  const pending = cardList.countPending(chatId);
+  const approved = cardList.countApproved(chatId);
+  const consumed = cardList.countConsumed(chatId);
+  const inUse = cardList.countInUse(chatId);
+  const next = cardList.peekPendingLine(chatId);
   let nextMask = '—';
   if (next) {
     const parsed = parseCardInput(next);
@@ -2335,6 +2369,44 @@ async function handleTxtDocument(chatId, document) {
   }
 }
 
+async function handleAdminUserCommands(chatId, text, msg) {
+  if (!isTelegramUserAdmin(chatId)) return false;
+  const t = String(text ?? '').trim();
+  if (t === '/pendentes' || t.startsWith('/pendentes@')) {
+    await send(chatId, formatPendingUsersList());
+    return true;
+  }
+  if (/^\/(aprovar|autorizar)(@\S+)?(\s|$)/i.test(t)) {
+    const arg = t.replace(/^\/(aprovar|autorizar)(@\S+)?\s*/i, '').trim();
+    let targetId = resolveUserTarget(arg, msg.reply_to_message?.from);
+    if (targetId && typeof targetId === 'object' && targetId.username) {
+      targetId = findUserByUsername(targetId.username);
+    }
+    if (!targetId) {
+      await send(chatId, 'Uso: <code>/aprovar ID</code> ou responda à mensagem do usuário.');
+      return true;
+    }
+    await approveUser(targetId, (id, html) => send(id, html));
+    await send(chatId, `✅ Acesso liberado: <code>${targetId}</code>`);
+    return true;
+  }
+  if (/^\/(negar|desautorizar)(@\S+)?(\s|$)/i.test(t)) {
+    const arg = t.replace(/^\/(negar|desautorizar)(@\S+)?\s*/i, '').trim();
+    let targetId = resolveUserTarget(arg, msg.reply_to_message?.from);
+    if (targetId && typeof targetId === 'object' && targetId.username) {
+      targetId = findUserByUsername(targetId.username);
+    }
+    if (!targetId) {
+      await send(chatId, 'Uso: <code>/negar ID</code> ou responda à mensagem do usuário.');
+      return true;
+    }
+    await denyUser(targetId, (id, html) => send(id, html));
+    await send(chatId, `🚫 Acesso negado: <code>${targetId}</code>`);
+    return true;
+  }
+  return false;
+}
+
 async function handleMessage(msg) {
   const chatId = msg.chat?.id;
   const text = msg.text?.trim() ?? '';
@@ -2347,9 +2419,13 @@ async function handleMessage(msg) {
     }
 
     if (msg.from) {
-      upsertTelegramUser(msg.from);
-      if (!isTelegramUserAllowed(chatId)) {
-        await send(chatId, '🚫 Acesso bloqueado pelo administrador.');
+      const access = registerTelegramUser(msg.from);
+      if (await handleAdminUserCommands(chatId, text, msg)) return;
+      if (!access.allowed) {
+        await send(chatId, accessDeniedMessage(access.user));
+        if (access.pending) {
+          await notifyAdminsNewUser((id, html) => send(id, html), access.user);
+        }
         return;
       }
     }
@@ -2464,7 +2540,7 @@ async function handleMessage(msg) {
     }
 
     if (text === '/status' || text.startsWith('/status@')) {
-      await send(chatId, await buildStatusMessage());
+      await send(chatId, await buildStatusMessage(chatId));
       return;
     }
 
@@ -2528,6 +2604,17 @@ async function poll() {
 }
 
 async function main() {
+  const admins = listTelegramAdmins();
+  const bootstrap = [...parseBootstrapAdminIds()];
+  const migrateOwner =
+    admins[0]?.chat_id ?? bootstrap[0] ?? null;
+  if (migrateOwner) {
+    const mig = cardList.migrateLegacyCardFiles(migrateOwner);
+    if (mig.migrated) {
+      console.log(`[bot] fila GG legada migrada para usuário ${mig.ownerId}`);
+    }
+  }
+
   const released = await cardList.releaseAllReservations();
   if (released.released) {
     console.log(`[bot] ${released.released} reserva(s) órfã(s) devolvida(s) à fila (${released.pendingLeft} pendente(s))`);
@@ -2548,6 +2635,8 @@ async function main() {
       { command: 'status', description: '🟢 Bot online' },
       { command: 'pausar', description: '⏸ Pausar recargas (admin)' },
       { command: 'retomar', description: '▶ Retomar recargas (admin)' },
+      { command: 'pendentes', description: '👥 Quem aguarda aprovação (admin)' },
+      { command: 'aprovar', description: '✅ Liberar usuário (admin)' },
     ],
   }).catch(() => {});
   poll();

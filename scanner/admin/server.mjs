@@ -31,7 +31,7 @@ import {
   listErrors,
   listValueStock,
 } from '../lib/numbers-db.mjs';
-import { createCardListStore } from '../lib/card-list.mjs';
+import { createCardListRouter } from '../lib/card-list-router.mjs';
 import { parseCardInput } from '../lib/card-parse.mjs';
 import { describeProxy, proxyEnabled } from '../lib/proxy.mjs';
 import { repairRechargeRow } from '../lib/recharge-events.mjs';
@@ -41,7 +41,10 @@ import { invalidateBotPauseCache } from '../lib/bot-pause.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
 const DATA_DIR = getDataDir();
-const cardList = createCardListStore(DATA_DIR);
+const cardList = createCardListRouter(DATA_DIR, {
+  isAdmin: () => true,
+  listKnownUserIds: () => listTelegramUsers({ limit: 2000 }).map((u) => u.chat_id),
+});
 
 const ADMIN_PORT = Number(process.env.ADMIN_PORT || 3080);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -266,12 +269,15 @@ export function startAdminServer() {
         { total: 0, ok: 0, withValues: 0, errors: 0 },
       ),
       cards: safeCall(
-        () => ({
-          pending: cardList.countPending(),
-          approved: cardList.countApproved(),
-          consumed: cardList.countConsumed(),
-          inUse: cardList.countInUse(),
-        }),
+        () => {
+          const c = cardList.countsFor('admin');
+          return {
+            pending: c.pending,
+            approved: c.approved,
+            consumed: c.consumed,
+            inUse: c.inUse,
+          };
+        },
         { pending: 0, approved: 0, consumed: 0, inUse: 0 },
       ),
       users: safeCall(() => countTelegramUsers(), 0),
@@ -342,48 +348,53 @@ export function startAdminServer() {
   app.get('/api/cards', requireAuth, (req, res) => {
     const reveal = req.query.reveal === '1';
     const mapLine = (line) => (reveal ? line : maskPan(line));
-    let reservations = [];
-    try {
-      if (existsSync(cardList.reservedPath)) {
-        reservations = JSON.parse(readFileSync(cardList.reservedPath, 'utf8')).reservations ?? [];
-      }
-    } catch {
-      reservations = [];
-    }
-
-    const pendingAll = cardList.loadPending();
-    const approvedAll = cardList.loadApproved();
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 80));
+    const agg = cardList.aggregateForAdmin({ limit });
+    const reserved = [];
+    for (const ownerId of cardList.listOwnerIds()) {
+      const store = cardList.ownerStore(ownerId);
+      try {
+        if (existsSync(store.reservedPath)) {
+          const rows = JSON.parse(readFileSync(store.reservedPath, 'utf8')).reservations ?? [];
+          for (const r of rows) {
+            reserved.push({ ...r, ownerId });
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
     res.json({
-      pending: pendingAll.slice(0, limit).map(mapLine),
-      approved: approvedAll.slice(-limit).map(mapLine),
-      reserved: reservations.map((r) => ({
+      pending: agg.pending.slice(0, limit).map((p) => ({
+        ownerId: p.ownerId,
+        line: mapLine(p.line),
+      })),
+      approved: agg.approved.slice(-limit).map((p) => ({
+        ownerId: p.ownerId,
+        line: mapLine(p.line),
+      })),
+      reserved: reserved.map((r) => ({
+        ownerId: r.ownerId,
         chatId: r.chatId,
         reservedAt: r.reservedAt,
         pan: r.pan ? `****${String(r.pan).slice(-4)}` : null,
         line: reveal ? r.line : maskPan(r.line),
       })),
-      counts: {
-        pending: pendingAll.length,
-        approved: approvedAll.length,
-        inUse: cardList.countInUse(),
-        pendingShown: Math.min(limit, pendingAll.length),
-        approvedShown: Math.min(limit, approvedAll.length),
-      },
+      counts: agg.counts,
     });
   });
 
   app.post('/api/cards/pending', requireAuth, async (req, res) => {
     const text = String(req.body?.text ?? '');
     if (!text.trim()) return res.status(400).json({ error: 'text vazio' });
-    const stats = await cardList.ingestText(text);
-    insertAudit('admin', 'cards_ingest', 'pending', stats);
+    const stats = await cardList.ingestTextGlobal(text);
+    insertAudit('admin', 'cards_ingest', 'pending_global', stats);
     res.json(stats);
   });
 
   app.delete('/api/cards/pending', requireAuth, (_req, res) => {
-    writeFileSync(cardList.pendingPath, '', 'utf8');
-    insertAudit('admin', 'cards_clear', 'pending');
+    cardList.clearAllPending();
+    insertAudit('admin', 'cards_clear', 'pending_all');
     res.json({ cleared: true });
   });
 
@@ -724,7 +735,8 @@ export function startAdminServer() {
   }
 
   try {
-    const bf = backfillApprovedRecharges(cardList.loadApproved());
+    const approvedLines = cardList.aggregateForAdmin({ limit: 100_000 }).approved.map((p) => p.line);
+    const bf = backfillApprovedRecharges(approvedLines);
     if (bf.inserted) {
       console.log(`[admin] backfill aprovados → recargas: +${bf.inserted} (arquivo ${bf.approved})`);
     }
