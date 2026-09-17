@@ -59,7 +59,7 @@ export function openAdminDb() {
       username TEXT,
       first_name TEXT,
       last_name TEXT,
-      allowed INTEGER NOT NULL DEFAULT 1,
+      allowed INTEGER NOT NULL DEFAULT 0,
       is_admin INTEGER NOT NULL DEFAULT 0,
       first_seen INTEGER NOT NULL,
       last_seen INTEGER NOT NULL,
@@ -132,7 +132,35 @@ export function openAdminDb() {
   if (!cols.includes('card_bin')) {
     database.exec('ALTER TABLE recharge_events ADD COLUMN card_bin TEXT');
   }
+  migrateNonAdminRequireApproval(database);
   return database;
+}
+
+/** Usuários legados tinham allowed=1 sem /aprovar; só admins entram sem aprovação. */
+function migrateNonAdminRequireApproval(database) {
+  const flag = database.prepare('SELECT value FROM bot_settings WHERE key = ?').get('non_admin_require_approval_v1');
+  if (flag?.value === '1') return;
+  const info = database
+    .prepare('UPDATE telegram_users SET allowed = 0 WHERE is_admin = 0 AND allowed = 1')
+    .run();
+  const now = Date.now();
+  database
+    .prepare(
+      `INSERT INTO bot_settings (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    )
+    .run('non_admin_require_approval_v1', '1', now);
+  if (info.changes > 0) {
+    database
+      .prepare('INSERT INTO audit_log (created_at, actor, action, entity, detail) VALUES (?, ?, ?, ?, ?)')
+      .run(
+        now,
+        'system',
+        'non_admin_require_approval',
+        'telegram_users',
+        JSON.stringify({ revokedCount: info.changes }),
+      );
+  }
 }
 
 function getDb() {
@@ -241,9 +269,14 @@ export function isTelegramUserAdmin(chatId) {
 }
 
 export function setTelegramUserAdmin(chatId, isAdmin) {
-  getDb()
-    .prepare('UPDATE telegram_users SET is_admin = ? WHERE chat_id = ?')
-    .run(isAdmin ? 1 : 0, String(chatId));
+  const id = String(chatId);
+  if (isAdmin) {
+    getDb()
+      .prepare('UPDATE telegram_users SET is_admin = 1, allowed = 1 WHERE chat_id = ?')
+      .run(id);
+  } else {
+    getDb().prepare('UPDATE telegram_users SET is_admin = 0 WHERE chat_id = ?').run(id);
+  }
 }
 
 export function getBotSetting(key) {
