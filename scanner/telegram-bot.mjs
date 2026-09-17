@@ -2689,7 +2689,7 @@ async function handleMessage(msg) {
 
     if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@')) {
       if (isBotPaused()) {
-        await send(chatId, `${PAUSE_USER_MESSAGE}\n\nComandos de consulta ainda funcionam: /status, /valor`);
+        await send(chatId, `${PAUSE_USER_MESSAGE}\n\nComandos de consulta ainda funcionam: /status`);
       }
       await promptRechargeMode(chatId);
       return;
@@ -2697,21 +2697,6 @@ async function handleMessage(msg) {
 
     if (/^\/(cancelar|cancel)(@|\s|$)/i.test(text)) {
       await send(chatId, '↩️ Fluxo cancelado. Envie a recarga ou /start.');
-      return;
-    }
-
-    if (text.startsWith('/valor')) {
-      const arg = text.replace(/^\/valor(@\S+)?\s*/, '').trim();
-      if (!arg) {
-        await send(chatId, 'Uso: <code>/valor 20</code> ou <code>/valor 15,00</code> — envia link de um número com esse valor.');
-        return;
-      }
-      const cents = parseReaisToCents(arg);
-      if (!cents) {
-        await send(chatId, 'Uso: <code>/valor 20</code> ou <code>/valor 15,00</code>');
-        return;
-      }
-      await sendLinkForValue(chatId, cents);
       return;
     }
 
@@ -2817,7 +2802,7 @@ async function handleMessage(msg) {
       } else {
         await send(
           chatId,
-          '❌ Envie um <b>.txt</b>, um valor (<code>20</code>), o número ou o link JWT.\nOu <code>/valor 20</code> para link por valor.',
+          '❌ Envie um <b>.txt</b>, um valor (<code>20</code>), o número ou o link JWT.',
         );
       }
       return;
@@ -2891,7 +2876,6 @@ async function main() {
   await tg('setMyCommands', {
     commands: [
       { command: 'start', description: '🏠 Início e recarga' },
-      { command: 'valor', description: '💰 Link por valor (ex: /valor 20)' },
       { command: 'recarga', description: '💳 Escolher valor e pagar' },
       { command: 'status', description: '🟢 Bot online' },
       { command: 'pausar', description: '⏸ Pausar recargas (admin)' },
