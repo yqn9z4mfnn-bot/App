@@ -112,8 +112,8 @@ import { logRechargeEvent } from './lib/recharge-events.mjs';
 import { getDataDir } from './lib/data-dir.mjs';
 import { parseQuickCrossRecharge } from './lib/quick-cross-recharge.mjs';
 import {
-  assertCanStartRecharge,
-  chargeRechargeAttempt,
+  reserveRechargeFee,
+  settleRechargeFee,
   createPixDepositForUser,
   formatWalletBrl,
   formatWalletHelp,
@@ -1203,11 +1203,11 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
     return;
   }
 
-  const walletGate = assertCanStartRecharge(chatId);
-  if (!walletGate.ok) {
+  const walletHold = reserveRechargeFee(chatId, { refId: startedAt });
+  if (!walletHold.ok && !walletHold.skipped) {
     busy.delete(chatId);
     if (listLine) await cardApplyOutcome(chatId, listLine, 'return', '', listOwner);
-    await send(chatId, walletGate.message);
+    await send(chatId, walletHold.message);
     return;
   }
 
@@ -1215,6 +1215,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
   const epochAtStart = workEpoch.get(chatId);
   let scheduledAutoRetry = false;
   let destBalanceText = '';
+  let walletFeeSettled = Boolean(walletHold.skipped);
 
   try {
     const destKey = normalizeBrMobile(targetMsisdn);
@@ -1326,10 +1327,12 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
       startedAt,
     });
-    const feeResult = chargeRechargeAttempt(chatId, {
+    const feeResult = settleRechargeFee(chatId, {
       confirmed: isRechargeSuccess(outcome),
       rechargeEventId,
+      refId: startedAt,
     });
+    walletFeeSettled = true;
     let walletFooter = '';
     if (feeResult.ok && !feeResult.skipped && feeResult.balanceCents != null) {
       walletFooter = `\n\n💰 Saldo: <b>${formatWalletBrl(feeResult.balanceCents)}</b>`;
@@ -1432,7 +1435,8 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       mode: useBrowser ? (useHybrid ? 'hybrid' : 'browser') : 'api',
       startedAt,
     });
-    chargeRechargeAttempt(chatId, { confirmed: false, rechargeEventId });
+    settleRechargeFee(chatId, { confirmed: false, rechargeEventId, refId: startedAt });
+    walletFeeSettled = true;
 
     let queueFooter = '';
     if (listLine) {
@@ -1481,6 +1485,9 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
       { reply_markup: retryKb },
     ).catch(() => {});
   } finally {
+    if (!walletFeeSettled && walletHold.reservedCents) {
+      settleRechargeFee(chatId, { confirmed: false, refId: startedAt });
+    }
     busy.delete(chatId);
     clearRecharge(chatId);
   }

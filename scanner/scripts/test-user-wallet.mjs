@@ -9,15 +9,15 @@ process.env.WALLET_ADMIN_FREE = '0';
 const { openAdminDb } = await import('../lib/admin-db.mjs');
 const {
   creditUserBalance,
-  debitUserBalance,
-  chargeRechargeAttempt,
-  assertCanStartRecharge,
   getUserBalanceCents,
+  reserveRechargeFee,
+  settleRechargeFee,
+  assertCanStartRecharge,
   processPushinPixWebhook,
   RECHARGE_FEE_CONFIRMED_CENTS,
   RECHARGE_FEE_UNCONFIRMED_CENTS,
 } = await import('../lib/user-wallet.mjs');
-const { upsertTelegramUser } = await import('../lib/admin-db.mjs');
+const { upsertTelegramUser, getAdminDb } = await import('../lib/admin-db.mjs');
 
 openAdminDb();
 upsertTelegramUser({ id: 12345, username: 'test' }, { incrementMessages: 0 });
@@ -37,13 +37,17 @@ creditUserBalance('12345', 1000, { kind: 'test' });
 check('saldo 10', getUserBalanceCents('12345') === 1000);
 check('gate 3', assertCanStartRecharge('12345').ok);
 
-const d1 = chargeRechargeAttempt('12345', { confirmed: true, rechargeEventId: 1 });
-check('debit confirmed', d1.ok && getUserBalanceCents('12345') === 1000 - RECHARGE_FEE_CONFIRMED_CENTS);
+check('hold 3', reserveRechargeFee('12345', { refId: 1 }).ok);
+settleRechargeFee('12345', { confirmed: true, refId: 1 });
+check('after confirmed', getUserBalanceCents('12345') === 1000 - RECHARGE_FEE_CONFIRMED_CENTS);
 
-const d2 = chargeRechargeAttempt('12345', { confirmed: false, rechargeEventId: 2 });
-check('debit unconfirmed', d2.ok && getUserBalanceCents('12345') === 1000 - RECHARGE_FEE_CONFIRMED_CENTS - RECHARGE_FEE_UNCONFIRMED_CENTS);
+check('hold again', reserveRechargeFee('12345', { refId: 2 }).ok);
+settleRechargeFee('12345', { confirmed: false, refId: 2 });
+check(
+  'after unconfirmed',
+  getUserBalanceCents('12345') === 1000 - RECHARGE_FEE_CONFIRMED_CENTS - RECHARGE_FEE_UNCONFIRMED_CENTS,
+);
 
-const { getAdminDb } = await import('../lib/admin-db.mjs');
 getAdminDb()
   .prepare(
     `INSERT INTO pix_deposits (pushin_id, chat_id, value_cents, status, created_at)

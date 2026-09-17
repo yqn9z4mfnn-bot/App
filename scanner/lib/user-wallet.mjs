@@ -121,39 +121,88 @@ export function minBalanceToStartRechargeCents() {
   return RECHARGE_FEE_CONFIRMED_CENTS;
 }
 
+function insufficientBalanceMessage(bal, need) {
+  return (
+    `Saldo insuficiente: você tem <b>${formatWalletBrl(bal)}</b>, ` +
+    `mas cada recarga exige pelo menos <b>${formatWalletBrl(need)}</b> ` +
+    `(R$ 3 confirmada / R$ 2 não confirmada).\n\nUse <b>/pix</b> para adicionar saldo ou <b>/saldo</b> para consultar.`
+  );
+}
+
+/** Só consulta — não reserva saldo. */
 export function assertCanStartRecharge(chatId) {
   if (!walletBillingRequiredForChat(chatId)) return { ok: true };
   const bal = getUserBalanceCents(chatId);
   const need = minBalanceToStartRechargeCents();
   if (bal < need) {
-    return {
-      ok: false,
-      balanceCents: bal,
-      neededCents: need,
-      message:
-        `Saldo insuficiente: você tem <b>${formatWalletBrl(bal)}</b>, ` +
-        `mas cada recarga exige pelo menos <b>${formatWalletBrl(need)}</b> ` +
-        `(R$ 3 confirmada / R$ 2 não confirmada).\n\nUse <b>/pix</b> para adicionar saldo ou <b>/saldo</b> para consultar.`,
-    };
+    return { ok: false, balanceCents: bal, neededCents: need, message: insufficientBalanceMessage(bal, need) };
   }
   return { ok: true, balanceCents: bal };
 }
 
-export function chargeRechargeAttempt(chatId, { confirmed, rechargeEventId = null } = {}) {
-  if (!walletBillingRequiredForChat(chatId)) return { ok: true, skipped: true };
-  const amount = confirmed ? RECHARGE_FEE_CONFIRMED_CENTS : RECHARGE_FEE_UNCONFIRMED_CENTS;
-  const kind = confirmed ? 'recharge_confirmed' : 'recharge_unconfirmed';
-  const result = debitUserBalance(chatId, amount, {
-    kind,
-    refId: rechargeEventId != null ? String(rechargeEventId) : null,
-    detail: { confirmed: Boolean(confirmed), feeCents: amount },
+/**
+ * Reserva tarifa máxima (R$ 3) antes do checkout — impede 2 recargas paralelas com o mesmo saldo.
+ */
+export function reserveRechargeFee(chatId, { refId = null } = {}) {
+  if (!walletBillingRequiredForChat(chatId)) {
+    return { ok: true, skipped: true, reservedCents: 0 };
+  }
+  const need = RECHARGE_FEE_CONFIRMED_CENTS;
+  const result = debitUserBalance(chatId, need, {
+    kind: 'recharge_hold',
+    refId: refId != null ? String(refId) : null,
+    detail: { phase: 'hold', feeCents: need },
   });
   if (!result.ok) {
-    console.warn(
-      `[wallet] débito pós-recarga falhou chat=${chatId} need=${amount}c bal=${result.balanceCents}c`,
-    );
+    const bal = result.balanceCents ?? 0;
+    return {
+      ok: false,
+      balanceCents: bal,
+      neededCents: need,
+      message: insufficientBalanceMessage(bal, need),
+    };
   }
-  return result;
+  return { ok: true, reservedCents: need, balanceCents: result.balanceCents };
+}
+
+/**
+ * Ajusta após a tentativa: hold já descontou R$ 3; não confirmada devolve R$ 1 (custo líquido R$ 2).
+ */
+export function settleRechargeFee(chatId, { confirmed, rechargeEventId = null, refId = null } = {}) {
+  if (!walletBillingRequiredForChat(chatId)) return { ok: true, skipped: true };
+  const actual = confirmed ? RECHARGE_FEE_CONFIRMED_CENTS : RECHARGE_FEE_UNCONFIRMED_CENTS;
+  const hold = RECHARGE_FEE_CONFIRMED_CENTS;
+  const refund = Math.max(0, hold - actual);
+  let balanceCents = getUserBalanceCents(chatId);
+  if (refund > 0) {
+    balanceCents = creditUserBalance(chatId, refund, {
+      kind: 'recharge_hold_refund',
+      refId: rechargeEventId != null ? String(rechargeEventId) : refId != null ? String(refId) : null,
+      detail: { confirmed: Boolean(confirmed), feeCents: actual, refundCents: refund },
+    });
+  }
+  withBusyRetry(() => {
+    getDb()
+      .prepare(
+        `INSERT INTO balance_ledger (created_at, chat_id, amount_cents, kind, ref_id, detail)
+         VALUES (?, ?, 0, ?, ?, ?)`,
+      )
+      .run(
+        Date.now(),
+        String(chatId),
+        confirmed ? 'recharge_confirmed' : 'recharge_unconfirmed',
+        rechargeEventId != null ? String(rechargeEventId) : refId != null ? String(refId) : null,
+        JSON.stringify({ confirmed: Boolean(confirmed), feeCents: actual, via: 'hold_settle' }),
+      );
+  });
+  return { ok: true, skipped: false, balanceCents, feeCents: actual, refundedCents: refund };
+}
+
+/** @deprecated use reserveRechargeFee + settleRechargeFee */
+export function chargeRechargeAttempt(chatId, opts) {
+  const hold = reserveRechargeFee(chatId, { refId: opts?.rechargeEventId });
+  if (!hold.ok && !hold.skipped) return hold;
+  return settleRechargeFee(chatId, opts);
 }
 
 function webhookBaseUrl() {
