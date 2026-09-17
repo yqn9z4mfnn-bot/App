@@ -1,4 +1,7 @@
-# Backups contêm .env, cartões e tokens — nunca commitar
+# Backups em claro — só no disco da nuvem
 /backups/
 *.tar.gz
 *.tar.gz.sha256
+# Publicado no GitHub apenas criptografado
+!/backups-published/
+!/backups-published/**
