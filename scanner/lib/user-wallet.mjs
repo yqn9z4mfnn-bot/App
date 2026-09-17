@@ -1,5 +1,5 @@
 import { withBusyRetry, getAdminDb, isTelegramUserAdmin } from './admin-db.mjs';
-import { createPixCashIn, pushinPayConfigured } from './pushinpay.mjs';
+import { createPixCashIn, fetchPushinTransaction, pushinPayConfigured } from './pushinpay.mjs';
 import { notifyTelegramChat } from './telegram-notify.mjs';
 
 export const RECHARGE_FEE_CONFIRMED_CENTS = Math.max(
@@ -285,6 +285,31 @@ export function processPushinPixWebhook(payload) {
       return { ok: true, credited: true, chatId: dep.chat_id, creditCents, balanceCents: newBal };
     });
   });
+}
+
+/** Confere na API PushinPay e credita se status=paid (fallback quando webhook não chega). */
+export async function reconcilePixDepositFromApi(pushinId) {
+  const id = String(pushinId ?? '').trim();
+  if (!id) return { ok: false, reason: 'missing_id' };
+  const dep = withBusyRetry(() =>
+    getDb().prepare('SELECT * FROM pix_deposits WHERE pushin_id = ?').get(id),
+  );
+  if (!dep) return { ok: false, reason: 'unknown_deposit' };
+  if (dep.status === 'paid') {
+    return { ok: true, duplicate: true, chatId: dep.chat_id, balanceCents: getUserBalanceCents(dep.chat_id) };
+  }
+  let tx;
+  try {
+    tx = await fetchPushinTransaction(id);
+  } catch (err) {
+    return { ok: false, reason: 'api_error', error: err.message };
+  }
+  const status = String(tx.status ?? '').toLowerCase();
+  if (status !== 'paid') {
+    return { ok: true, pending: true, status, chatId: dep.chat_id };
+  }
+  const value = Math.round(Number(tx.value ?? dep.value_cents));
+  return handlePushinPixWebhook({ id, status: 'paid', value, end_to_end_id: tx.end_to_end_id ?? null });
 }
 
 export async function handlePushinPixWebhook(payload) {

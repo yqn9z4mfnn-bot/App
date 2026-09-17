@@ -115,9 +115,11 @@ import {
   reserveRechargeFee,
   settleRechargeFee,
   createPixDepositForUser,
+  reconcilePixDepositFromApi,
   formatWalletBrl,
   formatWalletHelp,
   buildPixAmountKeyboard,
+  getUserBalanceCents,
 } from './lib/user-wallet.mjs';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -455,8 +457,13 @@ async function sendPixInvoice(chatId, valueCents) {
       'Copie o código abaixo no app do banco:',
       `<code>${safeCode}</code>`,
       '',
-      'Quando o pagamento confirmar, seu saldo é atualizado automaticamente.',
+      'Após pagar, toque em <b>Já paguei</b> para liberar o saldo.',
     ].join('\n'),
+    {
+      reply_markup: {
+        inline_keyboard: [[{ text: '✅ Já paguei', callback_data: `wallet:pixpaid:${dep.pushinId}` }]],
+      },
+    },
   );
 }
 
@@ -1928,6 +1935,26 @@ async function handleCallback(query) {
 
   if (data === 'wallet:saldo' || data === 'wallet:back') {
     await promptWalletSaldo(chatId);
+    return;
+  }
+
+  if (data.startsWith('wallet:pixpaid:')) {
+    const pushinId = data.slice('wallet:pixpaid:'.length);
+    try {
+      const r = await reconcilePixDepositFromApi(pushinId);
+      if (r.ok && (r.credited || r.duplicate)) {
+        await send(
+          chatId,
+          `✅ Saldo atualizado: <b>${formatWalletBrl(r.balanceCents ?? getUserBalanceCents(chatId))}</b>`,
+        );
+      } else if (r.ok && r.pending) {
+        await send(chatId, '⏳ Pagamento ainda não confirmado pela operadora. Aguarde alguns segundos e toque de novo.');
+      } else {
+        await send(chatId, `❌ Não foi possível confirmar: ${r.error || r.reason || 'erro'}`);
+      }
+    } catch (err) {
+      await send(chatId, `❌ ${err.message}`);
+    }
     return;
   }
 

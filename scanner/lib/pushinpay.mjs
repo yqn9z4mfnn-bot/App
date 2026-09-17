@@ -55,3 +55,27 @@ export async function createPixCashIn({ valueCents, webhookUrl, description }) {
   }
   return data;
 }
+
+/** Consulta status (máx. ~1/min por transação — use após o cliente pagar). */
+export async function fetchPushinTransaction(transactionId) {
+  const id = String(transactionId ?? '').trim();
+  if (!id) throw new Error('id da transação ausente');
+  const res = await fetch(`${apiBase()}/api/transactions/${encodeURIComponent(id)}`, {
+    headers: {
+      Authorization: `Bearer ${bearerToken()}`,
+      Accept: 'application/json',
+    },
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text };
+  }
+  if (!res.ok) {
+    const msg = data?.message || data?.error || `HTTP ${res.status}`;
+    throw new Error(`PushinPay: ${msg}`);
+  }
+  return data;
+}
