@@ -288,13 +288,16 @@ export function processPushinPixWebhook(payload) {
 }
 
 /** Confere na API PushinPay e credita se status=paid (fallback quando webhook não chega). */
-export async function reconcilePixDepositFromApi(pushinId) {
+export async function reconcilePixDepositFromApi(pushinId, { expectedChatId = null } = {}) {
   const id = String(pushinId ?? '').trim();
   if (!id) return { ok: false, reason: 'missing_id' };
   const dep = withBusyRetry(() =>
     getDb().prepare('SELECT * FROM pix_deposits WHERE pushin_id = ?').get(id),
   );
   if (!dep) return { ok: false, reason: 'unknown_deposit' };
+  if (expectedChatId != null && String(dep.chat_id) !== String(expectedChatId)) {
+    return { ok: false, reason: 'wrong_user' };
+  }
   if (dep.status === 'paid') {
     return { ok: true, duplicate: true, chatId: dep.chat_id, balanceCents: getUserBalanceCents(dep.chat_id) };
   }

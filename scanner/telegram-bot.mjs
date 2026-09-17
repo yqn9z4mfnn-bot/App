@@ -1941,12 +1941,14 @@ async function handleCallback(query) {
   if (data.startsWith('wallet:pixpaid:')) {
     const pushinId = data.slice('wallet:pixpaid:'.length);
     try {
-      const r = await reconcilePixDepositFromApi(pushinId);
+      const r = await reconcilePixDepositFromApi(pushinId, { expectedChatId: chatId });
       if (r.ok && (r.credited || r.duplicate)) {
         await send(
           chatId,
           `✅ Saldo atualizado: <b>${formatWalletBrl(r.balanceCents ?? getUserBalanceCents(chatId))}</b>`,
         );
+      } else if (r.reason === 'wrong_user') {
+        await send(chatId, '❌ Este PIX foi gerado em outra conta Telegram.');
       } else if (r.ok && r.pending) {
         await send(chatId, '⏳ Pagamento ainda não confirmado pela operadora. Aguarde alguns segundos e toque de novo.');
       } else {
