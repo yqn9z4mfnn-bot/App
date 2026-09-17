@@ -41,8 +41,6 @@ export function isReadOnlyWhenPaused(text = '') {
     t.startsWith('/help@') ||
     t === '/lista' ||
     t.startsWith('/lista@') ||
-    t === '/valores' ||
-    t.startsWith('/valores@') ||
     t.startsWith('/valor') ||
     t === '/cartoes_fila' ||
     t.startsWith('/cartoes_fila@') ||

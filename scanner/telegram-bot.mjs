@@ -2689,7 +2689,7 @@ async function handleMessage(msg) {
 
     if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@')) {
       if (isBotPaused()) {
-        await send(chatId, `${PAUSE_USER_MESSAGE}\n\nComandos de consulta ainda funcionam: /status, /lista, /valores, /cartoes_fila`);
+        await send(chatId, `${PAUSE_USER_MESSAGE}\n\nComandos de consulta ainda funcionam: /status, /lista, /valor, /cartoes_fila`);
       }
       await promptRechargeMode(chatId);
       return;
@@ -2705,20 +2705,10 @@ async function handleMessage(msg) {
       return;
     }
 
-    if (text === '/valores' || text.startsWith('/valores@')) {
-      try {
-        await sendValueStock(chatId);
-      } catch (err) {
-        console.error('[valores]', err.message);
-        await send(chatId, `❌ Não consegui listar os valores: ${err.message.replace(/</g, '&lt;')}`);
-      }
-      return;
-    }
-
     if (text.startsWith('/valor')) {
       const arg = text.replace(/^\/valor(@\S+)?\s*/, '').trim();
       if (!arg) {
-        await sendValueStock(chatId);
+        await send(chatId, 'Uso: <code>/valor 20</code> ou <code>/valor 15,00</code> — envia link de um número com esse valor.');
         return;
       }
       const cents = parseReaisToCents(arg);
@@ -2849,7 +2839,7 @@ async function handleMessage(msg) {
       } else {
         await send(
           chatId,
-          '❌ Envie um <b>.txt</b>, um valor (<code>20</code>), o número ou o link JWT.\n/valores lista o estoque.',
+          '❌ Envie um <b>.txt</b>, um valor (<code>20</code>), o número ou o link JWT.\nOu <code>/valor 20</code> para link por valor.',
         );
       }
       return;
@@ -2923,7 +2913,7 @@ async function main() {
   await tg('setMyCommands', {
     commands: [
       { command: 'start', description: '🏠 Início e recarga' },
-      { command: 'valores', description: '💰 Link por valor (R$ 20…)' },
+      { command: 'valor', description: '💰 Link por valor (ex: /valor 20)' },
       { command: 'lista', description: '🗄 Números no banco' },
       { command: 'recarga', description: '💳 Escolher valor e pagar' },
       { command: 'cartoes_fila', description: '🤖 Fila TXT de cartões' },
