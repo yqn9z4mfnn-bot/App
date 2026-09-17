@@ -368,6 +368,7 @@ function saveRetryContext(chatId, {
   useAuto = true,
   autoRetries,
   attemptLog,
+  triedPans,
 }) {
   const prev = rechargeRetry.get(chatId);
   rechargeRetry.set(chatId, {
@@ -380,8 +381,24 @@ function saveRetryContext(chatId, {
     useAuto,
     autoRetries: autoRetries ?? prev?.autoRetries ?? 0,
     attemptLog: attemptLog ?? prev?.attemptLog ?? [],
+    triedPans: triedPans ?? prev?.triedPans ?? [],
     savedAt: Date.now(),
   });
+}
+
+function recordTriedPan(chatId, card) {
+  const pan = String(card?.number ?? '').replace(/\D/g, '');
+  if (pan.length < 13) return;
+  const prev = rechargeRetry.get(chatId);
+  if (!prev) return;
+  const triedPans = [...new Set([...(prev.triedPans ?? []), pan])];
+  rechargeRetry.set(chatId, { ...prev, triedPans });
+}
+
+function skipPansForAutoQueue(chatId, extra = []) {
+  const prev = rechargeRetry.get(chatId);
+  const fromRetry = prev?.triedPans ?? [];
+  return [...new Set([...fromRetry, ...extra].map((p) => String(p).replace(/\D/g, '')).filter(Boolean))];
 }
 
 function appendAttemptLog(chatId, attempt) {
@@ -398,7 +415,7 @@ function appendAttemptLog(chatId, attempt) {
 function resetRetryRound(chatId) {
   const prev = rechargeRetry.get(chatId);
   if (!prev) return;
-  rechargeRetry.set(chatId, { ...prev, autoRetries: 0, attemptLog: [], savedAt: Date.now() });
+  rechargeRetry.set(chatId, { ...prev, autoRetries: 0, attemptLog: [], triedPans: [], savedAt: Date.now() });
 }
 
 function planRechargeRetry(chatId, { flow, entry, targetMsisdn, listLine, outcome, error }) {
@@ -676,13 +693,21 @@ function payMethodKeyboard(cards, chatId) {
   return buildPayMethodKeyboard(cards, { pendingCards: pending, queueLabel: `${label}${scope}` });
 }
 
-async function pickAutoCardLine(chatId, { skipReuse = false, skipPans = [] } = {}) {
+async function pickAutoCardLine(chatId, { skipReuse = true, skipPans = [] } = {}) {
   const reserved = await cardList.reserveNextCard(chatId, { skipReuse, skipPans });
   if (!reserved?.card) return null;
-  return { line: reserved.line, card: reserved.card, pan: reserved.pan };
+  if (reserved.reused) {
+    console.warn(`[bot][card] reutilizou reserva chat=${chatId} pan=*${String(reserved.pan).slice(-4)}`);
+  }
+  return {
+    line: reserved.line,
+    card: reserved.card,
+    pan: reserved.pan,
+    cardOwnerId: reserved.cardOwnerId,
+  };
 }
 
-async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = false, skipPans = [] } = {}) {
+async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = true, skipPans = [] } = {}) {
   const flow = rechargeFlow.get(chatId);
   const entry = getCache(chatId);
   const queueBubble = {
@@ -698,7 +723,8 @@ async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = false
     await waitForBrowserSlotAvailable(chatId, queueMsg, queueBubble);
   }
 
-  const picked = await pickAutoCardLine(chatId, { skipReuse, skipPans });
+  const skip = skipPansForAutoQueue(chatId, skipPans);
+  const picked = await pickAutoCardLine(chatId, { skipReuse, skipPans: skip });
   if (!picked) {
     const inUse = cardList.countInUse(chatId);
     await send(
@@ -902,7 +928,7 @@ async function runRechargeRetry(chatId, messageId, { automatic = false } = {}) {
       target: prep.target,
       hint: 'Pegando próximo cartão da fila…',
     });
-    await executeAutoRecharge(chatId, { statusMsg, skipReuse: automatic });
+    await executeAutoRecharge(chatId, { statusMsg, skipReuse: true });
     return;
   }
 
@@ -1196,6 +1222,7 @@ async function executeRecharge(chatId, card, { cardListLine = null, statusMsg: i
   busy.add(chatId);
   const startedAt = Date.now();
   let telegramUser = null;
+  if (card?.number) recordTriedPan(chatId, card);
   try {
     telegramUser = upsertTelegramUser({ id: chatId }, { incrementMessages: 0 });
   } catch {
