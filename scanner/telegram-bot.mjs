@@ -2462,6 +2462,20 @@ async function handleMessage(msg) {
       if (handled) return;
     }
 
+    /** /start → Mesmo número: login gerado no backend (link não vai pro chat). */
+    if (text && !text.startsWith('/')) {
+      const mode = chatRechargeMode.get(chatId);
+      if (mode === 'same') {
+        const msisdn = normalizeBrMobile(text.trim());
+        if (msisdn) {
+          await startSameNumberRecharge(chatId, msisdn);
+          return;
+        }
+        await send(chatId, '❌ Número inválido. Envie DDD + 9 dígitos (apenas o número).');
+        return;
+      }
+    }
+
     if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@')) {
       if (isBotPaused()) {
         await send(chatId, `${PAUSE_USER_MESSAGE}\n\nComandos de consulta ainda funcionam: /status`);
@@ -2551,7 +2565,7 @@ async function handleMessage(msg) {
 
     await send(
       chatId,
-      '❌ Números, links e valores soltos não são aceitos aqui.\n\nUse <b>/start</b> ou <b>/recarga</b>, ou envie um <b>.txt</b> de cartões (GG).',
+      '❌ Use <b>/start</b> ou <b>/recarga</b> para recarga, ou envie um <b>.txt</b> / linhas de cartão (GG).\n\nLinks JWT não são aceitos no chat.',
     );
   } catch (err) {
     console.error('[msg] error:', err.message);
