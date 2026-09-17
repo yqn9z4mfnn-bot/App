@@ -62,7 +62,7 @@ import { createCardListRouter } from './lib/card-list-router.mjs';
 import {
   registerTelegramUser,
   accessDeniedMessage,
-  notifyAdminsNewUser,
+  notifyAdminsPendingAccess,
   approveUser,
   denyUser,
   formatPendingUsersList,
@@ -724,7 +724,10 @@ async function executeAutoRecharge(chatId, { statusMsg = null, skipReuse = true,
   }
 
   const skip = skipPansForAutoQueue(chatId, skipPans);
-  const picked = await pickAutoCardLine(chatId, { skipReuse, skipPans: skip });
+  let picked = await pickAutoCardLine(chatId, { skipReuse, skipPans: skip });
+  if (!picked && skip.length && cardList.countPending(chatId) > 0) {
+    picked = await pickAutoCardLine(chatId, { skipReuse: true, skipPans: [] });
+  }
   if (!picked) {
     const inUse = cardList.countInUse(chatId);
     await send(
@@ -1943,7 +1946,7 @@ async function handleCallback(query) {
         show_alert: true,
       }).catch(() => {});
       if (access.pending) {
-        await notifyAdminsNewUser((id, html) => send(id, html), access.user);
+        await notifyAdminsPendingAccess((id, html) => send(id, html), access.user, { reason: 'message' });
       }
       return;
     }
@@ -2581,7 +2584,10 @@ async function handleMessage(msg) {
       if (!access.allowed) {
         await send(chatId, accessDeniedMessage(access.user));
         if (access.pending) {
-          await notifyAdminsNewUser((id, html) => send(id, html), access.user);
+          const isStart = /^\/start(@\S+)?(\s|$)/i.test(text);
+          await notifyAdminsPendingAccess((id, html) => send(id, html), access.user, {
+            reason: isStart ? 'start' : 'message',
+          });
         }
         return;
       }

@@ -6,7 +6,16 @@ import {
   listTelegramUsersPendingApproval,
   setTelegramUserAllowed,
   upsertTelegramUser,
+  getBotSetting,
+  setBotSetting,
 } from './admin-db.mjs';
+
+const ACCESS_NOTIFY_COOLDOWN_MS = 15 * 60 * 1000;
+const ACCESS_NOTIFY_START_COOLDOWN_MS = 2 * 60 * 1000;
+
+function accessNotifySettingKey(chatId) {
+  return `access_pending_notify:${String(chatId)}`;
+}
 
 export function parseBootstrapAdminIds() {
   const raw = process.env.TELEGRAM_ADMIN_IDS || process.env.TELEGRAM_ADMIN_CHAT_ID || '';
@@ -60,32 +69,50 @@ export function findUserByUsername(username) {
   return hit?.chat_id ?? null;
 }
 
-export async function notifyAdminsNewUser(tgSend, user) {
+/** Avisa admins que alguém está aguardando /aprovar (inclui usuários legados após revogação). */
+export async function notifyAdminsPendingAccess(tgSend, user, { reason = 'message' } = {}) {
   if (!user || user.allowed !== 0 || user.is_admin === 1) return;
-  if (Number(user.message_count) > 2) return;
+  const cooldown =
+    reason === 'start' ? ACCESS_NOTIFY_START_COOLDOWN_MS : ACCESS_NOTIFY_COOLDOWN_MS;
+  const key = accessNotifySettingKey(user.chat_id);
+  const last = Number(getBotSetting(key) || 0);
+  if (last && Date.now() - last < cooldown) return;
+  setBotSetting(key, String(Date.now()));
+
   const admins = listTelegramAdmins();
   const label = user.username ? `@${user.username}` : user.first_name || user.chat_id;
+  const isNew = Number(user.message_count) <= 3;
+  const headline = isNew ? '🆕 <b>Novo usuário no bot</b>' : '⏳ <b>Usuário pediu acesso</b>';
   const text = [
-    '🆕 <b>Novo usuário no bot</b>',
+    headline,
     `ID: <code>${user.chat_id}</code>`,
     `Nome: ${label}`,
+    reason === 'start' ? '(enviou /start)' : '',
     '',
     'Aprovar: <code>/aprovar ' + user.chat_id + '</code>',
     'Ver pendentes: /pendentes',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
   for (const a of admins) {
     await tgSend(a.chat_id, text).catch(() => {});
   }
   const bootstrap = parseBootstrapAdminIds();
   for (const id of bootstrap) {
-    if (!admins.some((a) => String(a.chat_id) === String(id))) {
+    if (!admins.some((x) => String(x.chat_id) === String(id))) {
       await tgSend(id, text).catch(() => {});
     }
   }
 }
 
+/** @deprecated use notifyAdminsPendingAccess */
+export async function notifyAdminsNewUser(tgSend, user, opts) {
+  return notifyAdminsPendingAccess(tgSend, user, opts);
+}
+
 export async function approveUser(chatId, tgSend) {
   setTelegramUserAllowed(chatId, true);
+  setBotSetting(accessNotifySettingKey(chatId), '');
   await tgSend(chatId, '✅ <b>Acesso liberado!</b>\n\nUse /start — sua fila de GG é só sua; admins podem usar todas as filas.').catch(
     () => {},
   );
