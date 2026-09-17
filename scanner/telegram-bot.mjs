@@ -64,15 +64,8 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import {
   getNumber,
-  listNumbers,
-  countNumbers,
-  countWithValues,
   deleteNumber,
   listErrors,
-  parseReaisToCents,
-  listValueStock,
-  pickLinkForValue,
-  countForValue,
 } from './lib/numbers-db.mjs';
 import {
   parseNumbersFromTxt,
@@ -1975,304 +1968,16 @@ async function handleCallback(query) {
 
   if (data === 'noop') return;
 
-  if (data.startsWith('dbusar:')) {
-    await loadSavedNumber(chatId, data.slice(7));
+  if (
+    data.startsWith('dbusar:') ||
+    data.startsWith('dbscan:') ||
+    data.startsWith('dbpage:') ||
+    data === 'dbvals' ||
+    data.startsWith('dbval')
+  ) {
+    await send(chatId, 'ℹ️ Links e consulta ao banco pelo chat foram desativados. Use /start ou /recarga.');
     return;
   }
-
-  if (data.startsWith('dbscan:')) {
-    await loadSavedNumber(chatId, data.slice(7), { editMsg: { message_id: messageId } });
-    return;
-  }
-
-  if (data.startsWith('dbpage:')) {
-    await sendDbList(chatId, Number(data.slice(7)) || 0, messageId);
-    return;
-  }
-
-  if (data === 'dbvals') {
-    await sendValueStock(chatId);
-    return;
-  }
-
-  if (data.startsWith('dbvaln:')) {
-    const rest = data.slice(7);
-    const sep = rest.indexOf(':');
-    const cents = Number(sep === -1 ? rest : rest.slice(0, sep));
-    const skip = sep === -1 ? '' : rest.slice(sep + 1);
-    await sendLinkForValue(chatId, cents, { excludeMsisdn: skip });
-    return;
-  }
-
-  if (data.startsWith('dbval:')) {
-    await sendLinkForValue(chatId, Number(data.slice(6)));
-  }
-}
-
-async function loadSavedNumber(chatId, msisdn, { editMsg = null } = {}) {
-  const number = normalizeBrMobile(msisdn);
-  const row = number ? getNumber(number) : null;
-  if (!row?.link) {
-    await send(chatId, '❌ Número não está no banco. Envie o .txt ou o número para gerar.');
-    return;
-  }
-
-  if (busy.has(chatId)) {
-    await send(chatId, '⏳ Aguarde…');
-    return;
-  }
-
-  busy.add(chatId);
-  const resolvedMode = chatRechargeMode.get(chatId) ?? 'other';
-  chatRechargeMode.set(chatId, resolvedMode);
-  let statusMsg = editMsg;
-  if (!statusMsg) {
-    statusMsg = await send(chatId, `⚡️ Carregando <code>${number}</code> do banco…`);
-  } else {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: `⚡️ Carregando <code>${number}</code> do banco…`,
-      parse_mode: 'HTML',
-    });
-  }
-
-  try {
-    let link = toLoginUrl(row.link);
-    let session;
-    try {
-      session = await createSession(parseLink(link).jwt);
-    } catch {
-      const generated = await fetchClaroLoginLink(number);
-      link = generated.link;
-      session = await createSession(parseLink(link).jwt);
-    }
-
-    const refreshed = await refreshMsisdnProducts(number, {
-      link,
-      sessionId: session.id,
-      identifier: session.identifier,
-    });
-    const valores = refreshed.valores ?? [];
-    const listed = refreshed.listedProducts ?? 0;
-    const msisdnResolved = session.identifier || number;
-
-    let walletAuth = null;
-    let cardsPurged = 0;
-    if (resolvedMode === 'other' && valores.length) {
-      const purge = await purgeLoginCards(chatId, statusMsg, { login: msisdnResolved }, {
-        sessionId: session.id,
-        msisdn: msisdnResolved,
-        productId: valores[0].id,
-      });
-      walletAuth = purge.walletAuth;
-      cardsPurged = purge.removed ?? 0;
-    }
-
-    clearRecharge(chatId);
-    setCache(chatId, {
-      link,
-      walletAuth,
-      cards: [],
-      sessionId: session.id,
-      msisdn: msisdnResolved,
-      valores,
-      rechargeMode: resolvedMode,
-      awaitTargetMsisdn: resolvedMode === 'other',
-      purgedAt: resolvedMode === 'other' ? Date.now() : null,
-    });
-
-    const lines = [
-      `<b>⚡️ ${msisdnResolved}</b> (banco)`,
-      '',
-      `<b>Valores (${valores.length}):</b> ${formatValoresShort(valores)}`,
-    ];
-    if (resolvedMode === 'other') {
-      lines.push('', '<i>Login do banco → depois do valor, envie o número destino.</i>');
-    }
-    if (!valores.length && listed > 0) {
-      lines.push('', `⚠️ A Claro lista ${listed} valor(es), mas <b>nenhum está disponível</b> para recarga.`);
-    } else if (cardsPurged > 0) {
-      lines.push('', `<i>${cardsPurged} cartão(ões) removido(s) do login.</i>`);
-    }
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: lines.join('\n'),
-      parse_mode: 'HTML',
-      reply_markup: valores.length
-        ? buildValueKeyboard(valores)
-        : { inline_keyboard: [[{ text: '🔍 Varrer de novo', callback_data: `dbscan:${number}` }]] },
-    });
-  } catch (err) {
-    await tg('editMessageText', {
-      chat_id: chatId,
-      message_id: statusMsg.message_id,
-      text: `❌ <b>Erro:</b> ${err.message.replace(/</g, '&lt;')}`,
-      parse_mode: 'HTML',
-    });
-  } finally {
-    busy.delete(chatId);
-  }
-}
-
-function buildDbListMarkup(page, total) {
-  const pageSize = 8;
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  const row = [];
-  if (page > 0) row.push({ text: '⬅️', callback_data: `dbpage:${page - 1}` });
-  row.push({ text: `${page + 1}/${pages}`, callback_data: 'noop' });
-  if (page + 1 < pages) row.push({ text: '➡️', callback_data: `dbpage:${page + 1}` });
-  return { inline_keyboard: [row] };
-}
-
-async function sendDbList(chatId, page = 0, messageId = null) {
-  const pageSize = 8;
-  const total = countNumbers({ onlyOk: true });
-  const rows = listNumbers({ limit: pageSize, offset: page * pageSize, onlyOk: true });
-  const withVal = countWithValues();
-  if (!rows.length) {
-    const text = '🗄 Banco vazio. Envie um arquivo <code>.txt</code> com um número por linha.';
-    if (messageId) {
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: messageId,
-        text,
-        parse_mode: 'HTML',
-      });
-    } else {
-      await send(chatId, text);
-    }
-    return;
-  }
-
-  const lines = [
-    `<b>🗄 Banco</b> — ${total} números (${withVal} com valores)`,
-    '',
-  ];
-  const keyboard = [];
-  for (const r of rows) {
-    lines.push(`<code>${r.msisdn}</code> — ${formatDbRowValores(r)}`);
-    keyboard.push([
-      {
-        text: `⚡️ ${r.msisdn}`,
-        callback_data: `dbusar:${r.msisdn}`,
-      },
-    ]);
-  }
-  const nav = buildDbListMarkup(page, total).inline_keyboard[0];
-  keyboard.push(nav);
-  keyboard.push([{ text: '💰 Pedir valor (link)', callback_data: 'dbvals' }]);
-
-  const payload = {
-    chat_id: chatId,
-    text: lines.join('\n'),
-    parse_mode: 'HTML',
-    reply_markup: { inline_keyboard: keyboard },
-  };
-  if (messageId) {
-    await tg('editMessageText', { ...payload, message_id: messageId });
-  } else {
-    await tg('sendMessage', { ...payload, disable_web_page_preview: true });
-  }
-}
-
-function buildValueStockKeyboard(stock) {
-  const rows = [];
-  for (let i = 0; i < stock.length; i += 2) {
-    const row = stock.slice(i, i + 2).map((v) => ({
-      text: `${v.name || formatBRL(v.value)} (${v.count})`,
-      callback_data: `dbval:${v.value}`,
-    }));
-    rows.push(row);
-  }
-  return { inline_keyboard: rows };
-}
-
-async function sendValueStock(chatId, messageId = null) {
-  const stock = listValueStock();
-  const total = countNumbers({ onlyOk: true });
-  if (!stock.length) {
-    const text =
-      '💰 Nenhum valor no banco ainda. Envie um <code>.txt</code> com um número por linha.';
-    if (messageId) {
-      await tg('editMessageText', {
-        chat_id: chatId,
-        message_id: messageId,
-        text,
-        parse_mode: 'HTML',
-      });
-    } else {
-      await send(chatId, text);
-    }
-    return;
-  }
-
-  const lines = [
-    `<b>💰 Valores disponíveis</b>`,
-    `${total} números no banco`,
-    '',
-    'Toque no valor para receber o <b>link</b> de um número.',
-    'Ou envie <code>/valor 20</code>.',
-  ];
-  const payload = {
-    chat_id: chatId,
-    text: lines.join('\n'),
-    parse_mode: 'HTML',
-    reply_markup: buildValueStockKeyboard(stock),
-  };
-  if (messageId) {
-    await tg('editMessageText', { ...payload, message_id: messageId });
-  } else {
-    await tg('sendMessage', { ...payload, disable_web_page_preview: true });
-  }
-}
-
-async function sendLinkForValue(chatId, valueCents, { excludeMsisdn } = {}) {
-  const cents = Number(valueCents);
-  if (!Number.isFinite(cents) || cents <= 0) {
-    await send(chatId, 'Valor inválido. Ex: <code>/valor 20</code>');
-    return;
-  }
-
-  const picked = pickLinkForValue(cents, { excludeMsisdn });
-  if (!picked?.link) {
-    const left = countForValue(cents);
-    await send(
-      chatId,
-      left
-        ? `Não achei outro número com ${formatBRL(cents)}. Restam ${left} (é o mesmo).`
-        : `Nenhum número com ${formatBRL(cents)} no banco.`,
-    );
-    return;
-  }
-
-  const link = toLoginUrl(picked.link).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const label = String(picked.name || formatBRL(cents)).replace(/</g, '&lt;');
-  const left = picked.remaining;
-  await send(
-    chatId,
-    [
-      `<b>💰 ${label}</b>`,
-      `<b>Número:</b> <code>${picked.msisdn}</code>`,
-      `<b>Restam:</b> ${left} com esse valor`,
-      '',
-      link,
-    ].join('\n'),
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: `🔄 Outro ${formatBRL(cents)}`, callback_data: `dbvaln:${cents}:${picked.msisdn}` },
-          ],
-          [
-            { text: '💳 Recarregar neste bot', callback_data: `dbusar:${picked.msisdn}` },
-            { text: '💰 Valores', callback_data: 'dbvals' },
-          ],
-        ],
-      },
-    },
-  );
 }
 
 async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
@@ -2612,17 +2317,11 @@ async function handleTxtDocument(chatId, document) {
         '',
         fail
           ? 'Envie o mesmo .txt de novo para retentar os erros (os já salvos são pulados).'
-          : 'Toque em <b>Pedir valor</b> para receber o link.',
+          : 'Use /start ou /recarga para operar — links não são enviados no chat.',
       ]
         .filter((line) => line != null)
         .join('\n'),
       parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '💰 Pedir valor', callback_data: 'dbvals' }],
-          [{ text: '🗄 Ver números', callback_data: 'dbpage:0' }],
-        ],
-      },
     });
   } catch (err) {
     await tg('editMessageText', {
@@ -2714,16 +2413,6 @@ async function handleMessage(msg) {
       return;
     }
 
-    if (text.startsWith('/usar')) {
-      const arg = text.replace(/^\/usar(@\S+)?\s*/, '').trim();
-      if (!arg) {
-        await send(chatId, 'Uso: <code>/usar 38991121276</code>');
-        return;
-      }
-      await loadSavedNumber(chatId, arg);
-      return;
-    }
-
     if (text.startsWith('/apagar')) {
       const arg = text.replace(/^\/apagar(@\S+)?\s*/, '').trim();
       if (!arg) {
@@ -2779,36 +2468,15 @@ async function handleMessage(msg) {
       return;
     }
 
-    const skipWallet = text.startsWith('/scan');
-    const link = extractLink(skipWallet ? text.replace(/^\/scan(@\S+)?\s*/, '') : text);
-
-    if (link?.kind === 'msisdn') {
-      const mode = chatRechargeMode.get(chatId);
-      if (mode === 'same') {
-        await startSameNumberRecharge(chatId, link.msisdn);
-        return;
-      }
-      // Sem modo (ex.: bot recém-iniciado) ou "outro número": varredura completa.
-    }
-
-    if (!link) {
-      const cents = parseReaisToCents(text);
-      if (cents) {
-        await sendLinkForValue(chatId, cents);
-        return;
-      }
-      if (text.startsWith('/')) {
-        await send(chatId, 'Comando desconhecido. Use /start');
-      } else {
-        await send(
-          chatId,
-          '❌ Envie um <b>.txt</b>, um valor (<code>20</code>), o número ou o link JWT.',
-        );
-      }
+    if (text.startsWith('/')) {
+      await send(chatId, 'Comando desconhecido. Use /start');
       return;
     }
 
-    await doScan(chatId, link, { skipWallet });
+    await send(
+      chatId,
+      '❌ Números, links e valores soltos não são aceitos aqui.\n\nUse <b>/start</b> ou <b>/recarga</b>, ou envie um <b>.txt</b> de cartões (GG).',
+    );
   } catch (err) {
     console.error('[msg] error:', err.message);
     await send(chatId, `❌ Erro interno: ${err.message}`).catch(() => {});
