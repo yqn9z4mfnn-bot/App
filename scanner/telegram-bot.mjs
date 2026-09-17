@@ -2689,7 +2689,7 @@ async function handleMessage(msg) {
 
     if (text === '/start' || text === '/help' || text.startsWith('/start@') || text.startsWith('/help@')) {
       if (isBotPaused()) {
-        await send(chatId, `${PAUSE_USER_MESSAGE}\n\nComandos de consulta ainda funcionam: /status, /lista, /valor, /cartoes_fila`);
+        await send(chatId, `${PAUSE_USER_MESSAGE}\n\nComandos de consulta ainda funcionam: /status, /valor`);
       }
       await promptRechargeMode(chatId);
       return;
@@ -2697,11 +2697,6 @@ async function handleMessage(msg) {
 
     if (/^\/(cancelar|cancel)(@|\s|$)/i.test(text)) {
       await send(chatId, '↩️ Fluxo cancelado. Envie a recarga ou /start.');
-      return;
-    }
-
-    if (text === '/lista' || text.startsWith('/lista@')) {
-      await sendDbList(chatId, 0);
       return;
     }
 
@@ -2796,23 +2791,6 @@ async function handleMessage(msg) {
 
     if (text === '/status' || text.startsWith('/status@')) {
       await send(chatId, await buildStatusMessage());
-      return;
-    }
-
-    if (text === '/cartoes_fila' || text.startsWith('/cartoes_fila@')) {
-      await sendCartoesFila(chatId);
-      return;
-    }
-
-    if (text === '/cartoes' || text.startsWith('/cartoes@')) {
-      const entry = getCache(chatId);
-      if (!entry?.cards?.length) {
-        await send(chatId, '❌ Nenhum cartão em cache. Varredura necessária.');
-        return;
-      }
-      await send(chatId, `<b>Cartões (${entry.cards.length})</b>:`, {
-        reply_markup: buildCardKeyboard(entry.cards),
-      });
       return;
     }
 
@@ -2914,10 +2892,7 @@ async function main() {
     commands: [
       { command: 'start', description: '🏠 Início e recarga' },
       { command: 'valor', description: '💰 Link por valor (ex: /valor 20)' },
-      { command: 'lista', description: '🗄 Números no banco' },
       { command: 'recarga', description: '💳 Escolher valor e pagar' },
-      { command: 'cartoes_fila', description: '🤖 Fila TXT de cartões' },
-      { command: 'cartoes', description: '💳 Cartões da varredura' },
       { command: 'status', description: '🟢 Bot online' },
       { command: 'pausar', description: '⏸ Pausar recargas (admin)' },
       { command: 'retomar', description: '▶ Retomar recargas (admin)' },
