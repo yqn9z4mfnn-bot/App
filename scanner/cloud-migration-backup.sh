@@ -167,7 +167,12 @@ else
   XDG_DATA_HOME="$ROOT" bash "$WORKSPACE/scanner/backup-appdata.sh"
 fi
 
+echo "[offsite] Tentativa de cópia fora da nuvem…"
+XDG_DATA_HOME="$ROOT" WORKSPACE="$WORKSPACE" bash "$WORKSPACE/scanner/cloud-backup-offsite.sh" "$ARCHIVE" || true
+
 echo "Pronto."
 ls -lh "$ARCHIVE"
 echo "SHA256=$(sha256sum "$ARCHIVE" | awk '{print $1}')"
 echo "DIR=$OUT_DIR"
+echo ""
+echo "IMPORTANTE: o .tar.gz fica NO DISCO DA NUVEM até você baixar ou enviar off-site (VPS_PASS)."

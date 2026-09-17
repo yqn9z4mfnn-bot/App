@@ -1,0 +1,4 @@
+# Backups contêm .env, cartões e tokens — nunca commitar
+/backups/
+*.tar.gz
+*.tar.gz.sha256
