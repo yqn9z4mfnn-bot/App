@@ -159,5 +159,16 @@ export function parseCardsFromTxt(text) {
   return lines;
 }
 
+/** Só PAN (13–19 dígitos), sem validade/CVV — não deve entrar na fila. */
+export function looksLikePanOnly(text) {
+  const t = String(text ?? '').trim().replace(/\s+#.*$/, '');
+  if (!t || t.startsWith('#')) return false;
+  if (parseCardInput(t)) return false;
+  if (/[|;]/.test(t)) return false;
+  const digits = t.replace(/\D/g, '');
+  if (digits.length < 13 || digits.length > 19) return false;
+  return /^[\d\s-]+$/.test(t);
+}
+
 export const CARD_INPUT_HINT =
   '💳 <b>Envie os dados do cartão</b> em uma linha:\n\n<code>NUMERO|MM|AAAA|CVV</code>\n\nExemplo:\n<code>4271680002723941|08|2033|999</code>\n\n<i>✨ Nome do titular gerado automaticamente.</i>\n\n<i>🤖 Ou use <b>Automático</b> com lista em cards-pending.txt</i>';

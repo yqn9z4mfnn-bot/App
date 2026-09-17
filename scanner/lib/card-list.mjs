@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import { dirname, join } from 'node:path';
-import { parseCardInput, formatCardLine, formatCardMask, extractCardBin } from './card-parse.mjs';
+import {
+  parseCardInput,
+  formatCardLine,
+  formatCardMask,
+  extractCardBin,
+} from './card-parse.mjs';
 
 const RESERVATION_TTL_MS = Number(process.env.CARD_RESERVATION_TTL_MS || 15 * 60 * 1000);
 
@@ -476,8 +481,7 @@ export function normalizeCardKey(line) {
 export function looksLikeCardLine(line) {
   const t = String(line ?? '').trim().replace(/\s+#.*$/, '');
   if (!t || t.startsWith('#')) return false;
-  const pan = t.split(/[|;]/)[0]?.replace(/\D/g, '') ?? '';
-  return pan.length >= 13 && pan.length <= 19;
+  return Boolean(parseCardInput(t));
 }
 
 export function looksLikeCardsTxt(text) {

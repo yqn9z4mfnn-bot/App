@@ -46,7 +46,13 @@ import {
   snapshotDestBalanceUntilChange,
   formatBalanceCompare,
 } from './lib/line-balance.mjs';
-import { parseCardInput, CARD_INPUT_HINT, randomHolderName, formatCardMask } from './lib/card-parse.mjs';
+import {
+  parseCardInput,
+  CARD_INPUT_HINT,
+  randomHolderName,
+  formatCardMask,
+  looksLikePanOnly,
+} from './lib/card-parse.mjs';
 import {
   looksLikeCardsTxt,
   extractCardLinesFromText,
@@ -1506,6 +1512,11 @@ async function handleRechargeInput(chatId, text) {
     return true;
   }
 
+  if (looksLikePanOnly(text)) {
+    await send(chatId, PAN_ONLY_HINT);
+    return true;
+  }
+
   const card = parseCardInput(text);
   if (card) {
     await executeRecharge(chatId, card);
@@ -2012,6 +2023,12 @@ async function handleCallback(query) {
 }
 
 async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
+  for (const raw of String(text).split(/\r?\n/)) {
+    if (looksLikePanOnly(raw)) {
+      await send(chatId, PAN_ONLY_HINT);
+      return;
+    }
+  }
   const extracted = extractCardLinesFromText(text);
   const cardLines = extracted.lines;
   if (!cardLines.length) {
@@ -2057,9 +2074,19 @@ async function handleCardsTxtIngest(chatId, text, statusMsg = null) {
   }
 }
 
+const PAN_ONLY_HINT =
+  '❌ <b>Só o número do cartão (PAN) não serve.</b>\n\nEnvie a linha completa:\n<code>NUMERO|MM|AAAA|CVV</code>';
+
 /** Lista colada no chat (2+ cartões) ou cartão único fora do fluxo de recarga. */
 async function tryIngestCardListFromMessage(chatId, text) {
   if (!text?.trim() || text.startsWith('/')) return false;
+
+  for (const raw of String(text).split(/\r?\n/)) {
+    if (looksLikePanOnly(raw)) {
+      await send(chatId, PAN_ONLY_HINT);
+      return true;
+    }
+  }
 
   const { lines: cardLines } = extractCardLinesFromText(text);
   if (cardLines.length >= 2) {
