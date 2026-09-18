@@ -37,6 +37,7 @@ from worker_rules import (
     decide_next_action,
     error_fingerprint,
     halt_next_step,
+    is_claro_payload,
     is_reivindicar_label,
     next_after_bot_result,
 )
@@ -357,6 +358,18 @@ async def bot_active_targets(tg, bot, limit=20):
     return targets
 
 
+async def release_non_claro_open(g, tg, open_rows):
+    """Pedido VIVO/etc. reivindicado por engano — Feita no grupo, sem enviar ao bot Claro."""
+    for pedido_id, payload, msg_id in open_rows:
+        if is_claro_payload(payload):
+            continue
+        op = (payload or "").split("|")[1] if payload and "|" in payload else "?"
+        log(f"Operadora {op} — não envia ao bot Claro; fechando {pedido_id} no grupo")
+        closed = await close_order_in_group(g, tg, pedido_id, anchor_msg_id=msg_id, log=log)
+        if not closed:
+            log(f"Não fechou {pedido_id} ({op}) — tratar manual no grupo")
+
+
 async def acquire_order(g, tg, bot):
     current = load_current_pedido()
     if current and current.get("pedido_id"):
@@ -364,8 +377,16 @@ async def acquire_order(g, tg, bot):
             log(f"Pedido antigo {current['pedido_id']} já fechado — limpando worker-current")
             clear_current_pedido()
             current = None
+        elif current.get("payload") and not is_claro_payload(current["payload"]):
+            log(f"Limpando worker-current não-Claro: {current['payload']}")
+            clear_current_pedido()
+            current = None
     open_raw = await list_open_orders(g, tg)
-    open_orders = [{"pedido_id": p, "payload": pay, "msg_id": mid} for p, pay, mid in open_raw]
+    non_claro = [(p, pay, mid) for p, pay, mid in open_raw if pay and not is_claro_payload(pay)]
+    if non_claro:
+        await release_non_claro_open(g, tg, non_claro)
+        open_raw = await list_open_orders(g, tg)
+    open_orders = [{"pedido_id": p, "payload": pay, "msg_id": mid} for p, pay, mid in open_raw if is_claro_payload(pay)]
     current_id = current["pedido_id"] if current else None
     bot_targets = await bot_active_targets(tg, bot)
 
@@ -402,6 +423,10 @@ async def acquire_order(g, tg, bot):
 
 async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
     """Qualquer coisa ≠ APROVADA: espera 60s e reenvia o mesmo número. Mesmo erro 2x → para."""
+    if not is_claro_payload(payload):
+        log(f"RECUSADO: {payload} — bot só processa Claro")
+        return "skipped_non_claro"
+
     target = payload_target(payload)
     last_fp = None
 
@@ -601,6 +626,10 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
             if result == "blocked":
                 log("Envio bloqueado — aguardando grupo limpo")
                 await asyncio.sleep(idle_poll)
+                continue
+
+            if result == "skipped_non_claro":
+                clear_current_pedido()
                 continue
 
             if not loop:

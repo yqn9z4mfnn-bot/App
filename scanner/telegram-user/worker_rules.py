@@ -6,6 +6,20 @@ def payload_target(payload):
     return (payload or "").split("|")[0].strip()
 
 
+def payload_operator(payload):
+    parts = (payload or "").split("|")
+    return parts[1].strip() if len(parts) > 1 else ""
+
+
+def is_claro_payload(payload):
+    """Bot Link Claro só aceita recarga Claro (grupo Fácil mistura operadoras)."""
+    return payload_operator(payload).lower() == "claro"
+
+
+def claro_open_orders(open_orders):
+    return [o for o in (open_orders or []) if is_claro_payload(o.get("payload"))]
+
+
 def decide_next_action(open_orders, current_pedido_id, bot_active_targets=None):
     """
     Decide o próximo passo SEM reivindicar por engano.
@@ -20,6 +34,7 @@ def decide_next_action(open_orders, current_pedido_id, bot_active_targets=None):
       claim  — grupo limpo; pode reivindicar 1 novo
     """
     bot_active_targets = set(bot_active_targets or [])
+    open_orders = claro_open_orders(open_orders)
     open_ids = [o["pedido_id"] for o in open_orders if o.get("pedido_id")]
 
     if current_pedido_id and current_pedido_id in open_ids:

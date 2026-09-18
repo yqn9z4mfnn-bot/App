@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """Regras do worker Fácil — 1 pedido por vez, nunca reivindica o já aberto."""
-from worker_rules import claim_allowed, decide_next_action
+from worker_rules import claim_allowed, decide_next_action, is_claro_payload
+
+
+def test_só_claro_no_resume():
+    opens = [
+        {"pedido_id": "v", "payload": "21980337369|VIVO|50", "msg_id": 1},
+        {"pedido_id": "c", "payload": "21973968712|Claro|30", "msg_id": 2},
+    ]
+    assert is_claro_payload("21973968712|Claro|30")
+    assert not is_claro_payload("21980337369|VIVO|50")
+    assert decide_next_action(opens, None, set()) == ("resume", "c")
 
 
 def test_grupo_limpo_reivindica():
