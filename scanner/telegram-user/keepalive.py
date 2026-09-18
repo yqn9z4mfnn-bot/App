@@ -5,9 +5,7 @@ import json
 import signal
 from datetime import datetime, timezone
 
-from telethon import TelegramClient
-
-from config import DATA_DIR, SESSION_PATH, STATUS_FILE, api_hash, api_id, load_env_file
+from config import DATA_DIR, STATUS_FILE, load_env_file, telegram_client
 
 
 running = True
@@ -33,7 +31,7 @@ async def main():
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
 
-    tg = TelegramClient(str(SESSION_PATH), api_id(), api_hash())
+    tg = telegram_client()
     await tg.connect()
 
     if not await tg.is_user_authorized():

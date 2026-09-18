@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from telethon import TelegramClient
 
-from config import DATA_DIR, SESSION_PATH, api_id, api_hash, load_env_file
+from config import DATA_DIR, SESSION_PATH, load_env_file, telegram_client
 from facil_group import (
     BOT_USERNAME,
     GROUP_ID,
@@ -516,7 +516,7 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
         log("Outro worker já ativo — abortando")
         return 1
 
-    tg = TelegramClient(str(SESSION_PATH), api_id(), api_hash())
+    tg = telegram_client()
     await tg.connect()
     g = await tg.get_entity(GROUP_ID)
     bot = await tg.get_entity(BOT_USERNAME)
