@@ -72,8 +72,8 @@ export function createCardListRouter(dataDir, { isAdmin = () => false, listKnown
     return [...ids];
   }
 
+  /** Sempre só a fila do consumidor — admin/Fácil não drenam GG de outros usuários. */
   function reservationOwnersForConsumer(consumerChatId) {
-    if (isAdmin(consumerChatId)) return listOwnerIds();
     return [String(consumerChatId)];
   }
 

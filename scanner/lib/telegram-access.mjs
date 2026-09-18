@@ -113,7 +113,7 @@ export async function notifyAdminsNewUser(tgSend, user, opts) {
 export async function approveUser(chatId, tgSend) {
   setTelegramUserAllowed(chatId, true);
   setBotSetting(accessNotifySettingKey(chatId), '');
-  await tgSend(chatId, '✅ <b>Acesso liberado!</b>\n\nUse /start — sua fila de GG é só sua; admins podem usar todas as filas.').catch(
+  await tgSend(chatId, '✅ <b>Acesso liberado!</b>\n\nUse /start — sua fila de GG é só sua (cada usuário consome apenas os cartões que enviou).').catch(
     () => {},
   );
 }

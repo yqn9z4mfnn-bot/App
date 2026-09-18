@@ -689,8 +689,7 @@ function payMethodKeyboard(cards, chatId) {
   const pending = cardList.countPending(chatId);
   const inUse = cardList.countInUse(chatId);
   const label = inUse > 0 ? `${pending} fila · ${inUse} em uso` : `${pending}`;
-  const scope = isTelegramUserAdmin(chatId) ? ' (todas as filas)' : '';
-  return buildPayMethodKeyboard(cards, { pendingCards: pending, queueLabel: `${label}${scope}` });
+  return buildPayMethodKeyboard(cards, { pendingCards: pending, queueLabel: label });
 }
 
 async function pickAutoCardLine(chatId, { skipReuse = true, skipPans = [] } = {}) {
@@ -2287,7 +2286,9 @@ async function buildStatusMessage(chatId) {
 
   const counts = cardList.countsFor(chatId);
   const scope =
-    counts.scope === 'all' ? ' (todas as filas — admin)' : ' (só sua fila)';
+    counts.scope === 'all'
+      ? ' · visão agregada (recarga usa só <b>sua</b> fila)'
+      : ' (só sua fila)';
   lines.push(
     `💳 <b>GG:</b> ${counts.pending} pendente${counts.pending === 1 ? '' : 's'} · ${counts.inUse} em uso${scope}`,
   );
