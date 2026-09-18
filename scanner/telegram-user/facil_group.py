@@ -40,7 +40,13 @@ def is_confirm_prompt(text):
 
 def is_feita_final(text):
     t = text or ""
-    return bool(re.search(r"Status:\s*✅\s*\*\*Feita\*\*|Status:\s*✅\s*Feita", t, re.I))
+    return bool(
+        re.search(
+            r"Status:\s*✅\s*(?:\*\*)?Feita(?:\*\*)?|Status:\s*✅\s*Feita|✅\s*\*\*Feita\*\*",
+            t,
+            re.I,
+        )
+    )
 
 
 TERMINAL_KINDS = frozenset({"approved", "denied", "3ds", "fail", "fail_login"})

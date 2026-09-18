@@ -474,8 +474,11 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
 async def _apply_terminal(g, tg, payload, pedido_id, target, kind, text, last_fp):
     if kind == "approved":
         log("APROVADA!")
-        closed = await close_order_in_group(g, tg, pedido_id, log=log)
-        clear_current_pedido()
+        cur = load_current_pedido()
+        anchor = cur.get("msg_id") if cur and cur.get("pedido_id") == pedido_id else None
+        closed = await close_order_in_group(g, tg, pedido_id, anchor_msg_id=anchor, log=log)
+        if closed:
+            clear_current_pedido()
         save_state({
             "result": "closed" if closed else "approved_unconfirmed",
             "payload": payload,
@@ -533,8 +536,17 @@ async def run_worker(payload=None, pedido_id=None, max_cycles=50, loop=False, id
         while True:
             if pending_confirm:
                 pedido_id_retry, payload_retry = pending_confirm
+                if await pedido_ja_feita(g, tg, pedido_id_retry):
+                    log(f"Pedido {pedido_id_retry} já Feita no grupo — seguindo fila")
+                    clear_current_pedido()
+                    pending_confirm = None
+                    continue
                 log(f"Retentando Confirmar {pedido_id_retry}")
-                closed = await close_order_in_group(g, tg, pedido_id_retry, log=log)
+                cur = load_current_pedido()
+                anchor = cur.get("msg_id") if cur and cur.get("pedido_id") == pedido_id_retry else None
+                closed = await close_order_in_group(
+                    g, tg, pedido_id_retry, anchor_msg_id=anchor, log=log
+                )
                 if closed:
                     pending_confirm = None
                     log(f"Grupo OK {pedido_id_retry}")

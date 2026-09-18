@@ -30,10 +30,18 @@ async def pedido_ja_feita(g, tg, pedido_id, limit=150):
     return False
 
 
-async def find_processing_msg(g, tg, pedido_id, limit=120):
+async def find_processing_msg(g, tg, pedido_id, limit=400):
+    """Localiza a msg do pedido (fila cheia: não exige só PROCESSANDO)."""
     async for m in tg.iter_messages(g, limit=limit):
         text = m.text or ""
-        if pedido_id in text and "PROCESSANDO" in text:
+        if pedido_id not in text:
+            continue
+        if is_feita_final(text):
+            return m
+        labels = _btn_labels(m)
+        if "PROCESSANDO" in text or is_confirm_prompt(text):
+            return m
+        if any(is_feita_label(l) for l in labels):
             return m
     return None
 
@@ -66,15 +74,24 @@ async def click_confirm(msg, pedido_id="?", log=print):
     return False
 
 
-async def close_order_in_group(g, tg, pedido_id, log=print):
+async def close_order_in_group(g, tg, pedido_id, anchor_msg_id=None, log=print):
     """Clica Feita + Confirmar. Retorna True só com status final Feita."""
     if await pedido_ja_feita(g, tg, pedido_id):
         log(f"Pedido {pedido_id} já está Feita no grupo")
         return True
 
-    msg = await find_processing_msg(g, tg, pedido_id)
+    msg = None
+    if anchor_msg_id:
+        try:
+            msg = await tg.get_messages(g, ids=anchor_msg_id)
+            if msg and pedido_id not in (msg.text or "") and not is_confirm_prompt(msg.text or ""):
+                msg = None
+        except Exception:
+            msg = None
+    if not msg:
+        msg = await find_processing_msg(g, tg, pedido_id)
 
-    anchor_id = msg.id if msg else None
+    anchor_id = anchor_msg_id or (msg.id if msg else None)
 
     if msg and msg.buttons:
         for row in msg.buttons:
