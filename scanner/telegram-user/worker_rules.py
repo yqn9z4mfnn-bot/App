@@ -37,7 +37,12 @@ def decide_next_action(open_orders, current_pedido_id, bot_active_targets=None):
     if len(matches) == 1:
         return "resume", matches[0]["pedido_id"]
 
-    return "block", None
+    if len(matches) >= 2:
+        return "block", None
+
+    # 1+ pedido(s) já reivindicado(s): processa o mais antigo (fila), sem Reivindicar outro.
+    oldest = min(open_orders, key=lambda o: o.get("msg_id") or 0)
+    return "resume", oldest["pedido_id"]
 
 
 def error_fingerprint(kind, text, target):

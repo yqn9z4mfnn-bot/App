@@ -456,11 +456,6 @@ async def process_one_order(g, tg, bot, payload, pedido_id, max_cycles=50):
                 continue
             return action
 
-        others = [o for o in await list_open_orders(g, tg) if o[0] != pedido_id]
-        if others:
-            log(f"ABORT envio: outro pedido aberto {others[0][0]}")
-            return "blocked"
-
         log(f"=== Envio {cycle} | pedido={pedido_id} | {payload} ===")
         if not tg.is_connected():
             await tg.connect()

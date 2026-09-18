@@ -14,18 +14,18 @@ def test_pedido_atual_aberto_resume():
     assert claim_allowed(1) is False
 
 
-def test_ja_reivindicado_bloqueia_novo():
+def test_ja_reivindicado_resume_sem_novo_reivindicar():
     opens = [{"pedido_id": "old", "payload": "67993286345|CLARO|35", "msg_id": 71553}]
-    assert decide_next_action(opens, None, set()) == ("block", None)
+    assert decide_next_action(opens, None, set()) == ("resume", "old")
     assert claim_allowed(len(opens)) is False
 
 
-def test_dois_abertos_sem_current_bloqueia():
+def test_dois_abertos_sem_current_resume_mais_antigo():
     opens = [
         {"pedido_id": "a", "payload": "91985241350|CLARO|30", "msg_id": 1},
         {"pedido_id": "b", "payload": "67993286345|CLARO|35", "msg_id": 2},
     ]
-    assert decide_next_action(opens, None, set()) == ("block", None)
+    assert decide_next_action(opens, None, set()) == ("resume", "a")
 
 
 def test_dois_abertos_resume_so_o_do_bot():
