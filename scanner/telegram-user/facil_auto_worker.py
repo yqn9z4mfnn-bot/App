@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from telethon import TelegramClient
 
+from automation_health import progress_is_zombie
 from config import DATA_DIR, SESSION_PATH, load_env_file, telegram_client
 from facil_group import (
     BOT_USERNAME,
@@ -284,6 +285,9 @@ async def bot_has_active_job(tg, bot, exclude_target=None, limit=15):
         if kind == "approved":
             continue
         if kind == "progress":
+            if progress_is_zombie(m):
+                log(f"Ignorando progress fantasma no bot (sem Edge, msg antiga): {text[:80]}")
+                continue
             return True, text[:100]
     return False, ""
 
@@ -345,6 +349,8 @@ async def bot_active_targets(tg, bot, limit=20):
         text = m.text or ""
         kind = classify_bot_response(text)
         if kind not in ("progress", "approved"):
+            continue
+        if kind == "progress" and progress_is_zombie(m):
             continue
         digits = re.findall(r"\d{10,11}", text.replace("`", ""))
         targets.update(digits)
