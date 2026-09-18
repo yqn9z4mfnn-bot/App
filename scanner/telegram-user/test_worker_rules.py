@@ -148,6 +148,17 @@ def test_cartao_bloqueado_com_fila_e_progress():
     assert next_after_bot_result("approved", "n|approved|x", None) == "close"
 
 
+def test_menu_start_nao_e_progress():
+    from facil_group import classify_bot_response
+
+    menu = (
+        "**📱 Link Claro**\n\n"
+        "Recarga automática com fila de cartões.\n\n"
+        "Escolha o modo:"
+    )
+    assert classify_bot_response(menu) == "idle"
+
+
 def test_login_429_nao_e_resultado_final():
     from facil_group import classify_bot_response, is_actionable_response, pick_bot_state
 

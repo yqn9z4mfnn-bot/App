@@ -68,6 +68,13 @@ FINAL_FAIL_RE = re.compile(
 
 def classify_bot_response(text):
     t = text or ""
+    # Menu /start do bot — contém "Recarga automática" mas não é job ativo
+    if re.search(r"Escolha o modo|Use /help|fila de cartões", t, re.I) and not re.search(
+        r"→\s*📱|APROVADA|NEGAD|__Processando__",
+        t,
+        re.I,
+    ):
+        return "idle"
     if re.search(r"✅\s*\*\*APROVADA\*\*|APROVADA", t, re.I):
         return "approved"
     if re.search(r"Validação 3DS|3DS|\bVBV\b", t, re.I):

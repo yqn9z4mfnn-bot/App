@@ -353,6 +353,11 @@ async def bot_active_targets(tg, bot, limit=20):
 
 async def acquire_order(g, tg, bot):
     current = load_current_pedido()
+    if current and current.get("pedido_id"):
+        if not await pedido_still_open(g, tg, current["pedido_id"]):
+            log(f"Pedido antigo {current['pedido_id']} já fechado — limpando worker-current")
+            clear_current_pedido()
+            current = None
     open_raw = await list_open_orders(g, tg)
     open_orders = [{"pedido_id": p, "payload": pay, "msg_id": mid} for p, pay, mid in open_raw]
     current_id = current["pedido_id"] if current else None
