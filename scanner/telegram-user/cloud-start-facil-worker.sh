@@ -4,8 +4,11 @@ XDG_DATA_HOME="${XDG_DATA_HOME:-/home/ubuntu/.local/share/cloud-bot-home}"
 DATA_DIR="$XDG_DATA_HOME/linkclaro-bot"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 TU="${TELEGRAM_USER_DATA:-$XDG_DATA_HOME/telegram-user}"
+PAUSE_FILE="$DATA_DIR/facil-worker.paused"
 TMUX="${TMUX_CMD:-tmux -f /exec-daemon/tmux.portal.conf}"
 PY="$DIR/.venv/bin/python3"
+
+rm -f "$PAUSE_FILE" 2>/dev/null || true
 PIP="$DIR/.venv/bin/pip"
 
 if [ ! -x "$PY" ] || ! "$PY" -c "import telethon" 2>/dev/null; then

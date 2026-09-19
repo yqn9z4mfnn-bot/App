@@ -130,8 +130,11 @@ ensure_node_service "Admin" "node admin/run.mjs" cloud-admin "node admin/run.mjs
 
 pgrep -af "node (telegram-bot|automation/run|admin/run)" 2>/dev/null || echo "(node bot/auto/admin ausentes)"
 
+FACIL_PAUSE="${XDG_DATA_HOME:-/home/ubuntu/.local/share/cloud-bot-home}/linkclaro-bot/facil-worker.paused"
 if pgrep -f "facil_auto_worker.py" >/dev/null 2>&1; then
   pgrep -af "facil_auto_worker.py"
+elif [ -f "$FACIL_PAUSE" ]; then
+  echo "(worker Fácil PAUSADO manualmente — vigia não reinicia; rm $FACIL_PAUSE ou cloud-start-facil-worker.sh)"
 else
   echo "(worker Fácil PARADO — reiniciando…)"
   start_facil_worker
