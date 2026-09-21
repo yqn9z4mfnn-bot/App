@@ -241,23 +241,42 @@ function webhookBaseUrl() {
   return u.replace(/\/$/, '');
 }
 
+function pushinWebhookSecret() {
+  return String(process.env.PUSHINPAY_WEBHOOK_SECRET || process.env.PUSHINPAY_WEBHOOK_HEADER_VALUE || '').trim();
+}
+
+/** PushinPay não envia header customizado unless configurado no painel — usamos ?k= na URL do webhook. */
 export function buildPixWebhookUrl() {
-  return `${webhookBaseUrl()}/api/webhooks/pushinpay/pix`;
+  const secret = pushinWebhookSecret();
+  const base = `${webhookBaseUrl()}/api/webhooks/pushinpay/pix`;
+  if (!secret) return base;
+  return `${base}?k=${encodeURIComponent(secret)}`;
 }
 
 export function validatePushinWebhookRequest(req) {
   const insecure = String(process.env.WALLET_WEBHOOK_INSECURE || '').toLowerCase() === '1';
   if (insecure) return true;
-  const headerName = String(process.env.PUSHINPAY_WEBHOOK_HEADER || process.env.PUSHINPAY_WEBHOOK_SECRET_HEADER || '')
-    .trim()
-    .toLowerCase();
-  const expected = String(process.env.PUSHINPAY_WEBHOOK_SECRET || process.env.PUSHINPAY_WEBHOOK_HEADER_VALUE || '').trim();
-  if (!headerName || !expected) {
-    console.warn('[wallet] webhook sem header secreto — defina PUSHINPAY_WEBHOOK_HEADER e PUSHINPAY_WEBHOOK_SECRET');
+
+  const expected = pushinWebhookSecret();
+  if (!expected) {
+    console.warn('[wallet] webhook sem PUSHINPAY_WEBHOOK_SECRET — rejeitando POST');
     return false;
   }
-  const got = String(req.headers[headerName] ?? req.headers[headerName.replace(/-/g, '_')] ?? '').trim();
-  return got === expected;
+
+  const queryKey = String(req.query?.k ?? req.query?.key ?? '').trim();
+  if (queryKey && queryKey === expected) return true;
+
+  const headerName = String(
+    process.env.PUSHINPAY_WEBHOOK_HEADER || process.env.PUSHINPAY_WEBHOOK_SECRET_HEADER || '',
+  )
+    .trim()
+    .toLowerCase();
+  if (headerName) {
+    const got = String(req.headers[headerName] ?? req.headers[headerName.replace(/-/g, '_')] ?? '').trim();
+    if (got && got === expected) return true;
+  }
+
+  return false;
 }
 
 export async function createPixDepositForUser(chatId, valueCents) {
