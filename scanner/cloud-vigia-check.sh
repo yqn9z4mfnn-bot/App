@@ -138,7 +138,10 @@ else
     ensure_node_service "Automação" "node automation/run.mjs" cloud-automation "node automation/run.mjs" "automation.log"
   fi
 fi
-ensure_node_service "Admin" "node admin/run.mjs" cloud-admin "node admin/run.mjs" "admin.log"
+if ! pgrep -f "node admin/run.mjs" >/dev/null 2>&1 || ! curl -sf -o /dev/null --max-time 3 http://127.0.0.1:3080/ 2>/dev/null; then
+  $TMUX kill-session -t cloud-admin 2>/dev/null || true
+  ensure_node_service "Admin" "node admin/run.mjs" cloud-admin "node admin/run.mjs" "admin.log"
+fi
 ensure_wallet_webhook_tunnel
 
 pgrep -af "node (telegram-bot|automation/run|admin/run)" 2>/dev/null || echo "(node bot/auto/admin ausentes)"
