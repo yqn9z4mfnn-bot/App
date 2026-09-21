@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { withBusyRetry, getAdminDb, isTelegramUserAdmin } from './admin-db.mjs';
 import { createPixCashIn, fetchPushinTransaction, pushinPayConfigured } from './pushinpay.mjs';
 import { notifyTelegramChat } from './telegram-notify.mjs';
@@ -205,9 +208,36 @@ export function chargeRechargeAttempt(chatId, opts) {
   return settleRechargeFee(chatId, opts);
 }
 
+function walletDataDir() {
+  const root = String(process.env.XDG_DATA_HOME || '').trim();
+  if (root) return path.join(root, 'linkclaro-bot');
+  return path.join(process.env.HOME || '', '.local/share/cloud-bot-home/linkclaro-bot');
+}
+
+function readWebhookBaseFromFile() {
+  try {
+    const file = path.join(walletDataDir(), 'wallet-webhook-public-url.txt');
+    const u = fs.readFileSync(file, 'utf8').trim();
+    if (/^https:\/\//i.test(u)) return u.replace(/\/$/, '');
+  } catch {
+    // optional override written by cloudflared tunnel script
+  }
+  return '';
+}
+
 function webhookBaseUrl() {
-  const u = String(process.env.WALLET_WEBHOOK_BASE_URL || process.env.ADMIN_PUBLIC_URL || '').trim();
-  if (!u) throw new Error('Defina WALLET_WEBHOOK_BASE_URL (URL pública do painel admin, ex. https://host:3080)');
+  const fromFile = readWebhookBaseFromFile();
+  const u = String(
+    fromFile || process.env.WALLET_WEBHOOK_BASE_URL || process.env.ADMIN_PUBLIC_URL || '',
+  ).trim();
+  if (!u) {
+    throw new Error(
+      'Defina WALLET_WEBHOOK_BASE_URL (URL HTTPS pública do admin) ou suba o túnel cloudflared',
+    );
+  }
+  if (!/^https:\/\//i.test(u)) {
+    throw new Error('WALLET_WEBHOOK_BASE_URL precisa ser HTTPS público (ex.: túnel cloudflared → admin :3080)');
+  }
   return u.replace(/\/$/, '');
 }
 
@@ -236,7 +266,13 @@ export async function createPixDepositForUser(chatId, valueCents) {
   if (!Number.isFinite(cents) || cents < 500) {
     throw new Error('Valor mínimo para recarga de saldo: R$ 5,00');
   }
-  const webhookUrl = buildPixWebhookUrl();
+  let webhookUrl;
+  try {
+    webhookUrl = buildPixWebhookUrl();
+  } catch (err) {
+    console.warn('[wallet] webhook URL indisponível — PIX sem webhook_url:', err.message);
+    webhookUrl = undefined;
+  }
   const tx = await createPixCashIn({
     valueCents: cents,
     webhookUrl,

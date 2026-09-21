@@ -1,5 +1,23 @@
 const DEFAULT_BASE = 'https://api.pushinpay.com.br';
 
+/** @param {Record<string, unknown> | null | undefined} data */
+function formatPushinApiError(data, httpStatus) {
+  const base =
+    (typeof data?.message === 'string' && data.message) ||
+    (typeof data?.error === 'string' && data.error) ||
+    (typeof data?.raw === 'string' ? data.raw.slice(0, 200) : null) ||
+    `HTTP ${httpStatus}`;
+  const codexRaw = typeof data?.codex === 'string' ? data.codex : '';
+  const cpx = codexRaw.match(/#?(CPX\d+)/i)?.[1]?.toUpperCase() ?? '';
+  let msg = base;
+  if (cpx) msg += ` (${cpx})`;
+  if (/temporariamente indispon/i.test(String(base)) || cpx) {
+    msg +=
+      ' — confira no painel PushinPay (conta aprovada, limites, whitelist de IP da nuvem) ou abra suporte informando o código CPX.';
+  }
+  return msg;
+}
+
 function apiBase() {
   return String(process.env.PUSHINPAY_API_BASE || DEFAULT_BASE).replace(/\/$/, '');
 }
@@ -46,12 +64,7 @@ export async function createPixCashIn({ valueCents, webhookUrl, description }) {
     data = { raw: text };
   }
   if (!res.ok) {
-    const msg =
-      data?.message ||
-      data?.error ||
-      (typeof data?.raw === 'string' ? data.raw.slice(0, 200) : null) ||
-      `HTTP ${res.status}`;
-    throw new Error(`PushinPay: ${msg}`);
+    throw new Error(`PushinPay: ${formatPushinApiError(data, res.status)}`);
   }
   return data;
 }
@@ -74,8 +87,7 @@ export async function fetchPushinTransaction(transactionId) {
     data = { raw: text };
   }
   if (!res.ok) {
-    const msg = data?.message || data?.error || `HTTP ${res.status}`;
-    throw new Error(`PushinPay: ${msg}`);
+    throw new Error(`PushinPay: ${formatPushinApiError(data, res.status)}`);
   }
   return data;
 }

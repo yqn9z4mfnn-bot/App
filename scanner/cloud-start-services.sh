@@ -23,6 +23,8 @@ ENV_EXPORT="export XDG_DATA_HOME=$XDG_DATA_HOME; set -a; source $DATA_DIR/.env; 
 run_in_tmux cloud-automation "$ENV_EXPORT; node automation/run.mjs"
 run_in_tmux cloud-telegram-bot "$ENV_EXPORT; node telegram-bot.mjs"
 run_in_tmux cloud-admin "$ENV_EXPORT; node admin/run.mjs"
+chmod +x "$APP_DIR/cloud-wallet-webhook-tunnel.sh"
+run_in_tmux cloudflared-wallet-webhook "export XDG_DATA_HOME=$XDG_DATA_HOME; exec $APP_DIR/cloud-wallet-webhook-tunnel.sh"
 
 echo "Automação: tmux attach -t cloud-automation"
 echo "Bot:       tmux attach -t cloud-telegram-bot"

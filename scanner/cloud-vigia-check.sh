@@ -59,6 +59,18 @@ ensure_bot_alive() {
   ensure_node_service "Bot Telegram" "$pattern" cloud-telegram-bot "node telegram-bot.mjs" "telegram-bot.log"
 }
 
+ensure_wallet_webhook_tunnel() {
+  local session="cloudflared-wallet-webhook"
+  local script="$APP_DIR/cloud-wallet-webhook-tunnel.sh"
+  [ -x "$script" ] || chmod +x "$script"
+  if $TMUX has-session -t "=$session" 2>/dev/null; then
+    return
+  fi
+  echo "(Túnel webhook PIX PARADO — reiniciando cloudflared…)"
+  $TMUX new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "export XDG_DATA_HOME=$XDG_DATA_HOME; exec '$script'"
+  sleep 4
+}
+
 ensure_node_service() {
   local label="$1"
   local pgrep_pattern="$2"
@@ -127,6 +139,7 @@ else
   fi
 fi
 ensure_node_service "Admin" "node admin/run.mjs" cloud-admin "node admin/run.mjs" "admin.log"
+ensure_wallet_webhook_tunnel
 
 pgrep -af "node (telegram-bot|automation/run|admin/run)" 2>/dev/null || echo "(node bot/auto/admin ausentes)"
 
@@ -144,5 +157,10 @@ fi
 echo "--- health ---"
 curl -sf http://127.0.0.1:3000/health 2>/dev/null || echo "automation: FALHOU"
 curl -sf -o /dev/null -w "admin HTTP %{http_code}\n" http://127.0.0.1:3080/ 2>/dev/null || echo "admin: FALHOU"
+if [ -f "$DATA_DIR/wallet-webhook-public-url.txt" ]; then
+  echo "webhook público: $(tr -d '\n' <"$DATA_DIR/wallet-webhook-public-url.txt")"
+else
+  echo "webhook público: (arquivo wallet-webhook-public-url.txt ausente)"
+fi
 echo "--- proxy ---"
 grep -E '^PROXY_ENABLED=' "$DATA_DIR/.env" 2>/dev/null || true
