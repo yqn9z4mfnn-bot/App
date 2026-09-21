@@ -99,6 +99,7 @@ import {
   setBotPaused,
   listTelegramAdmins,
   listTelegramUsers,
+  getAdminDb,
 } from './lib/admin-db.mjs';
 import {
   isBotPaused,
@@ -323,6 +324,78 @@ async function send(chatId, text, extra = {}) {
   });
 }
 
+/** PNG do QR PushinPay (`data:image/png;base64,...` ou base64 puro). */
+function decodePixQrPngBuffer(qrCodeBase64) {
+  const raw = String(qrCodeBase64 ?? '').trim();
+  if (!raw) return null;
+  let b64 = raw;
+  const m = raw.match(/^data:image\/\w+;base64,(.+)$/is);
+  if (m) b64 = m[1];
+  try {
+    const buf = Buffer.from(b64.replace(/\s/g, ''), 'base64');
+    return buf.length > 64 ? buf : null;
+  } catch {
+    return null;
+  }
+}
+
+async function tgMultipart(method, formData, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 60_000;
+  const res = await fetch(`${API}/${method}`, {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    const err = new Error(data.description || `Telegram ${method} failed`);
+    if (data.error_code === 429) err.retryAfter = Number(data.parameters?.retry_after || 1);
+    throw err;
+  }
+  return data.result;
+}
+
+function buildPixInvoiceKeyboard(dep, pixCode) {
+  const copyRow =
+    pixCode.length > 0 && pixCode.length <= 256
+      ? [{ text: '📋 Copiar código PIX', copy_text: { text: pixCode } }]
+      : [{ text: '📋 Copiar código PIX', callback_data: `wallet:pixcopy:${dep.pushinId}` }];
+  return {
+    inline_keyboard: [copyRow, [{ text: '✅ Já paguei', callback_data: `wallet:pixpaid:${dep.pushinId}` }]],
+  };
+}
+
+async function sendPixInvoice(chatId, valueCents) {
+  const dep = await createPixDepositForUser(chatId, valueCents);
+  const code = String(dep.qrCode ?? '').trim();
+  if (!code) throw new Error('PushinPay não retornou código PIX');
+
+  const caption = [
+    `<b>PIX — ${formatWalletBrl(dep.valueCents)}</b>`,
+    '',
+    '📷 Escaneie o QR no app do banco',
+    'ou toque em <b>Copiar código PIX</b>.',
+    '',
+    'Depois de pagar, toque em <b>Já paguei</b>.',
+  ].join('\n');
+
+  const reply_markup = buildPixInvoiceKeyboard(dep, code);
+  const png = decodePixQrPngBuffer(dep.qrCodeBase64);
+
+  if (png) {
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    form.append('photo', new Blob([png], { type: 'image/png' }), 'pix-qrcode.png');
+    form.append('caption', caption);
+    form.append('parse_mode', 'HTML');
+    form.append('reply_markup', JSON.stringify(reply_markup));
+    return tgMultipart('sendPhoto', form);
+  }
+
+  console.warn('[wallet] PIX sem qr_code_base64 — enviando só texto');
+  await send(chatId, caption, { reply_markup });
+}
+
 function extractLink(text) {
   if (!text) return null;
   const trimmed = text.trim();
@@ -459,29 +532,6 @@ async function promptRechargeMode(chatId) {
 
 async function promptWalletSaldo(chatId) {
   await send(chatId, formatWalletHelp(chatId), { reply_markup: buildPixAmountKeyboard() });
-}
-
-async function sendPixInvoice(chatId, valueCents) {
-  const dep = await createPixDepositForUser(chatId, valueCents);
-  const code = String(dep.qrCode ?? '').trim();
-  if (!code) throw new Error('PushinPay não retornou código PIX');
-  const safeCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  await send(
-    chatId,
-    [
-      `<b>PIX — ${formatWalletBrl(dep.valueCents)}</b>`,
-      '',
-      'Copie o código abaixo no app do banco:',
-      `<code>${safeCode}</code>`,
-      '',
-      'Após pagar, toque em <b>Já paguei</b> para liberar o saldo.',
-    ].join('\n'),
-    {
-      reply_markup: {
-        inline_keyboard: [[{ text: '✅ Já paguei', callback_data: `wallet:pixpaid:${dep.pushinId}` }]],
-      },
-    },
-  );
 }
 
 async function purgeLoginCards(chatId, statusMsg, bubble, { sessionId, msisdn, productId }) {
@@ -1964,6 +2014,40 @@ async function handleCallback(query) {
 
   if (data === 'wallet:saldo' || data === 'wallet:back') {
     await promptWalletSaldo(chatId);
+    return;
+  }
+
+  if (data.startsWith('wallet:pixcopy:')) {
+    const pushinId = data.slice('wallet:pixcopy:'.length);
+    try {
+      const row = getAdminDb()
+        .prepare('SELECT chat_id, raw_json FROM pix_deposits WHERE pushin_id = ?')
+        .get(pushinId);
+      if (!row || String(row.chat_id) !== String(chatId)) {
+        await send(chatId, '❌ Cobrança PIX não encontrada.');
+        return;
+      }
+      let emv = '';
+      try {
+        const raw = JSON.parse(row.raw_json || '{}');
+        emv = String(raw.qr_code ?? raw.qrCode ?? '').trim();
+      } catch {
+        /* ignore */
+      }
+      if (!emv) {
+        await send(chatId, '❌ Código PIX indisponível. Gere um novo /pix.');
+        return;
+      }
+      const safe = emv.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      await send(
+        chatId,
+        ['📋 <b>Copia e cola</b>', '', `<code>${safe}</code>`, '', '<i>Toque no código acima para copiar no Telegram.</i>'].join(
+          '\n',
+        ),
+      );
+    } catch (err) {
+      await send(chatId, `❌ ${err.message}`);
+    }
     return;
   }
 
