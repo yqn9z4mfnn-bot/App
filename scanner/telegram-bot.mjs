@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import './lib/load-env.mjs';
+import { writeBotHeartbeat } from './lib/bot-heartbeat.mjs';
 import { runScan } from './lib/run-scan.mjs';
 import {
   fetchWalletCards,
@@ -2863,6 +2864,7 @@ async function poll() {
       const now = Date.now();
       if (now - lastBeat >= 30_000) {
         lastBeat = now;
+        writeBotHeartbeat({ phase: 'poll', updates: updates.length });
         console.log(`[bot] poll ok · updates=${updates.length} · uptime=${Math.floor(process.uptime())}s`);
       }
 
@@ -2884,6 +2886,7 @@ async function poll() {
         continue;
       }
       console.error('[bot] poll:', msg);
+      writeBotHeartbeat({ phase: 'poll_error', error: msg.slice(0, 200) });
       await sleep(/409|conflict/i.test(msg) ? 1200 : 2000);
     }
   }
@@ -2913,6 +2916,7 @@ async function main() {
       (proxy ? ` · proxy ${proxy}` : '') +
       (isBotPaused() ? ' · PAUSADO' : ''),
   );
+  writeBotHeartbeat({ phase: 'online', username: me.username });
   await tg('deleteWebhook', { drop_pending_updates: false });
   await tg('setMyCommands', {
     commands: [

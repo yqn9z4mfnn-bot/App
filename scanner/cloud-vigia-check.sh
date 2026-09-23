@@ -28,9 +28,15 @@ start_tmux_node() {
   fi
 }
 
+BOT_HEARTBEAT_STALE_MS="${BOT_HEARTBEAT_STALE_MS:-180000}"
+BOT_LOG_STALE_MS="${BOT_LOG_STALE_MS:-240000}"
+
 bot_poll_stale_ms() {
   local hb="$DATA_DIR/bot-heartbeat.json"
-  [ -f "$hb" ] || return 0
+  if [ ! -f "$hb" ]; then
+    echo 999999999
+    return
+  fi
   python3 - "$hb" <<'PY' 2>/dev/null || echo 999999999
 import json, sys, time
 path = sys.argv[1]
@@ -43,20 +49,69 @@ except Exception:
 PY
 }
 
+bot_log_stale_ms() {
+  local log="$DATA_DIR/logs/telegram-bot.log"
+  if [ ! -f "$log" ]; then
+    echo 999999999
+    return
+  fi
+  python3 - "$log" <<'PY' 2>/dev/null || echo 999999999
+import os, sys, time
+try:
+    print(int(time.time() * 1000 - int(os.path.getmtime(sys.argv[1]) * 1000)))
+except Exception:
+    print(999999999)
+PY
+}
+
 ensure_bot_alive() {
   local pattern="node telegram-bot.mjs"
-  local stale_ms
+  local session="cloud-telegram-bot"
+  local stale_ms log_stale_ms reason=""
+  local running=0 tmux_ok=0
+
   stale_ms="$(bot_poll_stale_ms)"
-  if pgrep -f "$pattern" >/dev/null 2>&1; then
-    if [ -f "$DATA_DIR/bot-heartbeat.json" ] && [ "$stale_ms" -gt 180000 ] 2>/dev/null; then
-      echo "(Bot Telegram TRAVADO — heartbeat ${stale_ms}ms — reiniciando…)"
-      pkill -f "$pattern" 2>/dev/null || true
-      sleep 2
+  log_stale_ms="$(bot_log_stale_ms)"
+  pgrep -f "$pattern" >/dev/null 2>&1 && running=1
+  $TMUX has-session -t "=$session" 2>/dev/null && tmux_ok=1
+
+  if [ "$running" -eq 1 ] && [ "$tmux_ok" -eq 1 ]; then
+    if [ -f "$DATA_DIR/bot-heartbeat.json" ] && [ "$stale_ms" -gt "$BOT_HEARTBEAT_STALE_MS" ] 2>/dev/null; then
+      reason="heartbeat parado há ${stale_ms}ms"
+    elif [ "$log_stale_ms" -gt "$BOT_LOG_STALE_MS" ] 2>/dev/null; then
+      reason="log telegram-bot.log sem escrita há ${log_stale_ms}ms"
     else
       return 0
     fi
+  elif [ "$running" -eq 1 ] && [ "$tmux_ok" -eq 0 ]; then
+    reason="processo órfão (tmux $session ausente)"
+  elif [ "$running" -eq 0 ]; then
+    reason="processo ausente"
   fi
-  ensure_node_service "Bot Telegram" "$pattern" cloud-telegram-bot "node telegram-bot.mjs" "telegram-bot.log"
+
+  if [ -n "$reason" ]; then
+    echo "(Bot Telegram — $reason — reiniciando…)"
+    pkill -f "$pattern" 2>/dev/null || true
+    sleep 2
+  fi
+
+  if ! pgrep -f "$pattern" >/dev/null 2>&1 || ! $TMUX has-session -t "=$session" 2>/dev/null; then
+    ensure_node_service "Bot Telegram" "$pattern" "$session" "node telegram-bot.mjs" "telegram-bot.log"
+  fi
+}
+
+ensure_vigia_daemon() {
+  if command -v crontab >/dev/null 2>&1; then
+    return
+  fi
+  local session="cloud-vigia-daemon"
+  local daemon="$APP_DIR/cloud-vigia-daemon.sh"
+  [ -x "$daemon" ] || chmod +x "$daemon" 2>/dev/null || true
+  if $TMUX has-session -t "=$session" 2>/dev/null; then
+    return
+  fi
+  echo "(Daemon vigia PARADO — reiniciando tmux $session…)"
+  $TMUX new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "exec '$daemon'"
 }
 
 ensure_wallet_webhook_tunnel() {
@@ -128,6 +183,8 @@ $TMUX ls 2>/dev/null || echo "(sem sessões tmux)"
 echo "--- processos ---"
 
 ensure_bot_alive
+ensure_vigia_daemon
+
 if ! curl -sf http://127.0.0.1:3000/health 2>/dev/null | grep -q '"aliveSessions"'; then
   :
 else
