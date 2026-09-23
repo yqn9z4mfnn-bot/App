@@ -50,6 +50,10 @@ echo "[3/7] PKI / snapshots legados em XDG_DATA_HOME…"
 [ -d "$ROOT/pki" ] && cp -a "$ROOT/pki" "$OUT_DIR/data/"
 [ -d "$ROOT/linkclaro-bot.bak-aug31" ] && cp -a "$ROOT/linkclaro-bot.bak-aug31" "$OUT_DIR/data/"
 [ -f "$ROOT/mimeapps.list" ] && cp -a "$ROOT/mimeapps.list" "$OUT_DIR/data/"
+[ -d "$ROOT/telegram-user" ] && cp -a "$ROOT/telegram-user" "$OUT_DIR/data/"
+for f in bot-heartbeat.json wallet-webhook-public-url.txt facil-worker.paused; do
+  copy_tree "$DATA_DIR/$f" "$f"
+done
 
 echo "[4/7] Exports JSON (conferência legível)…"
 sqlite3 -header -json "$DEST_BOT/numbers.db" \
