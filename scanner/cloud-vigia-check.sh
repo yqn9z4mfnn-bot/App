@@ -68,7 +68,9 @@ PY
 }
 
 ensure_bot_alive() {
-  local pattern="node telegram-bot.mjs"
+  # Regex ancorada: evita pkill atingir o próprio shell/vigia quando o texto
+  # "node telegram-bot.mjs" aparece nos argumentos de diagnóstico.
+  local pattern="^node telegram-bot\\.mjs$"
   local session="cloud-telegram-bot"
   local supervisor="$APP_DIR/cloud-telegram-bot-supervisor.sh"
   local stale_ms log_stale_ms reason=""
