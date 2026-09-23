@@ -1,0 +1,14 @@
+---
+description: Vigia nuvem Linkclarotesbot — acordar a cada 15 min e checar serviços
+alwaysApply: true
+---
+
+Quando o timer **cloud-bot-vigia** disparar (ou a cada ~15 min em agente de fundo):
+
+1. Execute: `bash /workspace/scanner/cloud-vigia-check.sh`
+2. Se bot/automação/admin caíram, o script reinicia; se ainda falhar: `bash /workspace/scanner/cloud-start-services.sh`
+3. **Não** altere `PROXY_ENABLED`, credenciais proxy, `BROWSER_*` ou `.env` sem ordem explícita do Lucas.
+4. **Não** reinicie automação se `aliveSessions > 0`.
+5. Responda status resumido em português.
+
+O bot grava `bot-heartbeat.json`; o vigia reinicia se tmux sumir, heartbeat ou log pararem.
