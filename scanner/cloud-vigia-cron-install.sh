@@ -3,7 +3,8 @@
 set -euo pipefail
 APP_DIR="/workspace/scanner"
 DATA_DIR="/home/ubuntu/.local/share/cloud-bot-home/linkclaro-bot"
-TMUX="tmux -f /exec-daemon/tmux.portal.conf"
+unset TMUX TMUX_PANE
+TMUX_CMD="tmux -f /exec-daemon/tmux.portal.conf"
 MARKER="cloud-vigia-check.sh"
 CRON_LINE="*/15 * * * * bash $APP_DIR/cloud-vigia-check.sh >> $DATA_DIR/logs/cloud-vigia-cron.log 2>&1"
 
@@ -21,10 +22,10 @@ if command -v crontab >/dev/null 2>&1; then
   crontab -l | grep -F "$MARKER" || true
 else
   echo "(crontab indisponível — usando tmux cloud-vigia-daemon)"
-  if $TMUX has-session -t "=cloud-vigia-daemon" 2>/dev/null; then
+  if $TMUX_CMD has-session -t "=cloud-vigia-daemon" 2>/dev/null; then
     echo "Daemon vigia já ativo (tmux cloud-vigia-daemon)."
   else
-    $TMUX new-session -d -s cloud-vigia-daemon -c "$APP_DIR" -- bash -lc "exec $APP_DIR/cloud-vigia-daemon.sh"
+    $TMUX_CMD new-session -d -s cloud-vigia-daemon -c "$APP_DIR" -- bash -lc "exec $APP_DIR/cloud-vigia-daemon.sh"
     echo "Daemon vigia iniciado (tmux cloud-vigia-daemon, 15 min)."
   fi
 fi

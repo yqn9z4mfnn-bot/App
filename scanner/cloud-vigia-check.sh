@@ -5,7 +5,10 @@ XDG_DATA_HOME="/home/ubuntu/.local/share/cloud-bot-home"
 export XDG_DATA_HOME
 DATA_DIR="$XDG_DATA_HOME/linkclaro-bot"
 APP_DIR="/workspace/scanner"
-TMUX="tmux -f /exec-daemon/tmux.portal.conf"
+# TMUX é variável reservada do próprio tmux. Herdá-la dentro do daemon faz o
+# cliente procurar um socket inválido e gera falsos "sem sessões tmux".
+unset TMUX TMUX_PANE
+TMUX_CMD="tmux -f /exec-daemon/tmux.portal.conf"
 
 ENV_EXPORT="export XDG_DATA_HOME=$XDG_DATA_HOME; set -a; source $DATA_DIR/.env; set +a; export XDG_DATA_HOME=$XDG_DATA_HOME; export NUMBERS_DB=$DATA_DIR/numbers.db; export ADMIN_DB=$DATA_DIR/admin.db; cd $APP_DIR"
 
@@ -19,12 +22,12 @@ start_tmux_node() {
   if [ -n "$log_name" ]; then
     full_cmd="$full_cmd 2>&1 | tee -a $DATA_DIR/logs/$log_name"
   fi
-  if $TMUX has-session -t "=$session" 2>/dev/null; then
-    $TMUX send-keys -t "$session:0.0" C-c
+  if $TMUX_CMD has-session -t "=$session" 2>/dev/null; then
+    $TMUX_CMD send-keys -t "$session:0.0" C-c
     sleep 1
-    $TMUX send-keys -t "$session:0.0" "$full_cmd" C-m
+    $TMUX_CMD send-keys -t "$session:0.0" "$full_cmd" C-m
   else
-    $TMUX new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "$full_cmd"
+    $TMUX_CMD new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "$full_cmd"
   fi
 }
 
@@ -75,7 +78,7 @@ ensure_bot_alive() {
   stale_ms="$(bot_poll_stale_ms)"
   log_stale_ms="$(bot_log_stale_ms)"
   pgrep -f "$pattern" >/dev/null 2>&1 && running=1
-  $TMUX has-session -t "=$session" 2>/dev/null && tmux_ok=1
+  $TMUX_CMD has-session -t "=$session" 2>/dev/null && tmux_ok=1
 
   if [ "$running" -eq 1 ] && [ "$tmux_ok" -eq 1 ]; then
     if [ -f "$DATA_DIR/bot-heartbeat.json" ] && [ "$stale_ms" -gt "$BOT_HEARTBEAT_STALE_MS" ] 2>/dev/null; then
@@ -93,14 +96,14 @@ ensure_bot_alive() {
 
   if [ -n "$reason" ]; then
     echo "(Bot Telegram — $reason — reiniciando…)"
-    $TMUX kill-session -t "$session" 2>/dev/null || true
+    $TMUX_CMD kill-session -t "$session" 2>/dev/null || true
     pkill -f "$pattern" 2>/dev/null || true
     sleep 2
   fi
 
-  if ! pgrep -f "$pattern" >/dev/null 2>&1 || ! $TMUX has-session -t "=$session" 2>/dev/null; then
+  if ! pgrep -f "$pattern" >/dev/null 2>&1 || ! $TMUX_CMD has-session -t "=$session" 2>/dev/null; then
     echo "(Bot Telegram PARADO — iniciando supervisor…)"
-    $TMUX new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "exec '$supervisor'"
+    $TMUX_CMD new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "exec '$supervisor'"
     sleep 3
     pgrep -af "$pattern" 2>/dev/null || echo "(Bot Telegram ainda ausente após supervisor)"
   fi
@@ -113,22 +116,22 @@ ensure_vigia_daemon() {
   local session="cloud-vigia-daemon"
   local daemon="$APP_DIR/cloud-vigia-daemon.sh"
   [ -x "$daemon" ] || chmod +x "$daemon" 2>/dev/null || true
-  if $TMUX has-session -t "=$session" 2>/dev/null; then
+  if $TMUX_CMD has-session -t "=$session" 2>/dev/null; then
     return
   fi
   echo "(Daemon vigia PARADO — reiniciando tmux $session…)"
-  $TMUX new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "exec '$daemon'"
+  $TMUX_CMD new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "exec '$daemon'"
 }
 
 ensure_wallet_webhook_tunnel() {
   local session="cloudflared-wallet-webhook"
   local script="$APP_DIR/cloud-wallet-webhook-tunnel.sh"
   [ -x "$script" ] || chmod +x "$script"
-  if $TMUX has-session -t "=$session" 2>/dev/null; then
+  if $TMUX_CMD has-session -t "=$session" 2>/dev/null; then
     return
   fi
   echo "(Túnel webhook PIX PARADO — reiniciando cloudflared…)"
-  $TMUX new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "export XDG_DATA_HOME=$XDG_DATA_HOME; exec '$script'"
+  $TMUX_CMD new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "export XDG_DATA_HOME=$XDG_DATA_HOME; exec '$script'"
   sleep 4
 }
 
@@ -165,11 +168,11 @@ start_facil_worker() {
       [ -x "$PIP" ] && "$PIP" install -q -r "$DIR/requirements.txt" || true
     fi
   fi
-  $TMUX kill-session -t cloud-facil-worker 2>/dev/null || true
+  $TMUX_CMD kill-session -t cloud-facil-worker 2>/dev/null || true
   pkill -f "facil_auto_worker.py" 2>/dev/null || true
   sleep 1
   rm -f "$TU/facil-auto-worker.lock" 2>/dev/null || true
-  $TMUX new-session -d -s cloud-facil-worker -c "$DIR" -- bash -lc "
+  $TMUX_CMD new-session -d -s cloud-facil-worker -c "$DIR" -- bash -lc "
     set -a; source '$DIR/.env'; source '$DATA_DIR/.env'; set +a
     export TELEGRAM_USER_DATA='$TU'
     export TELEGRAM_PROXY_ENABLED=\${TELEGRAM_PROXY_ENABLED:-1}
@@ -185,7 +188,7 @@ start_facil_worker() {
 
 echo "=== cloud-vigia $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 echo "--- tmux ---"
-$TMUX ls 2>/dev/null || echo "(sem sessões tmux)"
+$TMUX_CMD ls 2>/dev/null || echo "(sem sessões tmux)"
 echo "--- processos ---"
 
 ensure_bot_alive
@@ -202,7 +205,7 @@ else
   fi
 fi
 if ! pgrep -f "node admin/run.mjs" >/dev/null 2>&1 || ! curl -sf -o /dev/null --max-time 3 http://127.0.0.1:3080/ 2>/dev/null; then
-  $TMUX kill-session -t cloud-admin 2>/dev/null || true
+  $TMUX_CMD kill-session -t cloud-admin 2>/dev/null || true
   ensure_node_service "Admin" "node admin/run.mjs" cloud-admin "node admin/run.mjs" "admin.log"
 fi
 ensure_wallet_webhook_tunnel

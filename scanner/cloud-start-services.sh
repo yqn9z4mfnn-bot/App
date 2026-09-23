@@ -4,17 +4,18 @@ set -euo pipefail
 export XDG_DATA_HOME="${XDG_DATA_HOME:-/home/ubuntu/.local/share/cloud-bot-home}"
 DATA_DIR="$XDG_DATA_HOME/linkclaro-bot"
 APP_DIR="/workspace/scanner"
-TMUX="tmux -f /exec-daemon/tmux.portal.conf"
+unset TMUX TMUX_PANE
+TMUX_CMD="tmux -f /exec-daemon/tmux.portal.conf"
 
 run_in_tmux() {
   local name="$1"
   local cmd="$2"
-  if $TMUX has-session -t "=$name" 2>/dev/null; then
-    $TMUX send-keys -t "$name:0.0" C-c
+  if $TMUX_CMD has-session -t "=$name" 2>/dev/null; then
+    $TMUX_CMD send-keys -t "$name:0.0" C-c
     sleep 1
-    $TMUX send-keys -t "$name:0.0" "$cmd" C-m
+    $TMUX_CMD send-keys -t "$name:0.0" "$cmd" C-m
   else
-    $TMUX new-session -d -s "$name" -c "$APP_DIR" -- bash -lc "$cmd"
+    $TMUX_CMD new-session -d -s "$name" -c "$APP_DIR" -- bash -lc "$cmd"
   fi
 }
 
