@@ -2861,10 +2861,11 @@ async function poll() {
         { timeoutMs: 90_000, retries: 1 },
       );
 
+      writeBotHeartbeat({ phase: 'poll', updates: updates.length });
+
       const now = Date.now();
       if (now - lastBeat >= 30_000) {
         lastBeat = now;
-        writeBotHeartbeat({ phase: 'poll', updates: updates.length });
         console.log(`[bot] poll ok · updates=${updates.length} · uptime=${Math.floor(process.uptime())}s`);
       }
 
