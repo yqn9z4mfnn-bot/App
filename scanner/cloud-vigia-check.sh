@@ -67,9 +67,11 @@ PY
 ensure_bot_alive() {
   local pattern="node telegram-bot.mjs"
   local session="cloud-telegram-bot"
+  local supervisor="$APP_DIR/cloud-telegram-bot-supervisor.sh"
   local stale_ms log_stale_ms reason=""
   local running=0 tmux_ok=0
 
+  [ -x "$supervisor" ] || chmod +x "$supervisor" 2>/dev/null || true
   stale_ms="$(bot_poll_stale_ms)"
   log_stale_ms="$(bot_log_stale_ms)"
   pgrep -f "$pattern" >/dev/null 2>&1 && running=1
@@ -91,12 +93,16 @@ ensure_bot_alive() {
 
   if [ -n "$reason" ]; then
     echo "(Bot Telegram — $reason — reiniciando…)"
+    $TMUX kill-session -t "$session" 2>/dev/null || true
     pkill -f "$pattern" 2>/dev/null || true
     sleep 2
   fi
 
   if ! pgrep -f "$pattern" >/dev/null 2>&1 || ! $TMUX has-session -t "=$session" 2>/dev/null; then
-    ensure_node_service "Bot Telegram" "$pattern" "$session" "node telegram-bot.mjs" "telegram-bot.log"
+    echo "(Bot Telegram PARADO — iniciando supervisor…)"
+    $TMUX new-session -d -s "$session" -c "$APP_DIR" -- bash -lc "exec '$supervisor'"
+    sleep 3
+    pgrep -af "$pattern" 2>/dev/null || echo "(Bot Telegram ainda ausente após supervisor)"
   fi
 }
 

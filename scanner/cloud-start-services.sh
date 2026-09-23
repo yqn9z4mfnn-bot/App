@@ -21,7 +21,8 @@ run_in_tmux() {
 ENV_EXPORT="export XDG_DATA_HOME=$XDG_DATA_HOME; set -a; source $DATA_DIR/.env; set +a; export NUMBERS_DB=$DATA_DIR/numbers.db; export ADMIN_DB=$DATA_DIR/admin.db; cd $APP_DIR"
 
 run_in_tmux cloud-automation "$ENV_EXPORT; node automation/run.mjs"
-run_in_tmux cloud-telegram-bot "$ENV_EXPORT; node telegram-bot.mjs"
+chmod +x "$APP_DIR/cloud-telegram-bot-supervisor.sh"
+run_in_tmux cloud-telegram-bot "export XDG_DATA_HOME=$XDG_DATA_HOME; exec $APP_DIR/cloud-telegram-bot-supervisor.sh"
 run_in_tmux cloud-admin "$ENV_EXPORT; node admin/run.mjs"
 chmod +x "$APP_DIR/cloud-wallet-webhook-tunnel.sh"
 run_in_tmux cloudflared-wallet-webhook "export XDG_DATA_HOME=$XDG_DATA_HOME; exec $APP_DIR/cloud-wallet-webhook-tunnel.sh"
